@@ -1,0 +1,407 @@
+# Orchestrazione dei servizi per il sistema E-Voting WabiSabi
+
+version: '3.8'
+
+services:
+  # Database PostgreSQL
+  postgres:
+    image: postgres:15-alpine
+    container_name: evoting-postgres
+    environment:
+      POSTGRES_DB: evoting_wabisabi
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - evoting-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis per caching e sessioni
+  redis:
+    image: redis:7-alpine
+    container_name: evoting-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis123}
+    ports:
+      - "6379:6379"
+    networks:
+      - evoting-network
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Server 1: API Gateway
+  api-gateway:
+    build:
+      context: ./server1
+      dockerfile: Dockerfile
+    container_name: evoting-api-gateway
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 3001
+      AUTH_SERVICE_URL: http://auth-service:3002
+      VOTE_SERVICE_URL: http://vote-service:3003
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis123}@redis:6379
+    ports:
+      - "3001:3001"
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - evoting-network
+    restart: unless-stopped
+
+  # Server 2: Authentication & Credentials
+  auth-service:
+    build:
+      context: ./server2
+      dockerfile: Dockerfile
+    container_name: evoting-auth-service
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 3002
+      DB_HOST: postgres
+      DB_NAME: evoting_wabisabi
+      DB_USER: postgres
+      DB_PASS: ${DB_PASSWORD:-password}
+      JWT_SECRET: ${JWT_SECRET:-your-secret-key}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis123}@redis:6379
+    ports:
+      - "3002:3002"
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - evoting-network
+    restart: unless-stopped
+
+  # Server 3: Vote Processing & Blockchain
+  vote-service:
+    build:
+      context: ./server3
+      dockerfile: Dockerfile
+    container_name: evoting-vote-service
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 3003
+      DB_HOST: postgres
+      DB_NAME: evoting_wabisabi
+      DB_USER: postgres
+      DB_PASS: ${DB_PASSWORD:-password}
+      BITCOIN_NETWORK: ${BITCOIN_NETWORK:-testnet}
+      BITCOIN_NODE_URL: ${BITCOIN_NODE_URL:-http://bitcoin-node:8332}
+      BITCOIN_RPC_USER: ${BITCOIN_RPC_USER:-user}
+      BITCOIN_RPC_PASS: ${BITCOIN_RPC_PASS:-pass}
+    ports:
+      - "3003:3003"
+    depends_on:
+      - postgres
+      - bitcoin-node
+    networks:
+      - evoting-network
+    restart: unless-stopped
+
+  # Bitcoin Core Node (Testnet)
+  bitcoin-node:
+    image: ruimarinho/bitcoin-core:0.21
+    container_name: evoting-bitcoin-node
+    command:
+      - -testnet
+      - -server
+      - -rpcuser=${BITCOIN_RPC_USER:-user}
+      - -rpcpassword=${BITCOIN_RPC_PASS:-pass}
+      - -rpcallowip=0.0.0.0/0
+      - -rpcbind=0.0.0.0
+      - -printtoconsole
+    volumes:
+      - bitcoin_data:/home/bitcoin/.bitcoin
+    ports:
+      - "18332:18332"  # Testnet RPC
+      - "18333:18333"  # Testnet P2P
+    networks:
+      - evoting-network
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: evoting-nginx
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - api-gateway
+      - auth-service
+      - vote-service
+    networks:
+      - evoting-network
+    restart: unless-stopped
+
+  # Tor Proxy per anonimato
+  tor:
+    image: dperson/torproxy
+    container_name: evoting-tor
+    environment:
+      TORUSER: ${TOR_USER:-tor}
+      PASSWORD: ${TOR_PASSWORD:-password}
+    ports:
+      - "9050:9050"  # SOCKS proxy
+      - "9051:9051"  # Control port
+    networks:
+      - evoting-network
+    restart: unless-stopped
+
+  # Prometheus per monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: evoting-prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    ports:
+      - "9090:9090"
+    networks:
+      - evoting-network
+    restart: unless-stopped
+
+  # Grafana per dashboard
+  grafana:
+    image: grafana/grafana:latest
+    container_name: evoting-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_INSTALL_PLUGINS: grafana-piechart-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - evoting-network
+    restart: unless-stopped
+
+networks:
+  evoting-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  bitcoin_data:
+  prometheus_data:
+  grafana_data:
+
+---
+# .env.example
+# Esempio di file di configurazione delle variabili d'ambiente
+
+# Ambiente
+NODE_ENV=development
+
+# Database
+DB_PASSWORD=secure_password_here
+DB_HOST=postgres
+DB_NAME=evoting_wabisabi
+DB_USER=postgres
+
+# Redis
+REDIS_PASSWORD=redis_secure_password
+
+# JWT
+JWT_SECRET=your_very_secure_jwt_secret_key_here
+
+# Bitcoin
+BITCOIN_NETWORK=testnet
+BITCOIN_RPC_USER=bitcoinrpc
+BITCOIN_RPC_PASS=secure_bitcoin_password
+
+# Tor
+TOR_USER=tor
+TOR_PASSWORD=tor_password
+
+# Grafana
+GRAFANA_USER=admin
+GRAFANA_PASSWORD=secure_grafana_password
+
+# API URLs
+AUTH_SERVICE_URL=http://auth-service:3002
+VOTE_SERVICE_URL=http://vote-service:3003
+
+---
+# nginx/nginx.conf
+# Configurazione Nginx per reverse proxy
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    upstream api_gateway {
+        server api-gateway:3001;
+    }
+
+    upstream auth_service {
+        server auth-service:3002;
+    }
+
+    upstream vote_service {
+        server vote-service:3003;
+    }
+
+    # Rate limiting
+    limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
+    limit_req_zone $binary_remote_addr zone=auth_limit:10m rate=5r/s;
+
+    # Server principale
+    server {
+        listen 80;
+        server_name evoting.local;
+
+        # Redirect to HTTPS
+        return 301 https://$server_name$request_uri;
+    }
+
+    # HTTPS server
+    server {
+        listen 443 ssl http2;
+        server_name evoting.local;
+
+        # SSL configuration
+        ssl_certificate /etc/nginx/ssl/cert.pem;
+        ssl_certificate_key /etc/nginx/ssl/key.pem;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers HIGH:!aNULL:!MD5;
+        ssl_prefer_server_ciphers on;
+
+        # Security headers
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+        add_header Content-Security-Policy "default-src 'self'" always;
+
+        # API Gateway
+        location /api/ {
+            limit_req zone=api_limit burst=20 nodelay;
+            
+            proxy_pass http://api_gateway;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            
+            # WebSocket support
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+        }
+
+        # Direct auth service access (for admin)
+        location /auth/ {
+            limit_req zone=auth_limit burst=10 nodelay;
+            
+            proxy_pass http://auth_service/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Health checks
+        location /health {
+            access_log off;
+            add_header Content-Type text/plain;
+            return 200 "healthy\n";
+        }
+
+        # Static files (se presente un frontend)
+        location / {
+            root /usr/share/nginx/html;
+            try_files $uri $uri/ /index.html;
+        }
+    }
+}
+
+---
+# Makefile
+# Comandi utili per gestire il sistema
+
+.PHONY: help build up down logs clean test
+
+help:
+	@echo "Comandi disponibili:"
+	@echo "  make build    - Costruisce tutti i container"
+	@echo "  make up       - Avvia tutti i servizi"
+	@echo "  make down     - Ferma tutti i servizi"
+	@echo "  make logs     - Mostra i log di tutti i servizi"
+	@echo "  make clean    - Pulisce volumi e container"
+	@echo "  make test     - Esegue i test"
+	@echo "  make migrate  - Esegue le migrazioni del database"
+
+build:
+	docker-compose build
+
+up:
+	docker-compose up -d
+	@echo "Servizi avviati!"
+	@echo "API Gateway: http://localhost:3001"
+	@echo "Grafana: http://localhost:3000"
+	@echo "Prometheus: http://localhost:9090"
+
+down:
+	docker-compose down
+
+logs:
+	docker-compose logs -f
+
+clean:
+	docker-compose down -v
+	docker system prune -f
+
+test:
+	docker-compose exec api-gateway npm test
+	docker-compose exec auth-service npm test
+	docker-compose exec vote-service npm test
+
+migrate:
+	docker-compose exec auth-service npm run migrate
+
+# Comandi di sviluppo
+dev-setup:
+	cp .env.example .env
+	npm install --prefix server1
+	npm install --prefix server2
+	npm install --prefix server3
+
+dev-start:
+	npm run dev --prefix server1 &
+	npm run dev --prefix server2 &
+	npm run dev --prefix server3 &
+
+# Backup database
+backup:
+	docker-compose exec postgres pg_dump -U postgres evoting_wabisabi > backup_$(shell date +%Y%m%d_%H%M%S).sql
+
+# Restore database
+restore:
+	@read -p "File di backup: " file; \
+	docker-compose exec -T postgres psql -U postgres evoting_wabisabi < $$file

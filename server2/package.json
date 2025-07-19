@@ -1,21 +1,32 @@
 {
-  "name": "voting-auth-server",
+  "name": "evoting-auth-service",
   "version": "1.0.0",
-  "description": "Sistema di autenticazione per voto elettronico",
+  "description": "Authentication e Credential Manager per sistema E-Voting WabiSabi",
   "main": "app.js",
   "scripts": {
     "start": "node app.js",
     "dev": "nodemon app.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest",
+    "lint": "eslint .",
+    "migrate": "node migrate.js"
   },
   "dependencies": {
+    "express": "^4.18.2",
     "bcrypt": "^5.1.0",
-    "express": "^4.18.0",
     "jsonwebtoken": "^9.0.0",
-    "uuid": "^9.0.0"
+    "uuid": "^9.0.0",
+    "sequelize": "^6.32.0",
+    "pg": "^8.11.0",
+    "pg-hstore": "^2.3.4",
+    "redis": "^4.6.7",
+    "winston": "^3.8.2",
+    "express-validator": "^7.0.1",
+    "dotenv": "^16.0.3"
   },
   "devDependencies": {
-    "dotenv": "^16.0.0",
-    "nodemon": "^3.0.0"
+    "nodemon": "^2.0.22",
+    "jest": "^29.5.0",
+    "supertest": "^6.3.3",
+    "eslint": "^8.41.0"
   }
 }
