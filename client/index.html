@@ -1,0 +1,132 @@
+const htmlExample = `
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema E-Voting WabiSabi</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            margin: 0;
+            padding: 20px;
+        }
+        
+        .login-container, .voting-container {
+            max-width: 400px;
+            margin: 50px auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h2 {
+            margin: 0 0 20px 0;
+            color: #333;
+        }
+        
+        input[type="email"],
+        input[type="password"],
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        
+        button:hover {
+            background: #0056b3;
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .candidates-list {
+            margin: 20px 0;
+        }
+        
+        .candidate {
+            padding: 15px;
+            margin: 10px 0;
+            background: #f8f9fa;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        
+        .candidate:hover {
+            background: #e9ecef;
+        }
+        
+        .candidate label {
+            display: block;
+            cursor: pointer;
+        }
+        
+        .candidate strong {
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        .candidate span {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .error {
+            color: #dc3545;
+            margin-top: 10px;
+            padding: 10px;
+            background: #f8d7da;
+            border-radius: 4px;
+        }
+        
+        .success {
+            color: #155724;
+            margin-top: 10px;
+            padding: 15px;
+            background: #d4edda;
+            border-radius: 4px;
+        }
+        
+        .status {
+            margin-top: 20px;
+        }
+        
+        #logout {
+            background: #6c757d;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+    
+    <script src="crypto-browserify.min.js"></script>
+    <script src="votingClient.js"></script>
+    <script src="votingUI.js"></script>
+    <script>
+        // Inizializza l'applicazione
+        const ui = new VotingUI();
+        ui.init();
+    </script>
+</body>
+</html>
+`;
