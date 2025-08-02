@@ -1,0 +1,23 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets: ['api-gateway:3001']
+    metrics_path: '/monitoring/metrics'
+
+  - job_name: 'auth-service'
+    static_configs:
+      - targets: ['auth-service:3002']
+    metrics_path: '/monitoring/metrics'
+
+  - job_name: 'vote-service'
+    static_configs:
+      - targets: ['vote-service:3003']
+    metrics_path: '/monitoring/metrics'
+
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
