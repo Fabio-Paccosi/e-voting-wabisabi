@@ -10,17 +10,17 @@ RUN apk add --no-cache \
 # Crea directory di lavoro
 WORKDIR /app
 
-# Copia package.json
-COPY package.json ./
+# Copia package.json e package-lock.json
+COPY package*.json ./
 
-# Rimuovi package-lock.json per evitare conflitti e installa dipendenze
-RUN npm install --only=production --no-package-lock
+# Installa dipendenze
+RUN npm ci --only=production
 
-# Copia il resto del codice sorgente
+# Copia il codice sorgente
 COPY . .
 
 # Esponi la porta
-EXPOSE 3002
+EXPOSE 3001
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \

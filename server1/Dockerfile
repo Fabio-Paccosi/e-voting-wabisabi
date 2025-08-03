@@ -1,5 +1,3 @@
- Dockerfile per Server 1 - API Gateway
-
 FROM node:18-alpine
 
 # Installa dipendenze di sistema necessarie
@@ -12,13 +10,13 @@ RUN apk add --no-cache \
 # Crea directory di lavoro
 WORKDIR /app
 
-# Copia package.json e package-lock.json
-COPY package*.json ./
+# Copia package.json
+COPY package.json ./
 
-# Installa dipendenze
-RUN npm ci --only=production
+# Rimuovi package-lock.json per evitare conflitti e installa dipendenze
+RUN npm install --only=production --no-package-lock
 
-# Copia il codice sorgente
+# Copia il resto del codice sorgente
 COPY . .
 
 # Esponi la porta
