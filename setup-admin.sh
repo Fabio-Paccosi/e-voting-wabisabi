@@ -1,5 +1,3 @@
-#!/bin/bash
-# setup-admin.sh
 # Script per configurare il dashboard amministratore del sistema E-Voting
 
 set -e
