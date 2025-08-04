@@ -31,10 +31,10 @@ echo "Test registrazione utente..."
 RESPONSE=$(curl -s -X POST http://localhost:3001/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{
-    "email": "test'$(date +%s)'@example.com",
+    "email": "alice@example.com",
     "password": "TestPass123!",
-    "firstName": "Test",
-    "lastName": "User",
+    "firstName": "Alice",
+    "lastName": "Test",
     "taxCode": "RSSMRA85M01H501Z"
   }' 2>/dev/null)
 
