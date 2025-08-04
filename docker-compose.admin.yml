@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  admin-dashboard:
+    build:
+      context: ./admin-dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "3006:3006"
+    environment:
+      - NODE_ENV=development
+      - REACT_APP_API_URL=http://localhost:3001/api/admin
+    volumes:
+      - ./admin-dashboard/src:/app/src
+      - ./admin-dashboard/public:/app/public
+    depends_on:
+      - api-gateway
+    networks:
+      - evoting-network
+
+  admin-nginx:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./admin-config/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./admin-dashboard/build:/usr/share/nginx/html
+    depends_on:
+      - admin-dashboard
+    networks:
+      - evoting-network
+
+networks:
+  evoting-network:
+    external: true
