@@ -27,19 +27,20 @@ test_endpoint "Auth Service Health" "http://localhost:3002/api/health"
 test_endpoint "Vote Service Health" "http://localhost:3003/api/health"
 
 echo ""
-echo "Test registrazione utente..."
-RESPONSE=$(curl -s -X POST http://localhost:3001/api/auth/register \
+echo "Test registrazione utente (usando utente in whitelist)..."
+RESPONSE=$(curl -s -X POST http://localhost:3002/api/register \
   -H "Content-Type: application/json" \
   -d '{
-    "email": "alice@example.com",
+    "email": "test@example.com",
     "password": "TestPass123!",
-    "firstName": "Alice",
-    "lastName": "Test",
+    "firstName": "Test",
+    "lastName": "User",
     "taxCode": "RSSMRA85M01H501Z"
   }' 2>/dev/null)
 
 if echo "$RESPONSE" | grep -q "success"; then
     echo -e "\033[0;32m✓ Registrazione completata\033[0m"
+    echo "Risposta: $RESPONSE"
 else
     echo -e "\033[0;31m✗ Registrazione fallita\033[0m"
     echo "Risposta: $RESPONSE"
@@ -47,3 +48,8 @@ fi
 
 echo ""
 echo "Test completati!"
+echo ""
+echo "🎯 Accedi al Dashboard Admin:"
+echo "   URL: http://localhost:3006"
+echo "   Username: admin"
+echo "   Password: admin123"
