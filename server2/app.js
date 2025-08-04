@@ -41,9 +41,11 @@ class AuthenticationService {
         const testVoters = [
             { email: 'alice@example.com', taxCode: 'RSSMRA85M01H501Z' },
             { email: 'bob@example.com', taxCode: 'VRDGPP90L15H501A' },
-            { email: 'charlie@example.com', taxCode: 'BNCLRA88S20H501B' }
+            { email: 'charlie@example.com', taxCode: 'BNCLRA88S20H501B' },
+            { email: 'test@example.com', taxCode: 'RSSMRA85M01H501Z' },
+            { email: 'mario.rossi@example.com', taxCode: 'RSSMRA80A01H501X' },
+            { email: 'admin@evoting.local', taxCode: 'ADMINTEST001234' }
         ];
-
         testVoters.forEach(voter => {
             db.whitelist.set(voter.email, {
                 ...voter,

@@ -1,0 +1,21 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Installa dipendenze globali
+RUN npm install -g react-scripts@5.0.1
+
+# Copia package files
+COPY package*.json ./
+
+# Installa dipendenze
+RUN npm install
+
+# Copia codice sorgente
+COPY . .
+
+# Esponi porta
+EXPOSE 3000
+
+# Comando per sviluppo
+CMD ["npm", "start"]
