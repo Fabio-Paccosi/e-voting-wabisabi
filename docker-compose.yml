@@ -6,119 +6,119 @@ services:
     environment:
       POSTGRES_DB: evoting_wabisabi
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-SecurePass123!}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     networks:
       - evoting-network
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
+      interval: 30s
       timeout: 5s
       retries: 5
 
-  # Redis per caching e sessioni
+  # Redis per caching
   redis:
     image: redis:7-alpine
     container_name: evoting-redis
-    command: redis-server --requirepass ${REDIS_PASSWORD:-redis123}
+    command: redis-server --requirepass ${REDIS_PASSWORD:-RedisPass456!}
+    volumes:
+      - redis_data:/data
     ports:
       - "6379:6379"
     networks:
       - evoting-network
-    volumes:
-      - redis_data:/data
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 3s
       retries: 5
 
-  # Server 1: API Gateway
+  # API Gateway
   api-gateway:
-    build:
-      context: ./server1
-      dockerfile: Dockerfile
+    build: ./server1
     container_name: evoting-api-gateway
-    environment:
-      NODE_ENV: ${NODE_ENV:-development}
-      PORT: 3001
-      AUTH_SERVICE_URL: http://auth-service:3002
-      VOTE_SERVICE_URL: http://vote-service:3003
-      REDIS_URL: redis://:${REDIS_PASSWORD:-redis123}@redis:6379
     ports:
       - "3001:3001"
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - JWT_SECRET=${JWT_SECRET:-default-secret-key}
+      - DB_HOST=postgres
+      - REDIS_HOST=redis
     depends_on:
-      - redis
       - postgres
+      - redis
     networks:
       - evoting-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  # Server 2: Authentication & Credentials
+  # Auth Service
   auth-service:
-    build:
-      context: ./server2
-      dockerfile: Dockerfile
+    build: ./server2
     container_name: evoting-auth-service
-    environment:
-      NODE_ENV: ${NODE_ENV:-development}
-      PORT: 3002
-      DB_HOST: postgres
-      DB_NAME: evoting_wabisabi
-      DB_USER: postgres
-      DB_PASS: ${DB_PASSWORD:-password}
-      JWT_SECRET: ${JWT_SECRET:-your-secret-key}
-      REDIS_URL: redis://:${REDIS_PASSWORD:-redis123}@redis:6379
     ports:
       - "3002:3002"
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - DB_HOST=postgres
+      - JWT_SECRET=${JWT_SECRET:-default-secret-key}
+      - REDIS_HOST=redis
     depends_on:
       - postgres
       - redis
     networks:
       - evoting-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  # Server 3: Vote Processing & Blockchain
+  # Vote Service
   vote-service:
-    build:
-      context: ./server3
-      dockerfile: Dockerfile
+    build: ./server3
     container_name: evoting-vote-service
-    environment:
-      NODE_ENV: ${NODE_ENV:-development}
-      PORT: 3003
-      DB_HOST: postgres
-      DB_NAME: evoting_wabisabi
-      DB_USER: postgres
-      DB_PASS: ${DB_PASSWORD:-password}
-      BITCOIN_NETWORK: ${BITCOIN_NETWORK:-testnet}
-      BITCOIN_NODE_URL: ${BITCOIN_NODE_URL:-http://bitcoin-node:8332}
-      BITCOIN_RPC_USER: ${BITCOIN_RPC_USER:-user}
-      BITCOIN_RPC_PASS: ${BITCOIN_RPC_PASS:-pass}
     ports:
       - "3003:3003"
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - DB_HOST=postgres
+      - REDIS_HOST=redis
     depends_on:
       - postgres
-      - bitcoin-node
+      - redis
     networks:
       - evoting-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3003/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  # Bitcoin Core Node (Testnet)
+  # Bitcoin Node
   bitcoin-node:
     image: ruimarinho/bitcoin-core:0.21
     container_name: evoting-bitcoin-node
-    command:
-      - -testnet
-      - -server
-      - -rpcuser=${BITCOIN_RPC_USER:-user}
-      - -rpcpassword=${BITCOIN_RPC_PASS:-pass}
-      - -rpcallowip=0.0.0.0/0
-      - -rpcbind=0.0.0.0
-      - -printtoconsole
+    command: >
+      bitcoind
+      -testnet=1
+      -server=1
+      -rpcbind=0.0.0.0
+      -rpcallowip=0.0.0.0/0
+      -rpcuser=${BITCOIN_RPC_USER:-bitcoinrpc}
+      -rpcpassword=${BITCOIN_RPC_PASSWORD:-BitcoinSecurePass789!}
+      -printtoconsole
     volumes:
       - bitcoin_data:/home/bitcoin/.bitcoin
     ports:
@@ -126,12 +126,34 @@ services:
       - "18333:18333"
     networks:
       - evoting-network
+    restart: unless-stopped
 
+  # Admin Dashboard
+  admin-dashboard:
+    build: ./admin-dashboard
+    container_name: evoting-admin-react
+    ports:
+      - "3006:3006"
+    environment:
+      - REACT_APP_API_URL=http://localhost:3001
+      - REACT_APP_ENV=development
+      - PORT=3006
+    depends_on:
+      - api-gateway
+    networks:
+      - evoting-network
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
 volumes:
   postgres_data:
+    driver: local
   redis_data:
+    driver: local
   bitcoin_data:
+    driver: local
 
 networks:
   evoting-network:
     driver: bridge
+    name: evoting-network

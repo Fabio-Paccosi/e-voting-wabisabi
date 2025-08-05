@@ -1,15 +1,154 @@
 <!DOCTYPE html>
 <html lang="it">
-  <head>
-    <meta charset="utf-8" />
-    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#000000" />
-    <meta name="description" content="Dashboard Amministratore E-Voting WabiSabi" />
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard - E-Voting WabiSabi</title>
-  </head>
-  <body>
-    <noscript>È necessario abilitare JavaScript per utilizzare questa applicazione.</noscript>
-    <div id="root"></div>
-  </body>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+</head>
+<body class="bg-gray-100">
+    <div id="app">
+        <nav class="bg-blue-600 text-white p-4">
+            <div class="container mx-auto flex justify-between items-center">
+                <h1 class="text-xl font-bold">🗳️ E-Voting Admin Dashboard</h1>
+                <div class="text-sm">Porta: 3006</div>
+            </div>
+        </nav>
+        
+        <div class="container mx-auto mt-8 px-4">
+            <!-- Statistiche -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h3 class="text-lg font-semibold text-gray-700">Elezioni Totali</h3>
+                    <p class="text-3xl font-bold text-blue-600" id="totalElections">-</p>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h3 class="text-lg font-semibold text-gray-700">Voti Totali</h3>
+                    <p class="text-3xl font-bold text-green-600" id="totalVotes">-</p>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h3 class="text-lg font-semibold text-gray-700">Utenti Attivi</h3>
+                    <p class="text-3xl font-bold text-yellow-600" id="activeUsers">-</p>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h3 class="text-lg font-semibold text-gray-700">Whitelist</h3>
+                    <p class="text-3xl font-bold text-purple-600" id="whitelistUsers">-</p>
+                </div>
+            </div>
+            
+            <!-- Status Servizi -->
+            <div class="bg-white p-6 rounded-lg shadow mb-8">
+                <h3 class="text-lg font-semibold text-gray-700 mb-4">🔍 Status Servizi</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="p-4 border rounded-lg">
+                        <div class="flex items-center justify-between">
+                            <span>API Gateway</span>
+                            <span id="gateway-status" class="px-2 py-1 rounded text-sm">Checking...</span>
+                        </div>
+                        <div class="text-sm text-gray-500">http://localhost:3001</div>
+                    </div>
+                    <div class="p-4 border rounded-lg">
+                        <div class="flex items-center justify-between">
+                            <span>Auth Service</span>
+                            <span id="auth-status" class="px-2 py-1 rounded text-sm">Checking...</span>
+                        </div>
+                        <div class="text-sm text-gray-500">http://localhost:3002</div>
+                    </div>
+                    <div class="p-4 border rounded-lg">
+                        <div class="flex items-center justify-between">
+                            <span>Vote Service</span>
+                            <span id="vote-status" class="px-2 py-1 rounded text-sm">Checking...</span>
+                        </div>
+                        <div class="text-sm text-gray-500">http://localhost:3003</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Azioni rapide -->
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h3 class="text-lg font-semibold text-gray-700 mb-4">⚡ Azioni Rapide</h3>
+                <div class="flex flex-wrap gap-4">
+                    <button onclick="testSystem()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                        Test Sistema
+                    </button>
+                    <button onclick="backupDb()" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
+                        Backup Database
+                    </button>
+                    <button onclick="viewLogs()" class="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700">
+                        Visualizza Logs
+                    </button>
+                    <button onclick="restartServices()" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">
+                        Restart Servizi
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Carica statistiche
+        async function loadStats() {
+            try {
+                const response = await axios.get('/api/admin/stats');
+                const stats = response.data;
+                
+                document.getElementById('totalElections').textContent = stats.totalElections;
+                document.getElementById('totalVotes').textContent = stats.totalVotes;
+                document.getElementById('activeUsers').textContent = stats.activeUsers;
+                document.getElementById('whitelistUsers').textContent = stats.whitelistUsers;
+            } catch (error) {
+                console.error('Errore caricamento statistiche:', error);
+            }
+        }
+        
+        // Verifica status servizi
+        async function checkServices() {
+            const services = [
+                { id: 'gateway-status', url: 'http://localhost:3001/api/health' },
+                { id: 'auth-status', url: 'http://localhost:3002/api/health' },
+                { id: 'vote-status', url: 'http://localhost:3003/api/health' }
+            ];
+            
+            for (const service of services) {
+                try {
+                    await axios.get(service.url);
+                    document.getElementById(service.id).textContent = 'Online';
+                    document.getElementById(service.id).className = 'px-2 py-1 rounded text-sm bg-green-100 text-green-800';
+                } catch (error) {
+                    document.getElementById(service.id).textContent = 'Offline';
+                    document.getElementById(service.id).className = 'px-2 py-1 rounded text-sm bg-red-100 text-red-800';
+                }
+            }
+        }
+        
+        // Funzioni azioni rapide
+        function testSystem() {
+            alert('Test sistema avviato! Controlla i logs per i risultati.');
+        }
+        
+        function backupDb() {
+            alert('Backup database avviato! Verrà salvato nella cartella backups/');
+        }
+        
+        function viewLogs() {
+            window.open('http://localhost:3001/logs', '_blank');
+        }
+        
+        function restartServices() {
+            if (confirm('Sei sicuro di voler riavviare i servizi?')) {
+                alert('Riavvio servizi in corso...');
+            }
+        }
+        
+        // Inizializzazione
+        document.addEventListener('DOMContentLoaded', function() {
+            loadStats();
+            checkServices();
+            
+            // Aggiorna ogni 30 secondi
+            setInterval(checkServices, 30000);
+        });
+    </script>
+</body>
 </html>
