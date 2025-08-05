@@ -129,22 +129,23 @@ services:
     restart: unless-stopped
 
   # Admin Dashboard
-  admin-dashboard:
-    build: ./admin-dashboard
-    container_name: evoting-admin-react
-    ports:
-      - "3006:3006"
-    environment:
-      - REACT_APP_API_URL=http://localhost:3001
-      - REACT_APP_ENV=development
-      - PORT=3006
-    depends_on:
-      - api-gateway
-    networks:
-      - evoting-network
-    restart: unless-stopped
-    stdin_open: true
-    tty: true
+  #admin-dashboard:
+    #build: ./admin-dashboard
+    #container_name: evoting-admin-react
+    #ports:
+    #  - "3006:3006"
+    #environment:
+    #  - REACT_APP_API_URL=http://localhost:3001
+    #  - REACT_APP_ENV=development
+    #  - PORT=3006
+    #depends_on:
+    #  - api-gateway
+    #networks:
+    #  - evoting-network
+    #restart: unless-stopped
+    #stdin_open: true
+    #tty: true
+
 volumes:
   postgres_data:
     driver: local
