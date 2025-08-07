@@ -1,7 +1,7 @@
-// server2/app.js
 // Server 2: Users Authentication & Credentials Management
 
 const express = require('express');
+const cors = require('cors'); 
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcrypt');
@@ -12,6 +12,13 @@ const PORT = process.env.PORT || 3002;
 
 // Middleware
 app.use(express.json());
+
+app.use(cors({
+    origin: process.env.CLIENT_URL || 'http://localhost:3000',
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
 // Configurazione
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
