@@ -2,6 +2,7 @@
 // Server 3: Users Vote Processing & Blockchain Node
 
 const express = require('express');
+const cors = require('cors'); 
 const bitcoin = require('bitcoinjs-lib');
 const axios = require('axios');
 const crypto = require('crypto');
@@ -12,6 +13,12 @@ const PORT = process.env.PORT || 3003;
 
 // Middleware
 app.use(express.json());
+app.use(cors({
+    origin: process.env.CLIENT_URL || 'http://localhost:3000',
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
 // Configurazione Bitcoin
 const BITCOIN_NETWORK = process.env.BITCOIN_NETWORK === 'mainnet' 
