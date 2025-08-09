@@ -19,6 +19,9 @@ RUN npm install --only=production --no-package-lock
 # Copia il resto del codice sorgente
 COPY . .
 
+RUN ls -la /app/
+RUN ls -la /app/routes/ || echo "Directory routes non trovata"
+
 # Esponi la porta
 EXPOSE 3001
 

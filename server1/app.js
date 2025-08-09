@@ -34,6 +34,46 @@ const VOTE_SERVICE_URL = process.env.VOTE_SERVICE_URL || 'http://localhost:3003'
 const adminRoutes = require('./routes/admin');
 app.use('/api/admin', adminRoutes);
 
+const http = require('http');
+const AdminSocketServer = require('./websocket/admin-socket');
+
+// Crea server HTTP
+const server = http.createServer(app);
+
+// Setup WebSocket
+const adminSocket = new AdminSocketServer(server);
+
+// Rendi disponibile globally per altri moduli
+app.set('adminSocket', adminSocket);
+
+// Avvia server
+server.listen(PORT, () => {
+  console.log(`[API Gateway] Server avviato sulla porta ${PORT}`);
+  console.log(`[WebSocket] Admin socket server attivo`);
+});
+
+// Simulazione eventi per testing
+if (process.env.NODE_ENV === 'development') {
+  // Simula aggiornamenti statistiche ogni 30 secondi
+  setInterval(() => {
+    adminSocket.onStatsUpdate({
+      totalElections: Math.floor(Math.random() * 10) + 5,
+      totalVotes: Math.floor(Math.random() * 1000) + 500,
+      activeUsers: Math.floor(Math.random() * 100) + 50,
+      whitelistUsers: Math.floor(Math.random() * 200) + 100
+    });
+  }, 30000);
+
+  // Simula nuovi voti ogni minuto
+  setInterval(() => {
+    adminSocket.onNewVote({
+      electionId: 'election_001',
+      totalVotes: Math.floor(Math.random() * 500) + 100,
+      activeSessions: Math.floor(Math.random() * 10) + 1
+    });
+  }, 60000);
+}
+
 // ====================
 // COORDINATOR SERVICE
 // ====================
