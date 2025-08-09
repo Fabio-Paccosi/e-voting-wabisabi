@@ -14,6 +14,18 @@ cd admin && npm start
 # Terminale 3: Client Frontend
 cd client && npm start
 
+## Tests
+# Test health check
+curl http://localhost:3001/api/health
+
+# Test connessione admin
+curl http://localhost:3001/api/admin/test-connection
+
+# Test admin login
+curl -X POST http://localhost:3001/api/admin/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}'
+
 
 ## Comandi utili
 
