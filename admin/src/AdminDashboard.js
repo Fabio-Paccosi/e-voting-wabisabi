@@ -15,7 +15,23 @@ import {
   Database,
   Server,
   Wifi,
-  WifiOff
+  WifiOff,
+  UserPlus,
+  Trash2,
+  Download,
+  Upload,
+  Play,
+  Pause,
+  Edit,
+  Save,
+  X,
+  Search,
+  Filter,
+  Clock,
+  Shield,
+  Key,
+  FileText,
+  HardDrive
 } from 'lucide-react';
 
 // Importa i servizi API
@@ -56,47 +72,76 @@ const AdminDashboard = () => {
   });
 
   const [recentActivity, setRecentActivity] = useState([]);
-  const [chartsData, setChartsData] = useState({
-    votesOverTime: [],
-    registrationsOverTime: [],
-    loading: true
-  });
-
   const [realTimeData, setRealTimeData] = useState({
     connectedUsers: 0,
     activeVotingSessions: 0,
     lastUpdate: null
   });
 
-  // ==========================================
-  // EFFETTI E LIFECYCLE
-  // ==========================================
-  useEffect(() => {
-    checkAuthenticationStatus();
-  }, []);
+  // Stato per sezioni specifiche
+  const [elections, setElections] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [whitelist, setWhitelist] = useState([]);
+  const [systemSettings, setSystemSettings] = useState({});
+  const [backups, setBackups] = useState([]);
+  const [logs, setLogs] = useState([]);
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      loadDashboardData();
-      setupRealTimeUpdates();
-      
-      // Refresh automatico ogni 30 secondi
-      const interval = setInterval(refreshData, 30000);
-      return () => clearInterval(interval);
+  // Stati UI
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // ==========================================
+  // FUNZIONI UTILITY
+  // ==========================================
+  const formatTimestamp = (timestamp) => {
+    if (!timestamp) return 'Mai';
+    return new Date(timestamp).toLocaleString('it-IT');
+  };
+
+  const formatNumber = (num) => {
+    return new Intl.NumberFormat('it-IT').format(num);
+  };
+
+  const showMessage = (message, type = 'success') => {
+    if (type === 'success') {
+      setSuccess(message);
+      setError('');
+    } else {
+      setError(message);
+      setSuccess('');
     }
-  }, [isAuthenticated]);
+    setTimeout(() => {
+      setSuccess('');
+      setError('');
+    }, 5000);
+  };
 
   // ==========================================
-  // FUNZIONI AUTENTICAZIONE
+  // AUTENTICAZIONE
   // ==========================================
   const checkAuthenticationStatus = async () => {
     try {
       const token = localStorage.getItem('adminToken');
-      if (token) {
-        await authAPI.verifyToken();
+      if (!token) {
+        setIsAuthenticated(false);
+        setIsLoading(false);
+        return;
+      }
+
+      const response = await authAPI.verifyToken();
+      if (response.valid) {
         setIsAuthenticated(true);
+        loadDashboardData();
+      } else {
+        localStorage.removeItem('adminToken');
+        setIsAuthenticated(false);
       }
     } catch (error) {
+      console.error('Errore verifica auth:', error);
       setIsAuthenticated(false);
     } finally {
       setIsLoading(false);
@@ -106,13 +151,17 @@ const AdminDashboard = () => {
   const handleLogin = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    
+    setError('');
+
     try {
-      await authAPI.login(credentials);
-      setIsAuthenticated(true);
-      setCredentials({ username: '', password: '' });
+      const response = await authAPI.login(credentials);
+      if (response.token) {
+        setIsAuthenticated(true);
+        loadDashboardData();
+        showMessage('Accesso effettuato con successo');
+      }
     } catch (error) {
-      alert('Credenziali non valide');
+      setError(error.message || 'Errore durante l\'accesso');
     } finally {
       setIsLoading(false);
     }
@@ -122,241 +171,299 @@ const AdminDashboard = () => {
     try {
       await authAPI.logout();
       setIsAuthenticated(false);
-      adminWS.disconnect();
+      setCredentials({ username: '', password: '' });
     } catch (error) {
       console.error('Errore logout:', error);
     }
   };
 
   // ==========================================
-  // CARICAMENTO DATI DASHBOARD
+  // CARICAMENTO DATI
   // ==========================================
   const loadDashboardData = async () => {
     try {
-      // Carica statistiche principali
-      await loadStats();
-      
-      // Carica stato sistema
-      await loadSystemStatus();
-      
-      // Carica attività recente
-      await loadRecentActivity();
-      
-      // Carica dati grafici
-      await loadChartsData();
-      
+      setStats(prev => ({ ...prev, loading: true }));
+      setSystemStatus(prev => ({ ...prev, loading: true }));
+
+      const [
+        statsData,
+        statusData,
+        activityData
+      ] = await Promise.all([
+        dashboardAPI.getStats(),
+        dashboardAPI.getSystemStatus(),
+        dashboardAPI.getRecentActivity()
+      ]);
+
+      setStats({ ...statsData, loading: false });
+      setSystemStatus({ ...statusData, loading: false });
+      setRecentActivity(activityData.activities || []);
+      setRealTimeData({
+        connectedUsers: statusData.connectedUsers || 0,
+        activeVotingSessions: statsData.activeElections || 0,
+        lastUpdate: new Date().toISOString()
+      });
     } catch (error) {
       console.error('Errore caricamento dashboard:', error);
+      setError('Errore caricamento dati dashboard');
     }
   };
 
-  const loadStats = async () => {
+  const loadElections = async () => {
+    setLoading(true);
     try {
-      setStats(prev => ({ ...prev, loading: true }));
-      const statsData = await dashboardAPI.getStats();
-      setStats({
-        ...statsData,
-        loading: false
-      });
+      const data = await electionsAPI.getElections();
+      setElections(data.elections || []);
     } catch (error) {
-      console.error('Errore caricamento statistiche:', error);
-      setStats(prev => ({ ...prev, loading: false }));
+      showMessage('Errore caricamento elezioni', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const loadSystemStatus = async () => {
+  const loadUsers = async () => {
+    setLoading(true);
     try {
-      setSystemStatus(prev => ({ ...prev, loading: true }));
-      const statusData = await dashboardAPI.getSystemStatus();
-      setSystemStatus({
-        ...statusData,
-        loading: false
-      });
+      const data = await usersAPI.getUsers({ page: currentPage, limit: 20 });
+      setUsers(data.users || []);
     } catch (error) {
-      console.error('Errore caricamento stato sistema:', error);
-      setSystemStatus(prev => ({ ...prev, loading: false }));
+      showMessage('Errore caricamento utenti', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const loadRecentActivity = async () => {
+  const loadWhitelist = async () => {
+    setLoading(true);
     try {
-      const activityData = await dashboardAPI.getRecentLogs(10);
-      setRecentActivity(activityData.logs || []);
+      const data = await usersAPI.getWhitelist();
+      setWhitelist(data.whitelist || []);
     } catch (error) {
-      console.error('Errore caricamento attività:', error);
+      showMessage('Errore caricamento whitelist', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const loadChartsData = async () => {
+  const loadSystemSettings = async () => {
+    setLoading(true);
     try {
-      setChartsData(prev => ({ ...prev, loading: true }));
-      const charts = await dashboardAPI.getChartsData('7d');
-      setChartsData({
-        ...charts,
-        loading: false
-      });
+      const data = await systemAPI.getSettings();
+      setSystemSettings(data);
     } catch (error) {
-      console.error('Errore caricamento grafici:', error);
-      setChartsData(prev => ({ ...prev, loading: false }));
+      showMessage('Errore caricamento impostazioni', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadBackups = async () => {
+    try {
+      const data = await systemAPI.getBackups();
+      setBackups(data.backups || []);
+    } catch (error) {
+      showMessage('Errore caricamento backup', 'error');
+    }
+  };
+
+  const loadLogs = async () => {
+    try {
+      const data = await systemAPI.getSystemLogs('all', 100);
+      setLogs(data.logs || []);
+    } catch (error) {
+      showMessage('Errore caricamento log', 'error');
     }
   };
 
   // ==========================================
-  // REAL-TIME UPDATES
+  // AZIONI ELEZIONI
   // ==========================================
-  const setupRealTimeUpdates = () => {
-    adminWS.connect();
-
-    // Listener per aggiornamenti statistiche
-    adminWS.on('stats-update', (newStats) => {
-      setStats(prev => ({
-        ...prev,
-        ...newStats
-      }));
-    });
-
-    // Listener per nuovi voti
-    adminWS.on('new-vote', (voteData) => {
-      setRealTimeData(prev => ({
-        ...prev,
-        activeVotingSessions: voteData.activeSessions,
-        lastUpdate: new Date().toISOString()
-      }));
-    });
-
-    // Listener per nuove registrazioni
-    adminWS.on('user-registered', (userData) => {
-      setStats(prev => ({
-        ...prev,
-        activeUsers: prev.activeUsers + 1
-      }));
-      
-      // Aggiungi alla attività recente
-      setRecentActivity(prev => [
-        {
-          id: Date.now(),
-          type: 'user_registration',
-          message: `Nuovo utente registrato: ${userData.email}`,
-          timestamp: new Date().toISOString(),
-          level: 'info'
-        },
-        ...prev.slice(0, 9)
-      ]);
-    });
-  };
-
-  // ==========================================
-  // UTILITY FUNCTIONS
-  // ==========================================
-  const refreshData = useCallback(async () => {
-    if (!isAuthenticated) return;
-    
+  const handleElectionAction = async (electionId, action) => {
     try {
-      await Promise.all([
-        loadStats(),
-        loadSystemStatus(),
-        loadRecentActivity()
-      ]);
-      
-      setRealTimeData(prev => ({
-        ...prev,
-        lastUpdate: new Date().toISOString()
-      }));
+      if (action === 'start') {
+        await electionsAPI.startElection(electionId);
+        showMessage('Elezione avviata con successo');
+      } else if (action === 'stop') {
+        await electionsAPI.stopElection(electionId);
+        showMessage('Elezione fermata con successo');
+      }
+      loadElections();
     } catch (error) {
-      console.error('Errore refresh dati:', error);
-    }
-  }, [isAuthenticated]);
-
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case 'online':
-      case 'connected':
-      case 'healthy':
-        return <CheckCircle className="text-green-500" size={16} />;
-      case 'warning':
-        return <AlertCircle className="text-yellow-500" size={16} />;
-      case 'offline':
-      case 'error':
-      case 'unhealthy':
-        return <XCircle className="text-red-500" size={16} />;
-      default:
-        return <Activity className="text-gray-500" size={16} />;
+      showMessage(`Errore ${action} elezione`, 'error');
     }
   };
 
-  const formatTimestamp = (timestamp) => {
-    if (!timestamp) return 'Mai';
-    return new Date(timestamp).toLocaleString('it-IT');
+  // ==========================================
+  // AZIONI UTENTI
+  // ==========================================
+  const handleAddToWhitelist = async (userData) => {
+    try {
+      await usersAPI.addToWhitelist(userData);
+      showMessage('Utente aggiunto alla whitelist');
+      loadWhitelist();
+    } catch (error) {
+      showMessage('Errore aggiunta utente', 'error');
+    }
   };
+
+  const handleRemoveFromWhitelist = async (email) => {
+    if (window.confirm('Rimuovere questo utente dalla whitelist?')) {
+      try {
+        await usersAPI.removeFromWhitelist(email);
+        showMessage('Utente rimosso dalla whitelist');
+        loadWhitelist();
+      } catch (error) {
+        showMessage('Errore rimozione utente', 'error');
+      }
+    }
+  };
+
+  // ==========================================
+  // AZIONI SISTEMA
+  // ==========================================
+  const handleCreateBackup = async () => {
+    try {
+      setLoading(true);
+      await systemAPI.createBackup();
+      showMessage('Backup creato con successo');
+      loadBackups();
+    } catch (error) {
+      showMessage('Errore creazione backup', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRestoreBackup = async (backupId) => {
+    if (window.confirm('Ripristinare questo backup? L\'operazione non può essere annullata.')) {
+      try {
+        setLoading(true);
+        await systemAPI.restoreBackup(backupId);
+        showMessage('Backup ripristinato con successo');
+      } catch (error) {
+        showMessage('Errore ripristino backup', 'error');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  const handleUpdateSettings = async (newSettings) => {
+    try {
+      await systemAPI.updateSettings(newSettings);
+      showMessage('Impostazioni aggiornate con successo');
+      setSystemSettings(newSettings);
+    } catch (error) {
+      showMessage('Errore aggiornamento impostazioni', 'error');
+    }
+  };
+
+  // ==========================================
+  // EFFETTI
+  // ==========================================
+  useEffect(() => {
+    checkAuthenticationStatus();
+  }, []);
+
+  useEffect(() => {
+    if (isAuthenticated && activeTab !== 'dashboard') {
+      if (activeTab === 'elections') loadElections();
+      else if (activeTab === 'users') { loadUsers(); loadWhitelist(); }
+      else if (activeTab === 'settings') { loadSystemSettings(); loadBackups(); loadLogs(); }
+    }
+  }, [activeTab, isAuthenticated]);
+
+  // Auto-refresh per dashboard
+  useEffect(() => {
+    if (isAuthenticated && activeTab === 'dashboard') {
+      const interval = setInterval(loadDashboardData, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [isAuthenticated, activeTab]);
 
   // ==========================================
   // COMPONENTI UI
   // ==========================================
-  const StatCard = ({ title, value, loading, icon: Icon, color = 'blue', trend }) => (
-    <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+  const StatCard = ({ title, value, loading, icon: Icon, color }) => (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-medium text-gray-700">{title}</h3>
-          {loading ? (
-            <div className="animate-pulse bg-gray-200 h-8 w-16 rounded mt-2"></div>
-          ) : (
-            <div className="flex items-center mt-2">
-              <p className={`text-3xl font-bold text-${color}-600`}>{value}</p>
-              {trend && (
-                <div className={`flex items-center ml-2 text-sm ${trend > 0 ? 'text-green-500' : 'text-red-500'}`}>
-                  <TrendingUp size={16} className={trend < 0 ? 'rotate-180' : ''} />
-                  <span>{Math.abs(trend)}%</span>
-                </div>
-              )}
-            </div>
-          )}
+          <p className="text-sm font-medium text-gray-600">{title}</p>
+          <p className="text-2xl font-bold text-gray-900">
+            {loading ? '...' : formatNumber(value)}
+          </p>
         </div>
-        <Icon className={`text-${color}-500`} size={24} />
+        <div className={`p-3 rounded-full bg-${color}-100`}>
+          <Icon className={`h-6 w-6 text-${color}-600`} />
+        </div>
       </div>
     </div>
   );
 
+  const StatusIndicator = ({ status, label }) => {
+    const statusColor = status === 'online' ? 'green' : status === 'offline' ? 'red' : 'yellow';
+    return (
+      <div className="flex items-center space-x-2">
+        <div className={`w-3 h-3 rounded-full bg-${statusColor}-500`}></div>
+        <span className="text-sm text-gray-700">{label}</span>
+        <span className={`text-xs font-medium text-${statusColor}-600`}>
+          {status.toUpperCase()}
+        </span>
+      </div>
+    );
+  };
+
   // ==========================================
-  // RENDER LOGIN
+  // LOGIN FORM
   // ==========================================
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-          <h2 className="text-2xl font-bold mb-6 text-center">🗳️ Admin Login</h2>
+          <h2 className="text-2xl font-bold text-center mb-6">🗳️ Admin Login</h2>
+          
+          {error && (
+            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+              {error}
+            </div>
+          )}
+
           <form onSubmit={handleLogin}>
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Username</label>
+              <label className="block text-gray-700 text-sm font-bold mb-2">
+                Username
+              </label>
               <input
                 type="text"
                 value={credentials.username}
-                onChange={(e) => setCredentials(prev => ({ ...prev, username: e.target.value }))}
-                className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                onChange={(e) => setCredentials({...credentials, username: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
-                disabled={isLoading}
               />
             </div>
+            
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+              <label className="block text-gray-700 text-sm font-bold mb-2">
+                Password
+              </label>
               <div className="relative">
                 <input
-                  type={showPassword ? 'text' : 'password'}
+                  type={showPassword ? "text" : "password"}
                   value={credentials.password}
-                  onChange={(e) => setCredentials(prev => ({ ...prev, password: e.target.value }))}
-                  className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                  onChange={(e) => setCredentials({...credentials, password: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
-                  disabled={isLoading}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                  disabled={isLoading}
                 >
                   {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
               </div>
             </div>
+            
             <button
               type="submit"
               className="w-full bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
@@ -389,7 +496,7 @@ const AdminDashboard = () => {
               <span>{formatTimestamp(realTimeData.lastUpdate)}</span>
             </div>
             <button
-              onClick={refreshData}
+              onClick={loadDashboardData}
               className="text-sm bg-blue-700 px-3 py-1 rounded hover:bg-blue-800 flex items-center space-x-1"
               title="Aggiorna dati"
             >
@@ -405,6 +512,22 @@ const AdminDashboard = () => {
           </div>
         </div>
       </nav>
+
+      {/* Messages */}
+      {(success || error) && (
+        <div className="container mx-auto mt-4 px-4">
+          {success && (
+            <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+              {success}
+            </div>
+          )}
+          {error && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+              {error}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="container mx-auto mt-8 px-4">
         {/* Tab Navigation */}
@@ -433,7 +556,7 @@ const AdminDashboard = () => {
           })}
         </div>
 
-        {/* Dashboard Content */}
+        {/* DASHBOARD */}
         {activeTab === 'dashboard' && (
           <div className="space-y-8">
             {/* Statistiche Principali */}
@@ -468,63 +591,35 @@ const AdminDashboard = () => {
               />
             </div>
 
-            {/* Stato Sistema */}
+            {/* Stato Sistema e Attività */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Stato Servizi */}
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
                   <Server className="mr-2" size={20} />
                   Stato Servizi
                 </h3>
-                {systemStatus.loading ? (
-                  <div className="space-y-3">
-                    {[1, 2, 3].map(i => (
-                      <div key={i} className="animate-pulse bg-gray-200 h-12 rounded"></div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {systemStatus.services?.map(service => (
-                      <div key={service.name} className="flex items-center justify-between p-3 bg-gray-50 rounded">
-                        <div className="flex items-center space-x-3">
-                          {getStatusIcon(service.status)}
-                          <span className="font-medium">{service.name}</span>
-                        </div>
-                        <div className="text-sm text-gray-600">
-                          {service.responseTime}ms
-                        </div>
-                      </div>
-                    ))}
-                    
-                    {/* Database Status */}
-                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded">
-                      <div className="flex items-center space-x-3">
-                        {getStatusIcon(systemStatus.database?.status)}
-                        <span className="font-medium">Database</span>
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        {systemStatus.database?.responseTime}ms
-                      </div>
-                    </div>
-
-                    {/* Redis Status */}
-                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded">
-                      <div className="flex items-center space-x-3">
-                        {getStatusIcon(systemStatus.redis?.status)}
-                        <span className="font-medium">Redis Cache</span>
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        {systemStatus.redis?.responseTime}ms
-                      </div>
-                    </div>
-                  </div>
-                )}
+                <div className="space-y-3">
+                  <StatusIndicator 
+                    status={systemStatus.database?.status || 'unknown'} 
+                    label="Database" 
+                  />
+                  <StatusIndicator 
+                    status={systemStatus.redis?.status || 'unknown'} 
+                    label="Redis" 
+                  />
+                  <StatusIndicator 
+                    status={systemStatus.blockchain?.status || 'unknown'} 
+                    label="Blockchain" 
+                  />
+                </div>
               </div>
 
-              {/* Attività Recente */}
+              {/* Attività Recenti */}
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
                   <Activity className="mr-2" size={20} />
-                  Attività Recente
+                  Attività Recenti
                 </h3>
                 <div className="space-y-2 max-h-64 overflow-y-auto">
                   {recentActivity.length === 0 ? (
@@ -566,34 +661,636 @@ const AdminDashboard = () => {
                     </div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-xs text-gray-500">Ultimo aggiornamento</div>
-                  <div className="text-sm font-medium">{formatTimestamp(realTimeData.lastUpdate)}</div>
-                </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Placeholder per altre sezioni */}
-        {activeTab !== 'dashboard' && (
-          <div className="text-center py-16">
-            <div className="mx-auto h-16 w-16 text-gray-400 mb-4">
-              <Settings className="h-16 w-16" />
-            </div>
-            <h3 className="text-xl font-medium text-gray-900 mb-2">
-              Sezione "{activeTab}" in Sviluppo
-            </h3>
-            <p className="text-gray-600 mb-4">
-              Questa sezione sarà implementata nella prossima versione con funzionalità complete.
-            </p>
-            <div className="text-sm text-gray-500">
-              <p>✅ Dashboard dinamico implementato</p>
-              <p>🔄 {activeTab} - in fase di sviluppo</p>
-            </div>
+        {/* SEZIONE ELEZIONI */}
+        {activeTab === 'elections' && (
+          <ElectionsSection 
+            elections={elections}
+            loading={loading}
+            onElectionAction={handleElectionAction}
+            onRefresh={loadElections}
+          />
+        )}
+
+        {/* SEZIONE UTENTI */}
+        {activeTab === 'users' && (
+          <UsersSection 
+            users={users}
+            whitelist={whitelist}
+            loading={loading}
+            onAddToWhitelist={handleAddToWhitelist}
+            onRemoveFromWhitelist={handleRemoveFromWhitelist}
+            onRefreshUsers={loadUsers}
+            onRefreshWhitelist={loadWhitelist}
+          />
+        )}
+
+        {/* SEZIONE IMPOSTAZIONI */}
+        {activeTab === 'settings' && (
+          <SettingsSection 
+            settings={systemSettings}
+            backups={backups}
+            logs={logs}
+            loading={loading}
+            onUpdateSettings={handleUpdateSettings}
+            onCreateBackup={handleCreateBackup}
+            onRestoreBackup={handleRestoreBackup}
+            onRefreshSettings={loadSystemSettings}
+            onRefreshBackups={loadBackups}
+            onRefreshLogs={loadLogs}
+          />
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// COMPONENTI SEZIONI
+// ==========================================
+
+const ElectionsSection = ({ elections, loading, onElectionAction, onRefresh }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
+
+  const filteredElections = elections.filter(election => {
+    const matchesSearch = election.title.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesFilter = filterStatus === 'all' || election.status === filterStatus;
+    return matchesSearch && matchesFilter;
+  });
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-800">Gestione Elezioni</h2>
+          <p className="text-gray-600">{elections.length} elezioni totali</p>
+        </div>
+        <button
+          onClick={onRefresh}
+          className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+          disabled={loading}
+        >
+          <RefreshCcw size={16} className={loading ? 'animate-spin' : ''} />
+          <span>Aggiorna</span>
+        </button>
+      </div>
+
+      {/* Filtri */}
+      <div className="flex space-x-4">
+        <div className="flex-1 relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+          <input
+            type="text"
+            placeholder="Cerca elezioni..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="all">Tutti gli stati</option>
+          <option value="draft">Bozza</option>
+          <option value="active">Attiva</option>
+          <option value="completed">Completata</option>
+          <option value="cancelled">Cancellata</option>
+        </select>
+      </div>
+
+      {/* Lista Elezioni */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        {loading ? (
+          <div className="p-8 text-center">
+            <RefreshCcw className="animate-spin mx-auto mb-4" size={32} />
+            <p>Caricamento elezioni...</p>
+          </div>
+        ) : filteredElections.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">
+            <Vote size={48} className="mx-auto mb-4 text-gray-300" />
+            <p>Nessuna elezione trovata</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-200">
+            {filteredElections.map(election => (
+              <div key={election.id} className="p-6 hover:bg-gray-50">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-gray-800">{election.title}</h3>
+                    <p className="text-gray-600 mt-1">{election.description}</p>
+                    <div className="flex items-center space-x-4 mt-3 text-sm text-gray-500">
+                      <span>📅 {election.startDate} - {election.endDate}</span>
+                      <span>🗳️ {election.totalVotes || 0} voti</span>
+                      <span>👥 {election.candidates?.length || 0} candidati</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      election.status === 'active' ? 'bg-green-100 text-green-800' :
+                      election.status === 'draft' ? 'bg-gray-100 text-gray-800' :
+                      election.status === 'completed' ? 'bg-blue-100 text-blue-800' :
+                      'bg-red-100 text-red-800'
+                    }`}>
+                      {election.status}
+                    </span>
+                    {election.status === 'draft' && (
+                      <button
+                        onClick={() => onElectionAction(election.id, 'start')}
+                        className="flex items-center space-x-1 bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700"
+                      >
+                        <Play size={14} />
+                        <span>Avvia</span>
+                      </button>
+                    )}
+                    {election.status === 'active' && (
+                      <button
+                        onClick={() => onElectionAction(election.id, 'stop')}
+                        className="flex items-center space-x-1 bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700"
+                      >
+                        <Pause size={14} />
+                        <span>Ferma</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
+    </div>
+  );
+};
+
+const UsersSection = ({ users, whitelist, loading, onAddToWhitelist, onRemoveFromWhitelist, onRefreshUsers, onRefreshWhitelist }) => {
+  const [activeUserTab, setActiveUserTab] = useState('users');
+  const [showAddUser, setShowAddUser] = useState(false);
+  const [newUser, setNewUser] = useState({ email: '', firstName: '', lastName: '', taxCode: '' });
+
+  const handleAddUser = async (e) => {
+    e.preventDefault();
+    await onAddToWhitelist(newUser);
+    setNewUser({ email: '', firstName: '', lastName: '', taxCode: '' });
+    setShowAddUser(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-800">Gestione Utenti</h2>
+          <p className="text-gray-600">
+            {activeUserTab === 'users' 
+              ? `${users.length} utenti registrati`
+              : `${whitelist.length} utenti in whitelist`
+            }
+          </p>
+        </div>
+        
+        <div className="flex space-x-3">
+          <button
+            onClick={() => activeUserTab === 'users' ? onRefreshUsers() : onRefreshWhitelist()}
+            className="flex items-center space-x-2 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200"
+            disabled={loading}
+          >
+            <RefreshCcw size={16} className={loading ? 'animate-spin' : ''} />
+            <span>Aggiorna</span>
+          </button>
+          
+          {activeUserTab === 'whitelist' && (
+            <button
+              onClick={() => setShowAddUser(true)}
+              className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+            >
+              <UserPlus size={16} />
+              <span>Aggiungi</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Tab Navigation */}
+      <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg">
+        <button
+          onClick={() => setActiveUserTab('users')}
+          className={`flex-1 flex items-center justify-center space-x-2 px-4 py-2 rounded-md transition-colors ${
+            activeUserTab === 'users'
+              ? 'bg-white text-blue-600 shadow-sm'
+              : 'text-gray-600 hover:text-blue-600'
+          }`}
+        >
+          <Users size={16} />
+          <span>Utenti Registrati</span>
+        </button>
+        <button
+          onClick={() => setActiveUserTab('whitelist')}
+          className={`flex-1 flex items-center justify-center space-x-2 px-4 py-2 rounded-md transition-colors ${
+            activeUserTab === 'whitelist'
+              ? 'bg-white text-blue-600 shadow-sm'
+              : 'text-gray-600 hover:text-blue-600'
+          }`}
+        >
+          <Shield size={16} />
+          <span>Whitelist</span>
+        </button>
+      </div>
+
+      {/* Contenuto Tab */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        {loading ? (
+          <div className="p-8 text-center">
+            <RefreshCcw className="animate-spin mx-auto mb-4" size={32} />
+            <p>Caricamento...</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-200">
+            {(activeUserTab === 'users' ? users : whitelist).map((user, index) => (
+              <div key={user.id || user.email || index} className="p-4 hover:bg-gray-50">
+                <div className="flex justify-between items-center">
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-3">
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-800">{user.email}</p>
+                        {user.firstName && user.lastName && (
+                          <p className="text-sm text-gray-600">{user.firstName} {user.lastName}</p>
+                        )}
+                        {user.taxCode && (
+                          <p className="text-xs text-gray-500">CF: {user.taxCode}</p>
+                        )}
+                      </div>
+                      {activeUserTab === 'users' && (
+                        <div className="flex items-center space-x-2">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            user.status === 'verified' ? 'bg-green-100 text-green-800' :
+                            user.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800'
+                          }`}>
+                            {user.status}
+                          </span>
+                          {user.hasVoted && (
+                            <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+                              Ha votato
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-2">
+                      <span>Registrato: {new Date(user.createdAt || user.addedAt).toLocaleDateString('it-IT')}</span>
+                      {user.lastActivity && (
+                        <span className="ml-4">Ultima attività: {new Date(user.lastActivity).toLocaleDateString('it-IT')}</span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {activeUserTab === 'whitelist' && (
+                    <button
+                      onClick={() => onRemoveFromWhitelist(user.email)}
+                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                      title="Rimuovi da whitelist"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Modal Aggiungi Utente */}
+      {showAddUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Aggiungi Utente alla Whitelist</h3>
+              <button onClick={() => setShowAddUser(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <form onSubmit={handleAddUser} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={newUser.email}
+                  onChange={(e) => setNewUser({...newUser, email: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nome</label>
+                  <input
+                    type="text"
+                    value={newUser.firstName}
+                    onChange={(e) => setNewUser({...newUser, firstName: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Cognome</label>
+                  <input
+                    type="text"
+                    value={newUser.lastName}
+                    onChange={(e) => setNewUser({...newUser, lastName: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Codice Fiscale</label>
+                <input
+                  type="text"
+                  value={newUser.taxCode}
+                  onChange={(e) => setNewUser({...newUser, taxCode: e.target.value.toUpperCase()})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              
+              <div className="flex space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAddUser(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+                >
+                  Annulla
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  Aggiungi
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const SettingsSection = ({ 
+  settings, 
+  backups, 
+  logs, 
+  loading, 
+  onUpdateSettings, 
+  onCreateBackup, 
+  onRestoreBackup,
+  onRefreshSettings,
+  onRefreshBackups,
+  onRefreshLogs 
+}) => {
+  const [activeSettingsTab, setActiveSettingsTab] = useState('system');
+  const [editingSettings, setEditingSettings] = useState(false);
+  const [tempSettings, setTempSettings] = useState(settings);
+
+  useEffect(() => {
+    setTempSettings(settings);
+  }, [settings]);
+
+  const handleSaveSettings = async () => {
+    await onUpdateSettings(tempSettings);
+    setEditingSettings(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-800">Impostazioni Sistema</h2>
+          <p className="text-gray-600">Configurazione e manutenzione del sistema</p>
+        </div>
+      </div>
+
+      {/* Tab Navigation */}
+      <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg">
+        {[
+          { id: 'system', label: 'Sistema', icon: Settings },
+          { id: 'backup', label: 'Backup', icon: HardDrive },
+          { id: 'logs', label: 'Log', icon: FileText }
+        ].map(tab => {
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveSettingsTab(tab.id)}
+              className={`flex-1 flex items-center justify-center space-x-2 px-4 py-2 rounded-md transition-colors ${
+                activeSettingsTab === tab.id
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-600 hover:text-blue-600'
+              }`}
+            >
+              <Icon size={16} />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* SISTEMA */}
+      {activeSettingsTab === 'system' && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-lg font-semibold">Configurazione Sistema</h3>
+            <div className="flex space-x-2">
+              {editingSettings ? (
+                <>
+                  <button
+                    onClick={() => setEditingSettings(false)}
+                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+                  >
+                    Annulla
+                  </button>
+                  <button
+                    onClick={handleSaveSettings}
+                    className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  >
+                    <Save size={16} />
+                    <span>Salva</span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setEditingSettings(true)}
+                  className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
+                >
+                  <Edit size={16} />
+                  <span>Modifica</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Nome Sistema
+              </label>
+              <input
+                type="text"
+                value={tempSettings.systemName || ''}
+                onChange={(e) => setTempSettings({...tempSettings, systemName: e.target.value})}
+                disabled={!editingSettings}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Timeout Sessione (minuti)
+              </label>
+              <input
+                type="number"
+                value={tempSettings.sessionTimeout || 30}
+                onChange={(e) => setTempSettings({...tempSettings, sessionTimeout: parseInt(e.target.value)})}
+                disabled={!editingSettings}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Max Utenti Connessi
+              </label>
+              <input
+                type="number"
+                value={tempSettings.maxConnectedUsers || 1000}
+                onChange={(e) => setTempSettings({...tempSettings, maxConnectedUsers: parseInt(e.target.value)})}
+                disabled={!editingSettings}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+              />
+            </div>
+
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                checked={tempSettings.maintenanceMode || false}
+                onChange={(e) => setTempSettings({...tempSettings, maintenanceMode: e.target.checked})}
+                disabled={!editingSettings}
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:opacity-50"
+              />
+              <label className="ml-2 block text-sm text-gray-700">
+                Modalità Manutenzione
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BACKUP */}
+      {activeSettingsTab === 'backup' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-semibold">Gestione Backup</h3>
+              <div className="flex space-x-2">
+                <button
+                  onClick={onRefreshBackups}
+                  className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
+                >
+                  <RefreshCcw size={16} />
+                  <span>Aggiorna</span>
+                </button>
+                <button
+                  onClick={onCreateBackup}
+                  disabled={loading}
+                  className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+                >
+                  <Download size={16} />
+                  <span>Crea Backup</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {backups.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <HardDrive size={48} className="mx-auto mb-4 text-gray-300" />
+                  <p>Nessun backup disponibile</p>
+                </div>
+              ) : (
+                backups.map(backup => (
+                  <div key={backup.id} className="flex justify-between items-center p-4 border border-gray-200 rounded-lg">
+                    <div>
+                      <p className="font-medium">{backup.filename}</p>
+                      <p className="text-sm text-gray-600">
+                        Creato il {new Date(backup.createdAt).toLocaleString('it-IT')}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        Dimensione: {(backup.size / 1024 / 1024).toFixed(2)} MB
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => onRestoreBackup(backup.id)}
+                      className="flex items-center space-x-2 px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
+                    >
+                      <Upload size={14} />
+                      <span>Ripristina</span>
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* LOG */}
+      {activeSettingsTab === 'logs' && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-lg font-semibold">Log di Sistema</h3>
+            <button
+              onClick={onRefreshLogs}
+              className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
+            >
+              <RefreshCcw size={16} />
+              <span>Aggiorna</span>
+            </button>
+          </div>
+
+          <div className="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm max-h-96 overflow-y-auto">
+            {logs.length === 0 ? (
+              <p className="text-gray-500">Nessun log disponibile</p>
+            ) : (
+              logs.map((log, index) => (
+                <div key={index} className="mb-1">
+                  <span className="text-gray-500">[{new Date(log.timestamp).toLocaleString('it-IT')}]</span>
+                  <span className={`ml-2 ${
+                    log.level === 'error' ? 'text-red-400' :
+                    log.level === 'warning' ? 'text-yellow-400' :
+                    'text-green-400'
+                  }`}>
+                    {log.level.toUpperCase()}
+                  </span>
+                  <span className="ml-2 text-white">{log.message}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

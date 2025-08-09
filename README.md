@@ -5,8 +5,11 @@ Sistema di **Voto Elettronico Anonimo e Sicuro** basato sul protocollo WabiSabi 
 ## Avvio
 
 # Terminale 1: Avvia solo i backend services
-./start.sh
 docker compose up
+
+oppure per rebuildare
+
+docker compose up --build
 
 # Terminale 2: Admin Dashboard  (user: admin  psw: admin123)
 cd admin && npm start
