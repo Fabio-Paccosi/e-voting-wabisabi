@@ -1,7 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const router = express.Router();
 
 // Configurazione servizi backend
@@ -81,12 +81,13 @@ router.post('/auth/login', async (req, res) => {
         id: admin.username,
         username: admin.username,
         role: admin.role,
-        exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60) // 24 ore
+        exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60) // 24 ore.floor(Date.now() / 1000) + (24 * 60 * 60) // 24 ore
       },
       process.env.JWT_SECRET
     );
     
     res.json({
+      message: 'Login admin effettuato',
       token,
       admin: {
         username: admin.username,
@@ -96,229 +97,106 @@ router.post('/auth/login', async (req, res) => {
     
   } catch (error) {
     console.error('Errore login admin:', error);
-    res.status(500).json({ error: 'Errore interno del server' });
+    res.status(500).json({ error: 'Errore server durante login' });
   }
 });
 
-// Verifica token
-router.get('/auth/verify', adminAuth, (req, res) => {
-  res.json({
-    valid: true,
-    admin: {
-      username: req.admin.username,
-      role: req.admin.role
-    }
-  });
-});
-
-// Logout
-router.post('/auth/logout', adminAuth, (req, res) => {
-  // Per JWT stateless, il logout è gestito lato client
-  res.json({ message: 'Logout effettuato' });
-});
-
 // ==========================================
-// STATISTICHE DASHBOARD
+// GESTIONE UTENTI
 // ==========================================
 
-// Statistiche generali
-router.get('/stats', adminAuth, async (req, res) => {
+// Lista utenti
+router.get('/users', adminAuth, async (req, res) => {
   try {
-    // Chiama tutti i servizi per ottenere statistiche
-    const [authStats, voteStats] = await Promise.allSettled([
-      callService('auth', '/api/admin/stats'),
-      callService('vote', '/api/admin/stats')
+    const response = await callService('auth', '/api/admin/users', 'GET', null, {
+      'Authorization': req.headers.authorization
+    });
+    res.json(response);
+  } catch (error) {
+    res.status(error.response?.status || 500).json({ 
+      error: 'Errore recupero utenti',
+      details: error.message 
+    });
+  }
+});
+
+// Dettagli utente specifico
+router.get('/users/:userId', adminAuth, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const response = await callService('auth', `/api/admin/users/${userId}`, 'GET', null, {
+      'Authorization': req.headers.authorization
+    });
+    res.json(response);
+  } catch (error) {
+    res.status(error.response?.status || 500).json({ 
+      error: 'Errore recupero dettagli utente',
+      details: error.message 
+    });
+  }
+});
+
+// ==========================================
+// GESTIONE ELEZIONI
+// ==========================================
+
+// Lista elezioni
+router.get('/elections', adminAuth, async (req, res) => {
+  try {
+    const response = await callService('vote', '/api/admin/elections', 'GET', null, {
+      'Authorization': req.headers.authorization
+    });
+    res.json(response);
+  } catch (error) {
+    res.status(error.response?.status || 500).json({ 
+      error: 'Errore recupero elezioni',
+      details: error.message 
+    });
+  }
+});
+
+// Crea nuova elezione
+router.post('/elections', adminAuth, async (req, res) => {
+  try {
+    const response = await callService('vote', '/api/admin/elections', 'POST', req.body, {
+      'Authorization': req.headers.authorization,
+      'Content-Type': 'application/json'
+    });
+    res.json(response);
+  } catch (error) {
+    res.status(error.response?.status || 500).json({ 
+      error: 'Errore creazione elezione',
+      details: error.message 
+    });
+  }
+});
+
+// ==========================================
+// STATISTICHE E MONITORAGGIO
+// ==========================================
+
+// Dashboard statistiche
+router.get('/dashboard/stats', adminAuth, async (req, res) => {
+  try {
+    // Raccoglie statistiche da più servizi
+    const [usersStats, votesStats] = await Promise.all([
+      callService('auth', '/api/admin/stats', 'GET', null, {
+        'Authorization': req.headers.authorization
+      }),
+      callService('vote', '/api/admin/stats', 'GET', null, {
+        'Authorization': req.headers.authorization
+      })
     ]);
     
-    const stats = {
-      totalElections: voteStats.status === 'fulfilled' ? voteStats.value.totalElections : 0,
-      totalVotes: voteStats.status === 'fulfilled' ? voteStats.value.totalVotes : 0,
-      activeUsers: authStats.status === 'fulfilled' ? authStats.value.activeUsers : 0,
-      whitelistUsers: authStats.status === 'fulfilled' ? authStats.value.whitelistUsers : 0,
+    res.json({
+      users: usersStats,
+      votes: votesStats,
       timestamp: new Date().toISOString()
-    };
-    
-    res.json(stats);
+    });
     
   } catch (error) {
-    console.error('Errore recupero statistiche:', error);
-    res.status(500).json({ 
+    res.status(error.response?.status || 500).json({ 
       error: 'Errore recupero statistiche',
-      details: error.message 
-    });
-  }
-});
-
-// Stato sistema
-router.get('/system-status', adminAuth, async (req, res) => {
-  try {
-    const services = [];
-    
-    // Test connettività servizi
-    for (const [name, url] of Object.entries(SERVICES)) {
-      const startTime = Date.now();
-      try {
-        await axios.get(`${url}/api/health`, { timeout: 5000 });
-        services.push({
-          name: `${name}-service`,
-          status: 'online',
-          responseTime: Date.now() - startTime,
-          url: url
-        });
-      } catch (error) {
-        services.push({
-          name: `${name}-service`,
-          status: 'offline',
-          responseTime: Date.now() - startTime,
-          error: error.message
-        });
-      }
-    }
-    
-    // Test database e Redis (tramite auth service)
-    let database = { status: 'unknown', responseTime: 0 };
-    let redis = { status: 'unknown', responseTime: 0 };
-    
-    try {
-      const systemInfo = await callService('auth', '/api/admin/system-info');
-      database = systemInfo.database || database;
-      redis = systemInfo.redis || redis;
-    } catch (error) {
-      console.warn('Impossibile recuperare info sistema:', error.message);
-    }
-    
-    res.json({
-      services,
-      database,
-      redis,
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime()
-    });
-    
-  } catch (error) {
-    console.error('Errore stato sistema:', error);
-    res.status(500).json({ error: 'Errore recupero stato sistema' });
-  }
-});
-
-// Grafici e trend
-router.get('/charts/:timeRange', adminAuth, async (req, res) => {
-  try {
-    const { timeRange } = req.params; // 1d, 7d, 30d
-    
-    // Chiama i servizi per ottenere dati storici
-    const [voteData, authData] = await Promise.allSettled([
-      callService('vote', `/api/admin/charts/${timeRange}`),
-      callService('auth', `/api/admin/charts/${timeRange}`)
-    ]);
-    
-    const charts = {
-      votesOverTime: voteData.status === 'fulfilled' ? voteData.value.votesOverTime : [],
-      registrationsOverTime: authData.status === 'fulfilled' ? authData.value.registrationsOverTime : [],
-      electionsOverTime: voteData.status === 'fulfilled' ? voteData.value.electionsOverTime : []
-    };
-    
-    res.json(charts);
-    
-  } catch (error) {
-    console.error('Errore grafici:', error);
-    res.status(500).json({ error: 'Errore recupero dati grafici' });
-  }
-});
-
-// Log sistema aggregati
-router.get('/logs', adminAuth, async (req, res) => {
-  try {
-    const { limit = 50, level = 'all' } = req.query;
-    
-    // Recupera log da tutti i servizi
-    const [authLogs, voteLogs] = await Promise.allSettled([
-      callService('auth', `/api/admin/logs?limit=${limit}&level=${level}`),
-      callService('vote', `/api/admin/logs?limit=${limit}&level=${level}`)
-    ]);
-    
-    let allLogs = [];
-    
-    if (authLogs.status === 'fulfilled') {
-      allLogs = [...allLogs, ...authLogs.value.logs.map(log => ({ ...log, service: 'auth' }))];
-    }
-    
-    if (voteLogs.status === 'fulfilled') {
-      allLogs = [...allLogs, ...voteLogs.value.logs.map(log => ({ ...log, service: 'vote' }))];
-    }
-    
-    // Ordina per timestamp
-    allLogs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    
-    res.json({
-      logs: allLogs.slice(0, limit),
-      total: allLogs.length
-    });
-    
-  } catch (error) {
-    console.error('Errore log sistema:', error);
-    res.status(500).json({ error: 'Errore recupero log' });
-  }
-});
-
-// ==========================================
-// PROXY ROUTES PER MICROSERVIZI
-// ==========================================
-
-// Proxy per gestione elezioni
-router.use('/elections', adminAuth, async (req, res) => {
-  try {
-    const response = await callService(
-      'vote',
-      `/api/admin/elections${req.url}`,
-      req.method,
-      req.body,
-      { 'Content-Type': 'application/json' }
-    );
-    res.json(response);
-  } catch (error) {
-    res.status(error.response?.status || 500).json({ 
-      error: 'Errore servizio elezioni',
-      details: error.message 
-    });
-  }
-});
-
-// Proxy per gestione utenti
-router.use('/users', adminAuth, async (req, res) => {
-  try {
-    const response = await callService(
-      'auth',
-      `/api/admin/users${req.url}`,
-      req.method,
-      req.body,
-      { 'Content-Type': 'application/json' }
-    );
-    res.json(response);
-  } catch (error) {
-    res.status(error.response?.status || 500).json({ 
-      error: 'Errore servizio utenti',
-      details: error.message 
-    });
-  }
-});
-
-// Proxy per whitelist
-router.use('/whitelist', adminAuth, async (req, res) => {
-  try {
-    const response = await callService(
-      'auth',
-      `/api/admin/whitelist${req.url}`,
-      req.method,
-      req.body,
-      req.headers['content-type']?.includes('multipart/form-data') 
-        ? req.headers 
-        : { 'Content-Type': 'application/json' }
-    );
-    res.json(response);
-  } catch (error) {
-    res.status(error.response?.status || 500).json({ 
-      error: 'Errore servizio whitelist',
       details: error.message 
     });
   }
@@ -367,29 +245,6 @@ router.get('/system-info', adminAuth, async (req, res) => {
   } catch (error) {
     console.error('Errore info sistema:', error);
     res.status(500).json({ error: 'Errore recupero info sistema' });
-  }
-});
-
-// Restart servizi (comando remoto)
-router.post('/restart-service/:service', adminAuth, async (req, res) => {
-  try {
-    const { service } = req.params;
-    
-    if (!SERVICES[service]) {
-      return res.status(400).json({ error: 'Servizio non trovato' });
-    }
-    
-    // Segnale di restart (implementazione dipende dall'infrastruttura)
-    console.log(`Admin ${req.admin.username} richiesto restart servizio: ${service}`);
-    
-    res.json({
-      message: `Richiesta restart per ${service} inviata`,
-      timestamp: new Date().toISOString()
-    });
-    
-  } catch (error) {
-    console.error('Errore restart servizio:', error);
-    res.status(500).json({ error: 'Errore restart servizio' });
   }
 });
 
