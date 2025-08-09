@@ -1,4 +1,3 @@
-// server1/app.js
 // Server 1: API Gateway e WabiSabi Protocol Coordination
 
 const express = require('express');
@@ -30,6 +29,10 @@ app.use('/api/', limiter);
 // Configurazione URL dei servizi
 const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || 'http://localhost:3002';
 const VOTE_SERVICE_URL = process.env.VOTE_SERVICE_URL || 'http://localhost:3003';
+
+// Configurazione URL dei servizi Admin
+const adminRoutes = require('./routes/admin');
+app.use('/api/admin', adminRoutes);
 
 // ====================
 // COORDINATOR SERVICE

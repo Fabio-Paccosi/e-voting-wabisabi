@@ -24,6 +24,10 @@ app.use(cors({
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const SALT_ROUNDS = 10;
 
+// Configurazione URL dei servizi Admin
+const adminRoutes = require('./routes/admin');
+app.use('/api/admin', adminRoutes);
+
 // ====================
 // SIMULAZIONE DATABASE
 // ====================
