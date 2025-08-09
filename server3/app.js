@@ -30,6 +30,10 @@ const BITCOIN_NODE_URL = process.env.BITCOIN_NODE_URL || 'http://localhost:8332'
 const BITCOIN_RPC_USER = process.env.BITCOIN_RPC_USER || 'user';
 const BITCOIN_RPC_PASS = process.env.BITCOIN_RPC_PASS || 'pass';
 
+// Configurazione URL dei servizi Admin
+const adminRoutes = require('./routes/admin');
+app.use('/api/admin', adminRoutes);
+
 // ====================
 // SIMULAZIONE DATABASE
 // ====================
