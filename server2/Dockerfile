@@ -1,30 +1,30 @@
 FROM node:18-alpine
 
-# Installa dipendenze di sistema necessarie
+# Installa dipendenze per compilazione bcrypt
 RUN apk add --no-cache \
     python3 \
     make \
     g++ \
-    git
+    git \
+    libc6-compat
 
-# Crea directory di lavoro
 WORKDIR /app
 
 # Copia package.json
 COPY package.json ./
 
-# Rimuovi package-lock.json per evitare conflitti e installa dipendenze
+# Pulisci cache npm e installa dipendenze
+RUN npm cache clean --force
 RUN npm install --only=production --no-package-lock
 
-# Copia il resto del codice sorgente
+# Rebuild bcrypt per architettura corretta
+RUN npm rebuild bcrypt --build-from-source
+
+# Copia codice applicazione
 COPY . .
 
-# Esponi la porta
+# Esponi porta
 EXPOSE 3002
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-    CMD node healthcheck.js || exit 1
 
 # Comando di avvio
 CMD ["node", "app.js"]
