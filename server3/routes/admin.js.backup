@@ -1,0 +1,469 @@
+// server3/routes/admin.js - Vote Service Admin Routes
+const express = require('express');
+const router = express.Router();
+
+// Middleware di autenticazione admin
+const adminAuth = (req, res, next) => {
+  // Per ora passa sempre - implementa la tua autenticazione
+  next();
+};
+
+// ==========================================
+// STATISTICHE VOTI
+// ==========================================
+
+// GET /api/admin/stats - Statistiche vote service
+router.get('/stats', adminAuth, async (req, res) => {
+  try {
+    // Simula query al database per statistiche voti
+    const voteStats = {
+      totalVotes: 850,
+      pendingVotes: 15,
+      processedVotes: 825,
+      failedVotes: 10,
+      elections: {
+        total: 4,
+        active: 1,
+        completed: 2,
+        scheduled: 1
+      },
+      blockchain: {
+        transactionCount: 65,
+        confirmedTx: 62,
+        pendingTx: 3,
+        lastBlock: 2456789
+      },
+      coinjoin: {
+        sessionsTotal: 25,
+        sessionsActive: 1,
+        sessionsCompleted: 24,
+        averageParticipants: 8.2
+      }
+    };
+
+    res.json(voteStats);
+  } catch (error) {
+    console.error('Errore stats vote:', error);
+    res.status(500).json({ error: 'Errore statistiche voti' });
+  }
+});
+
+// ==========================================
+// ATTIVITÀ RECENTE
+// ==========================================
+
+// GET /api/admin/activity - Attività recente vote service
+router.get('/activity', adminAuth, async (req, res) => {
+  try {
+    const { limit = 25 } = req.query;
+    
+    // Implementa query ai tuoi log
+    // Per ora dati mock
+    const activities = [];
+    
+    const voteEvents = [
+      'Nuovo voto ricevuto',
+      'Voto processato e confermato',
+      'Elezione creata',
+      'Sessione CoinJoin avviata',
+      'Transazione blockchain confermata',
+      'Voto invalidato per errore formato',
+      'Elezione chiusa',
+      'Conteggio voti completato'
+    ];
+
+    for (let i = 0; i < parseInt(limit); i++) {
+      activities.push({
+        id: `vote_${Date.now()}_${i}`,
+        type: 'vote',
+        action: voteEvents[Math.floor(Math.random() * voteEvents.length)],
+        timestamp: new Date(Date.now() - (i * 240000)).toISOString(), // Ogni 4 minuti
+        source: 'vote-service',
+        details: {
+          electionId: Math.floor(Math.random() * 5) + 1,
+          voteId: `vote_${Math.floor(Math.random() * 10000)}`,
+          blockHash: `0x${Math.random().toString(16).substr(2, 64)}`
+        }
+      });
+    }
+
+    res.json(activities);
+  } catch (error) {
+    console.error('Errore activity vote:', error);
+    res.status(500).json({ error: 'Errore caricamento attività voti' });
+  }
+});
+
+// ==========================================
+// DATI GRAFICI
+// ==========================================
+
+// GET /api/admin/charts/:period - Dati grafici voti
+router.get('/charts/:period', adminAuth, async (req, res) => {
+  try {
+    const { period } = req.params;
+    const days = period === '7d' ? 7 : period === '30d' ? 30 : 7;
+    
+    const chartData = [];
+    
+    // Genera dati per il periodo richiesto
+    for (let i = days - 1; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      
+      chartData.push({
+        date: date.toISOString().split('T')[0],
+        votesReceived: Math.floor(Math.random() * 100) + 30,
+        votesProcessed: Math.floor(Math.random() * 95) + 25,
+        transactions: Math.floor(Math.random() * 12) + 3,
+        coinjoinSessions: Math.floor(Math.random() * 4) + 1,
+        blockchainOps: Math.floor(Math.random() * 8) + 2
+      });
+    }
+
+    res.json(chartData);
+  } catch (error) {
+    console.error('Errore charts vote:', error);
+    res.status(500).json({ error: 'Errore dati grafici voti' });
+  }
+});
+
+// ==========================================
+// GESTIONE ELEZIONI
+// ==========================================
+
+// GET /api/admin/elections - Lista elezioni
+router.get('/elections', adminAuth, async (req, res) => {
+  try {
+    const { status = 'all' } = req.query;
+    
+    // Implementa query al database
+    // Per ora dati mock
+    const elections = [
+      {
+        id: 1,
+        title: 'Elezioni Sindaco 2024',
+        description: 'Elezione del sindaco per il mandato 2024-2029',
+        status: 'active',
+        startDate: '2024-11-01T00:00:00Z',
+        endDate: '2024-11-15T23:59:59Z',
+        totalVotes: 456,
+        eligibleVoters: 1200,
+        candidates: [
+          { name: 'Mario Rossi', votes: 234 },
+          { name: 'Anna Bianchi', votes: 122 },
+          { name: 'Giuseppe Verdi', votes: 100 }
+        ]
+      },
+      {
+        id: 2,
+        title: 'Referendum Locale',
+        description: 'Referendum per nuovo centro sportivo',
+        status: 'completed',
+        startDate: '2024-09-01T00:00:00Z',
+        endDate: '2024-09-07T23:59:59Z',
+        totalVotes: 890,
+        eligibleVoters: 1200,
+        results: {
+          'Sì': 523,
+          'No': 367
+        }
+      },
+      {
+        id: 3,
+        title: 'Elezioni Consiglio Comunale',
+        description: 'Rinnovo consiglio comunale',
+        status: 'scheduled',
+        startDate: '2025-03-01T00:00:00Z',
+        endDate: '2025-03-15T23:59:59Z',
+        totalVotes: 0,
+        eligibleVoters: 1200
+      }
+    ];
+
+    let filteredElections = elections;
+    if (status !== 'all') {
+      filteredElections = elections.filter(e => e.status === status);
+    }
+
+    res.json({ elections: filteredElections });
+  } catch (error) {
+    console.error('Errore lista elezioni:', error);
+    res.status(500).json({ error: 'Errore caricamento elezioni' });
+  }
+});
+
+// GET /api/admin/elections/:id - Dettagli elezione
+router.get('/elections/:id', adminAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Implementa query al database
+    // Per ora dati mock
+    const election = {
+      id: parseInt(id),
+      title: 'Elezioni Sindaco 2024',
+      description: 'Elezione del sindaco per il mandato 2024-2029',
+      status: 'active',
+      startDate: '2024-11-01T00:00:00Z',
+      endDate: '2024-11-15T23:59:59Z',
+      totalVotes: 456,
+      eligibleVoters: 1200,
+      settings: {
+        anonymousVoting: true,
+        blockchainVerification: true,
+        coinjoinEnabled: true,
+        maxVotesPerUser: 1
+      },
+      candidates: [
+        { 
+          id: 1, 
+          name: 'Mario Rossi', 
+          party: 'Lista Civica', 
+          votes: 234,
+          percentage: 51.3 
+        },
+        { 
+          id: 2, 
+          name: 'Anna Bianchi', 
+          party: 'Movimento Progressista', 
+          votes: 122,
+          percentage: 26.8 
+        },
+        { 
+          id: 3, 
+          name: 'Giuseppe Verdi', 
+          party: 'Coalizione Verde', 
+          votes: 100,
+          percentage: 21.9 
+        }
+      ],
+      recentVotes: [
+        {
+          timestamp: '2024-11-10T14:30:00Z',
+          voteHash: '0xa1b2c3d4e5f6...',
+          blockHash: '0x9876543210...',
+          confirmed: true
+        }
+      ]
+    };
+
+    res.json(election);
+  } catch (error) {
+    console.error('Errore dettagli elezione:', error);
+    res.status(500).json({ error: 'Errore caricamento dettagli elezione' });
+  }
+});
+
+// POST /api/admin/elections - Crea nuova elezione
+router.post('/elections', adminAuth, async (req, res) => {
+  try {
+    const { title, description, startDate, endDate, candidates } = req.body;
+    
+    // Implementa inserimento nel database
+    console.log('Creazione nuova elezione:', { title, description, startDate, endDate });
+    
+    const newElection = {
+      id: Date.now(),
+      title,
+      description,
+      status: 'scheduled',
+      startDate,
+      endDate,
+      totalVotes: 0,
+      eligibleVoters: 0,
+      candidates: candidates || [],
+      createdAt: new Date().toISOString()
+    };
+
+    res.json({
+      success: true,
+      message: 'Elezione creata con successo',
+      election: newElection
+    });
+  } catch (error) {
+    console.error('Errore creazione elezione:', error);
+    res.status(500).json({ error: 'Errore creazione elezione' });
+  }
+});
+
+// PUT /api/admin/elections/:id/status - Aggiorna status elezione
+router.put('/elections/:id/status', adminAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    
+    // Implementa update nel database
+    console.log(`Aggiornamento status elezione ${id} a ${status}`);
+    
+    res.json({
+      success: true,
+      message: `Status elezione ${id} aggiornato a ${status}`
+    });
+  } catch (error) {
+    console.error('Errore aggiornamento status elezione:', error);
+    res.status(500).json({ error: 'Errore aggiornamento status elezione' });
+  }
+});
+
+// ==========================================
+// BLOCKCHAIN & COINJOIN STATUS
+// ==========================================
+
+// GET /api/admin/blockchain/status - Stato blockchain
+router.get('/blockchain/status', adminAuth, async (req, res) => {
+  try {
+    // Simula stato blockchain
+    const blockchainStatus = {
+      connected: true,
+      network: 'mainnet',
+      blockHeight: 2456789,
+      difficulty: '0x1a00ffff',
+      hashRate: '45.2 TH/s',
+      mempool: {
+        size: 1524,
+        fee: {
+          fast: 15,
+          normal: 8,
+          slow: 3
+        }
+      },
+      node: {
+        version: '0.21.0',
+        uptime: 3600000,
+        peers: 8,
+        storage: '250.5 GB'
+      }
+    };
+
+    res.json(blockchainStatus);
+  } catch (error) {
+    console.error('Errore blockchain status:', error);
+    res.status(500).json({ error: 'Errore stato blockchain' });
+  }
+});
+
+// GET /api/admin/coinjoin/sessions - Sessioni CoinJoin attive
+router.get('/coinjoin/sessions', adminAuth, async (req, res) => {
+  try {
+    // Simula sessioni CoinJoin
+    const sessions = [
+      {
+        id: 'session_001',
+        status: 'input_registration',
+        participants: 6,
+        maxParticipants: 10,
+        denomination: 0.001,
+        startTime: new Date(Date.now() - 300000).toISOString(),
+        estimatedCompletion: new Date(Date.now() + 600000).toISOString()
+      },
+      {
+        id: 'session_002',
+        status: 'output_registration',
+        participants: 8,
+        maxParticipants: 8,
+        denomination: 0.01,
+        startTime: new Date(Date.now() - 800000).toISOString(),
+        estimatedCompletion: new Date(Date.now() + 200000).toISOString()
+      }
+    ];
+
+    res.json(sessions);
+  } catch (error) {
+    console.error('Errore sessioni coinjoin:', error);
+    res.status(500).json({ error: 'Errore recupero sessioni CoinJoin' });
+  }
+});
+
+// ==========================================
+// LOGS & MONITORING
+// ==========================================
+
+// GET /api/admin/votes/:id/trace - Traccia voto
+router.get('/votes/:id/trace', adminAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Implementa tracciamento voto
+    const trace = {
+      voteId: id,
+      steps: [
+        {
+          timestamp: '2024-11-10T14:30:00Z',
+          step: 'received',
+          description: 'Voto ricevuto dal client',
+          hash: '0xa1b2c3d4...'
+        },
+        {
+          timestamp: '2024-11-10T14:30:05Z',
+          step: 'validated',
+          description: 'Voto validato crittograficamente',
+          hash: '0xa1b2c3d4...'
+        },
+        {
+          timestamp: '2024-11-10T14:30:10Z',
+          step: 'coinjoin',
+          description: 'Inserito in sessione CoinJoin',
+          sessionId: 'session_001'
+        },
+        {
+          timestamp: '2024-11-10T14:35:00Z',
+          step: 'blockchain',
+          description: 'Registrato su blockchain',
+          blockHash: '0x9876543210...',
+          transactionHash: '0xabcdef1234...'
+        }
+      ]
+    };
+
+    res.json(trace);
+  } catch (error) {
+    console.error('Errore trace voto:', error);
+    res.status(500).json({ error: 'Errore tracciamento voto' });
+  }
+});
+
+// Health check
+router.get('/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    service: 'vote-service',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// ==========================================
+// ADMIN ROUTES - AGGIUNGI QUESTE RIGHE
+// ==========================================
+try {
+    const adminRoutes = require('./routes/admin');
+    app.use('/api/admin', adminRoutes);
+    console.log('✅ [VOTE SERVICE] Route admin caricate correttamente');
+} catch (error) {
+    console.error('❌ [VOTE SERVICE] Errore caricamento route admin:', error.message);
+    console.error('📁 Verifica che esista: ./routes/admin.js');
+    
+    // Route admin di fallback per vote service
+    app.get('/api/admin/*', (req, res) => {
+        res.status(500).json({ 
+            error: 'Route admin vote non disponibili',
+            reason: 'File admin.js mancante',
+            service: 'vote-service',
+            path: req.path
+        });
+    });
+}
+
+// Health check per vote service (se non esiste già)
+app.get('/api/health', (req, res) => {
+    res.json({ 
+        status: 'ok', 
+        service: 'vote-service',
+        timestamp: new Date().toISOString(),
+        port: process.env.PORT || 3003
+    });
+});
+
+console.log('[VOTE ADMIN ROUTES] ✓ Route admin vote caricate');
+
+module.exports = router;

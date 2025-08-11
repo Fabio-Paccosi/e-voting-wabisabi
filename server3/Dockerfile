@@ -1,6 +1,6 @@
 FROM node:18-alpine
 
-# Installa dipendenze di sistema necessarie
+# Installa dipendenze sistema
 RUN apk add --no-cache \
     python3 \
     make \
@@ -10,24 +10,18 @@ RUN apk add --no-cache \
     autoconf \
     automake
 
-# Crea directory di lavoro
 WORKDIR /app
 
-# Copia package.json
+# Copia e installa dipendenze
 COPY package.json ./
-
-# Rimuovi package-lock.json per evitare conflitti e installa dipendenze
+RUN npm cache clean --force
 RUN npm install --only=production --no-package-lock
 
-# Copia il resto del codice sorgente
+# Copia codice applicazione
 COPY . .
 
-# Esponi la porta
+# Esponi porta
 EXPOSE 3003
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-    CMD node healthcheck.js || exit 1
 
 # Comando di avvio
 CMD ["node", "app.js"]
