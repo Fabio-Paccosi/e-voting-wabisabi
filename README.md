@@ -11,7 +11,7 @@ oppure per rebuildare
 
 docker compose up --build
 
-# Terminale 2: Admin Dashboard  (user: admin  psw: admin123)
+# Terminale 2: Admin Dashboard  (user: admin@example.com  psw: admin123)
 cd admin && npm start
 
 # Terminale 3: Client Frontend

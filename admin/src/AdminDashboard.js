@@ -103,7 +103,20 @@ const AdminDashboard = () => {
   };
 
   const formatNumber = (num) => {
-    return new Intl.NumberFormat('it-IT').format(num);
+    // ✅ CONTROLLO VALIDITÀ
+    if (num === null || num === undefined || isNaN(num)) {
+      return '0';
+    }
+    
+    // ✅ CONVERTE A NUMERO SE È STRINGA
+    const number = typeof num === 'string' ? parseInt(num, 10) : num;
+    
+    // ✅ CONTROLLO FINALE
+    if (isNaN(number)) {
+      return '0';
+    }
+    
+    return new Intl.NumberFormat('it-IT').format(number);
   };
 
   const showMessage = (message, type = 'success') => {
@@ -194,7 +207,6 @@ const AdminDashboard = () => {
         dashboardAPI.getSystemStatus(),
         dashboardAPI.getRecentActivity()
       ]);
-
       setStats({ ...statsData, loading: false });
       setSystemStatus({ ...statusData, loading: false });
       setRecentActivity(activityData.activities || []);

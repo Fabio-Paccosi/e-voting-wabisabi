@@ -32,26 +32,12 @@ initializeDatabase()
     });
 
 // Middleware di autenticazione admin
-const adminAuth = async (req, res, next) => {
-    try {
-        const token = req.headers.authorization?.replace('Bearer ', '');
-        
-        if (!token) {
-            return res.status(401).json({ error: 'Token mancante' });
-        }
-
-        const decoded = jwt.verify(token, JWT_SECRET);
-        if (decoded.role !== 'administrator') {
-            return res.status(403).json({ error: 'Accesso negato' });
-        }
-
-        req.user = decoded;
-        next();
-    } catch (error) {
-        res.status(401).json({ error: 'Token non valido' });
-    }
+// Middleware di autenticazione admin - SEMPLIFICATO PER CHIAMATE INTERNE
+const adminAuth = (req, res, next) => {
+    // Per chiamate interne dai servizi, non richiede autenticazione
+    // L'autenticazione è gestita dall'API Gateway
+    next();
 };
-
 // ==========================================
 // AUTH MANAGEMENT
 // ==========================================

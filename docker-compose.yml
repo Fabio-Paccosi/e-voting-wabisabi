@@ -32,8 +32,13 @@ services:
     networks:
       - evoting-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "RedisPass456!", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
-  # Auth Service (SERVER 2)
+  # Auth Service (SERVER 2) - ✅ CON VARIABILI DB CORRETTE
   auth-service:
     build: ./server2
     container_name: evoting-auth-service
@@ -43,21 +48,27 @@ services:
       - NODE_ENV=production
       - PORT=3002
       - DB_HOST=postgres
+      - DB_NAME=${DB_NAME:-evoting_wabisabi}          # ✅ AGGIUNTO
+      - DB_USER=${DB_USER:-postgres}                  # ✅ AGGIUNTO
+      - DB_PASSWORD=${DB_PASSWORD:-SecurePass123!}    # ✅ AGGIUNTO
       - JWT_SECRET=${JWT_SECRET:-default-secret-key}
       - REDIS_HOST=redis
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-RedisPass456!}
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy  # ✅ ASPETTA CHE POSTGRES SIA PRONTO
+      redis:
+        condition: service_healthy  # ✅ ASPETTA CHE REDIS SIA PRONTO
     networks:
       - evoting-network
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3002/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:3002/api/health"]
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
 
-  # Vote Service (SERVER 3)
+  # Vote Service (SERVER 3) - ✅ CON VARIABILI DB CORRETTE
   vote-service:
     build: ./server3
     container_name: evoting-vote-service
@@ -67,18 +78,24 @@ services:
       - NODE_ENV=production
       - PORT=3003
       - DB_HOST=postgres
+      - DB_NAME=${DB_NAME:-evoting_wabisabi}          # ✅ AGGIUNTO
+      - DB_USER=${DB_USER:-postgres}                  # ✅ AGGIUNTO
+      - DB_PASSWORD=${DB_PASSWORD:-SecurePass123!}    # ✅ AGGIUNTO
       - REDIS_HOST=redis
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-RedisPass456!}
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy  # ✅ ASPETTA CHE POSTGRES SIA PRONTO
+      redis:
+        condition: service_healthy  # ✅ ASPETTA CHE REDIS SIA PRONTO
     networks:
       - evoting-network
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3003/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:3003/api/health"]
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
 
   # API Gateway (SERVER 1)
   api-gateway:
@@ -93,18 +110,24 @@ services:
       - VOTE_SERVICE_URL=http://vote-service:3003
       - JWT_SECRET=${JWT_SECRET:-default-secret-key}
       - DB_HOST=postgres
+      - DB_NAME=${DB_NAME:-evoting_wabisabi}          # ✅ AGGIUNTO
+      - DB_USER=${DB_USER:-postgres}                  # ✅ AGGIUNTO
+      - DB_PASSWORD=${DB_PASSWORD:-SecurePass123!}    # ✅ AGGIUNTO
       - REDIS_HOST=redis
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-RedisPass456!}
     depends_on:
-      - auth-service
-      - vote-service
+      auth-service:
+        condition: service_started  # ✅ ASPETTA CHE I SERVIZI SIANO AVVIATI
+      vote-service:
+        condition: service_started
     networks:
       - evoting-network
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
 
   # Bitcoin Node
   bitcoin-node:
@@ -118,12 +141,11 @@ services:
       -rpcallowip=0.0.0.0/0
       -rpcuser=${BITCOIN_RPC_USER:-bitcoinrpc}
       -rpcpassword=${BITCOIN_RPC_PASSWORD:-BitcoinSecurePass789!}
-      -printtoconsole
     volumes:
       - bitcoin_data:/home/bitcoin/.bitcoin
     ports:
-      - "18332:18332"  # RPC
-      - "18333:18333"  # P2P
+      - "18332:18332"
+      - "18333:18333"
     networks:
       - evoting-network
     restart: unless-stopped

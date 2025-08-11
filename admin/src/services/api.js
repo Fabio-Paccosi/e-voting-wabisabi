@@ -5,8 +5,8 @@ import axios from 'axios';
 // ==========================================
 // CONFIGURAZIONE AXIOS
 // ==========================================
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001';
-const WS_URL = process.env.REACT_APP_WS_URL || 'http://localhost:3001';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://127.0.0.1:3001';
+const WS_URL = process.env.REACT_APP_WS_URL || 'http://127.0.0.1:3001';
 
 // Crea istanza axios con configurazione base
 const apiClient = axios.create({

@@ -1,744 +1,95 @@
 #!/bin/bash
+# Script di diagnosi per problemi dashboard admin
 
-echo "🔧 Fix Database Integration REALE per E-Voting WabiSabi..."
-
-# Ferma i container
-echo "🛑 Fermando i container..."
-docker compose down
-
-# Pulisci tutto
-echo "🧹 Pulizia completa..."
-docker system prune -f
-rm -rf server*/node_modules
-rm -f server*/package-lock.json
-
-# ==========================================
-# FIX 1: STRUTTURA DATABASE CORRETTA
-# ==========================================
-echo "🗄️ Fix #1: Creando struttura database corretta..."
-
-# Crea directory database se non esiste
-mkdir -p database
-
-# Crea database/config.js con path corretti per i container
-cat > database/config.js << 'EOF'
-// database/config.js - Configurazione database per container Docker
-const { Sequelize, DataTypes } = require('sequelize');
-
-console.log('🔗 Inizializzazione database config...');
-console.log('Environment vars:', {
-    DB_NAME: process.env.DB_NAME,
-    DB_USER: process.env.DB_USER,
-    DB_HOST: process.env.DB_HOST,
-    NODE_ENV: process.env.NODE_ENV
-});
-
-// Configurazione del database con variabili d'ambiente Docker
-const sequelize = new Sequelize(
-    process.env.DB_NAME || 'evoting_wabisabi',
-    process.env.DB_USER || 'postgres', 
-    process.env.DB_PASSWORD || 'SecurePass123!',
-    {
-        host: process.env.DB_HOST || 'localhost',
-        dialect: 'postgres',
-        logging: process.env.NODE_ENV === 'development' ? console.log : false,
-        pool: {
-            max: 10,
-            min: 0,
-            acquire: 30000,
-            idle: 10000
-        },
-        define: {
-            timestamps: true,
-            underscored: false
-        }
-    }
-);
-
-// ====================
-// MODELLI DATABASE
-// ====================
-
-// Modello User
-const User = sequelize.define('User', {
-    id: {
-        type: DataTypes.UUID,
-        defaultValue: DataTypes.UUIDV4,
-        primaryKey: true
-    },
-    email: {
-        type: DataTypes.STRING,
-        allowNull: false,
-        unique: true,
-        validate: { isEmail: true }
-    },
-    password: {
-        type: DataTypes.STRING,
-        allowNull: false
-    },
-    firstName: {
-        type: DataTypes.STRING,
-        allowNull: false
-    },
-    lastName: {
-        type: DataTypes.STRING,
-        allowNull: false
-    },
-    taxCode: {
-        type: DataTypes.STRING(16),
-        allowNull: false,
-        unique: true
-    },
-    isAuthorized: {
-        type: DataTypes.BOOLEAN,
-        defaultValue: false
-    },
-    authorizationProof: {
-        type: DataTypes.TEXT,
-        allowNull: true
-    },
-    status: {
-        type: DataTypes.ENUM('active', 'suspended', 'pending', 'inactive'),
-        defaultValue: 'pending'
-    },
-    lastLogin: {
-        type: DataTypes.DATE,
-        allowNull: true
-    },
-    loginAttempts: {
-        type: DataTypes.INTEGER,
-        defaultValue: 0
-    }
-});
-
-// Modello Election
-const Election = sequelize.define('Election', {
-    id: {
-        type: DataTypes.UUID,
-        defaultValue: DataTypes.UUIDV4,
-        primaryKey: true
-    },
-    title: {
-        type: DataTypes.STRING,
-        allowNull: false
-    },
-    description: {
-        type: DataTypes.TEXT,
-        allowNull: true
-    },
-    startDate: {
-        type: DataTypes.DATE,
-        allowNull: false
-    },
-    endDate: {
-        type: DataTypes.DATE,
-        allowNull: false
-    },
-    status: {
-        type: DataTypes.ENUM('draft', 'scheduled', 'active', 'completed', 'cancelled'),
-        defaultValue: 'draft'
-    },
-    isActive: {
-        type: DataTypes.BOOLEAN,
-        defaultValue: false
-    },
-    maxParticipants: {
-        type: DataTypes.INTEGER,
-        allowNull: true
-    },
-    settings: {
-        type: DataTypes.JSONB,
-        defaultValue: {}
-    }
-});
-
-// Modello Candidate
-const Candidate = sequelize.define('Candidate', {
-    id: {
-        type: DataTypes.UUID,
-        defaultValue: DataTypes.UUIDV4,
-        primaryKey: true
-    },
-    name: {
-        type: DataTypes.STRING,
-        allowNull: false
-    },
-    description: {
-        type: DataTypes.TEXT,
-        allowNull: true
-    },
-    party: {
-        type: DataTypes.STRING,
-        allowNull: true
-    },
-    valueEncoding: {
-        type: DataTypes.INTEGER,
-        allowNull: false
-    },
-    electionId: {
-        type: DataTypes.UUID,
-        allowNull: false
-    }
-});
-
-// Modello Vote
-const Vote = sequelize.define('Vote', {
-    id: {
-        type: DataTypes.UUID,
-        defaultValue: DataTypes.UUIDV4,
-        primaryKey: true
-    },
-    serialNumber: {
-        type: DataTypes.STRING,
-        allowNull: false,
-        unique: true
-    },
-    commitment: {
-        type: DataTypes.TEXT,
-        allowNull: false
-    },
-    transactionId: {
-        type: DataTypes.STRING,
-        allowNull: true
-    },
-    sessionId: {
-        type: DataTypes.UUID,
-        allowNull: true
-    },
-    status: {
-        type: DataTypes.ENUM('pending', 'processed', 'confirmed', 'failed'),
-        defaultValue: 'pending'
-    }
-});
-
-// Modello VotingSession
-const VotingSession = sequelize.define('VotingSession', {
-    id: {
-        type: DataTypes.UUID,
-        defaultValue: DataTypes.UUIDV4,
-        primaryKey: true
-    },
-    startTime: {
-        type: DataTypes.DATE,
-        allowNull: false
-    },
-    endTime: {
-        type: DataTypes.DATE,
-        allowNull: true
-    },
-    status: {
-        type: DataTypes.ENUM('input_registration', 'output_registration', 'signing', 'completed', 'failed'),
-        defaultValue: 'input_registration'
-    },
-    transactionCount: {
-        type: DataTypes.INTEGER,
-        defaultValue: 0
-    },
-    finalTallyTransactionId: {
-        type: DataTypes.STRING,
-        allowNull: true
-    },
-    electionId: {
-        type: DataTypes.UUID,
-        allowNull: false
-    }
-});
-
-// Modello Transaction
-const Transaction = sequelize.define('Transaction', {
-    id: {
-        type: DataTypes.UUID,
-        defaultValue: DataTypes.UUIDV4,
-        primaryKey: true
-    },
-    txId: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        unique: true
-    },
-    type: {
-        type: DataTypes.ENUM('coinjoin', 'tally', 'registration'),
-        allowNull: false
-    },
-    rawData: {
-        type: DataTypes.TEXT,
-        allowNull: true
-    },
-    metadata: {
-        type: DataTypes.JSONB,
-        defaultValue: {}
-    },
-    confirmations: {
-        type: DataTypes.INTEGER,
-        defaultValue: 0
-    },
-    blockHeight: {
-        type: DataTypes.INTEGER,
-        allowNull: true
-    },
-    blockHash: {
-        type: DataTypes.STRING,
-        allowNull: true
-    },
-    electionId: {
-        type: DataTypes.UUID,
-        allowNull: true
-    },
-    sessionId: {
-        type: DataTypes.UUID,
-        allowNull: true
-    }
-});
-
-// Modello Whitelist
-const Whitelist = sequelize.define('Whitelist', {
-    id: {
-        type: DataTypes.UUID,
-        defaultValue: DataTypes.UUIDV4,
-        primaryKey: true
-    },
-    email: {
-        type: DataTypes.STRING,
-        allowNull: false,
-        unique: true,
-        validate: { isEmail: true }
-    },
-    taxCode: {
-        type: DataTypes.STRING(16),
-        allowNull: false,
-        unique: true
-    },
-    firstName: {
-        type: DataTypes.STRING,
-        allowNull: false
-    },
-    lastName: {
-        type: DataTypes.STRING,
-        allowNull: false
-    },
-    addedBy: {
-        type: DataTypes.STRING,
-        allowNull: true
-    },
-    notes: {
-        type: DataTypes.TEXT,
-        allowNull: true
-    }
-});
-
-// Modello SystemSettings
-const SystemSettings = sequelize.define('SystemSettings', {
-    id: {
-        type: DataTypes.UUID,
-        defaultValue: DataTypes.UUIDV4,
-        primaryKey: true
-    },
-    key: {
-        type: DataTypes.STRING,
-        allowNull: false,
-        unique: true
-    },
-    value: {
-        type: DataTypes.JSONB,
-        allowNull: false
-    },
-    description: {
-        type: DataTypes.TEXT,
-        allowNull: true
-    },
-    isPublic: {
-        type: DataTypes.BOOLEAN,
-        defaultValue: false
-    }
-});
-
-// ====================
-// RELAZIONI
-// ====================
-
-// Election -> Candidates (1:N)
-Election.hasMany(Candidate, {
-    foreignKey: 'electionId',
-    as: 'candidates',
-    onDelete: 'CASCADE'
-});
-Candidate.belongsTo(Election, {
-    foreignKey: 'electionId',
-    as: 'election'
-});
-
-// Election -> VotingSessions (1:N)
-Election.hasMany(VotingSession, {
-    foreignKey: 'electionId',
-    as: 'sessions',
-    onDelete: 'CASCADE'
-});
-VotingSession.belongsTo(Election, {
-    foreignKey: 'electionId',
-    as: 'election'
-});
-
-// VotingSession -> Votes (1:N)
-VotingSession.hasMany(Vote, {
-    foreignKey: 'sessionId',
-    as: 'votes',
-    onDelete: 'CASCADE'
-});
-Vote.belongsTo(VotingSession, {
-    foreignKey: 'sessionId',
-    as: 'session'
-});
-
-// Election -> Transactions (1:N)
-Election.hasMany(Transaction, {
-    foreignKey: 'electionId',
-    as: 'transactions'
-});
-Transaction.belongsTo(Election, {
-    foreignKey: 'electionId',
-    as: 'election'
-});
-
-// VotingSession -> Transactions (1:N)
-VotingSession.hasMany(Transaction, {
-    foreignKey: 'sessionId',
-    as: 'transactions'
-});
-Transaction.belongsTo(VotingSession, {
-    foreignKey: 'sessionId',
-    as: 'session'
-});
-
-// ====================
-// FUNZIONI DI UTILITÀ
-// ====================
-
-// Inizializzazione database
-const initializeDatabase = async () => {
-    try {
-        console.log('🔗 Connessione al database PostgreSQL...');
-        await sequelize.authenticate();
-        console.log('✅ Connessione database stabilita');
-        
-        console.log('📋 Sincronizzazione modelli...');
-        await sequelize.sync({ alter: true });
-        console.log('✅ Modelli sincronizzati');
-        
-        // Crea dati di esempio se necessario
-        await createSampleData();
-        
-        return true;
-    } catch (error) {
-        console.error('❌ Errore connessione database:', error);
-        return false;
-    }
-};
-
-// Crea dati di esempio
-const createSampleData = async () => {
-    try {
-        // Controlla se ci sono già dati
-        const userCount = await User.count();
-        if (userCount > 0) {
-            console.log('📊 Database già popolato');
-            return;
-        }
-
-        console.log('📊 Creazione dati di esempio...');
-
-        // Crea utenti di esempio
-        await User.bulkCreate([
-            {
-                email: 'user1@example.com',
-                password: 'hashedpassword1',
-                firstName: 'Mario',
-                lastName: 'Rossi',
-                taxCode: 'RSSMRA80A01H501Z',
-                status: 'active',
-                isAuthorized: true
-            },
-            {
-                email: 'user2@example.com', 
-                password: 'hashedpassword2',
-                firstName: 'Anna',
-                lastName: 'Bianchi',
-                taxCode: 'BNCNNA85B05H501A',
-                status: 'active',
-                isAuthorized: true
-            },
-            {
-                email: 'admin@example.com',
-                password: 'hashedadminpass',
-                firstName: 'Admin',
-                lastName: 'Sistema',
-                taxCode: 'ADMINS90C10H501B',
-                status: 'active',
-                isAuthorized: true
-            }
-        ]);
-
-        // Crea elezione di esempio
-        const election = await Election.create({
-            title: 'Elezioni Sindaco 2024',
-            description: 'Elezione del sindaco per il mandato 2024-2029',
-            startDate: new Date('2024-11-01'),
-            endDate: new Date('2024-11-15'),
-            status: 'active',
-            isActive: true,
-            maxParticipants: 1000
-        });
-
-        // Crea candidati
-        await Candidate.bulkCreate([
-            {
-                name: 'Mario Rossi',
-                description: 'Candidato Lista Civica',
-                party: 'Lista Civica',
-                valueEncoding: 1,
-                electionId: election.id
-            },
-            {
-                name: 'Anna Bianchi',
-                description: 'Candidato Movimento Progressista',
-                party: 'Movimento Progressista', 
-                valueEncoding: 2,
-                electionId: election.id
-            }
-        ]);
-
-        // Crea whitelist
-        await Whitelist.bulkCreate([
-            {
-                email: 'whitelist1@example.com',
-                taxCode: 'WHTLST80A01H501C',
-                firstName: 'Giuseppe',
-                lastName: 'Verdi',
-                addedBy: 'admin'
-            }
-        ]);
-
-        // Crea impostazioni sistema
-        await SystemSettings.bulkCreate([
-            {
-                key: 'system_name',
-                value: 'E-Voting WabiSabi',
-                description: 'Nome del sistema di voto',
-                isPublic: true
-            },
-            {
-                key: 'max_elections_concurrent',
-                value: 5,
-                description: 'Numero massimo di elezioni contemporanee',
-                isPublic: false
-            }
-        ]);
-
-        console.log('✅ Dati di esempio creati');
-    } catch (error) {
-        console.error('❌ Errore creazione dati esempio:', error);
-    }
-};
-
-// Statistiche rapide
-const getQuickStats = async () => {
-    try {
-        const [
-            totalUsers,
-            activeUsers,
-            totalElections,
-            activeElections,
-            totalVotes,
-            pendingVotes
-        ] = await Promise.all([
-            User.count(),
-            User.count({ where: { status: 'active' } }),
-            Election.count(),
-            Election.count({ where: { status: 'active' } }),
-            Vote.count(),
-            Vote.count({ where: { status: 'pending' } })
-        ]);
-
-        return {
-            users: { total: totalUsers, active: activeUsers },
-            elections: { total: totalElections, active: activeElections },
-            votes: { total: totalVotes, pending: pendingVotes }
-        };
-    } catch (error) {
-        console.error('Errore statistiche:', error);
-        return {
-            users: { total: 0, active: 0 },
-            elections: { total: 0, active: 0 },
-            votes: { total: 0, pending: 0 }
-        };
-    }
-};
-
-module.exports = {
-    sequelize,
-    User,
-    Election,
-    Candidate,
-    Vote,
-    VotingSession,
-    Transaction,
-    Whitelist,
-    SystemSettings,
-    initializeDatabase,
-    getQuickStats
-};
-
-console.log('📦 Database config loaded');
-EOF
-
-# ==========================================
-# FIX 2: COPIA DATABASE CONFIG NEI SERVIZI
-# ==========================================
-echo "📁 Fix #2: Copiando database config nei servizi..."
-
-# Copia database config in ogni servizio
-cp database/config.js server1/database_config.js
-cp database/config.js server2/database_config.js  
-cp database/config.js server3/database_config.js
-
-# ==========================================
-# FIX 3: PACKAGE.JSON CON BCRYPT CORRETTO
-# ==========================================
-echo "📦 Fix #3: Package.json con bcrypt corretto..."
-
-# server1 package.json
-cat > server1/package.json << 'EOF'
-{
-  "name": "evoting-api-gateway",
-  "version": "1.0.0",
-  "main": "app.js",
-  "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "axios": "^1.6.0",
-    "sequelize": "^6.35.0",
-    "pg": "^8.11.3",
-    "pg-hstore": "^2.3.4"
-  }
-}
-EOF
-
-# server2 package.json con bcrypt rebuild
-cat > server2/package.json << 'EOF'
-{
-  "name": "evoting-auth-service",
-  "version": "1.0.0",
-  "main": "app.js",
-  "scripts": {
-    "postinstall": "npm rebuild bcrypt --build-from-source"
-  },
-  "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "bcrypt": "^5.1.1",
-    "jsonwebtoken": "^9.0.2",
-    "sequelize": "^6.35.0",
-    "pg": "^8.11.3",
-    "pg-hstore": "^2.3.4"
-  }
-}
-EOF
-
-# server3 package.json
-cat > server3/package.json << 'EOF'
-{
-  "name": "evoting-vote-service",
-  "version": "1.0.0",
-  "main": "app.js",
-  "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "sequelize": "^6.35.0",
-    "pg": "^8.11.3",
-    "pg-hstore": "^2.3.4"
-  }
-}
-EOF
-
-# ==========================================
-# FIX 4: DOCKERFILE MIGLIORATI PER BCRYPT
-# ==========================================
-echo "🐳 Fix #4: Dockerfile migliorati per bcrypt..."
-
-# Dockerfile server2 con bcrypt fix
-cat > server2/Dockerfile << 'EOF'
-FROM node:18-alpine
-
-# Installa dipendenze per compilazione bcrypt
-RUN apk add --no-cache \
-    python3 \
-    make \
-    g++ \
-    git \
-    libc6-compat
-
-WORKDIR /app
-
-# Copia package.json
-COPY package.json ./
-
-# Pulisci cache npm e installa dipendenze
-RUN npm cache clean --force
-RUN npm install --only=production --no-package-lock
-
-# Rebuild bcrypt per architettura corretta
-RUN npm rebuild bcrypt --build-from-source
-
-# Copia codice applicazione
-COPY . .
-
-# Esponi porta
-EXPOSE 3002
-
-# Comando di avvio
-CMD ["node", "app.js"]
-EOF
-
-# Dockerfile server3
-cat > server3/Dockerfile << 'EOF'
-FROM node:18-alpine
-
-# Installa dipendenze sistema
-RUN apk add --no-cache \
-    python3 \
-    make \
-    g++ \
-    git \
-    libtool \
-    autoconf \
-    automake
-
-WORKDIR /app
-
-# Copia e installa dipendenze
-COPY package.json ./
-RUN npm cache clean --force
-RUN npm install --only=production --no-package-lock
-
-# Copia codice applicazione
-COPY . .
-
-# Esponi porta
-EXPOSE 3003
-
-# Comando di avvio
-CMD ["node", "app.js"]
-EOF
-
-echo "✅ Fix database integration completato!"
+echo "🔍 DIAGNOSI PROBLEMI DASHBOARD ADMIN"
+echo "====================================="
 echo ""
-echo "📋 PROSSIMI PASSI:"
-echo "1. Copia i contenuti degli artifacts aggiornati:"
-echo "   - server2/routes/admin.js (quello con database reale)" 
-echo "   - server3/routes/admin.js (quello con database reale)"
+
+# 1. Stato container
+echo "1. 📊 STATO CONTAINER:"
+docker compose ps
 echo ""
-echo "2. Ricostruisci i container:"
-echo "   docker compose up --build"
+
+# 2. Test connessione database
+echo "2. 🗄️ TEST CONNESSIONE DATABASE:"
+if docker compose exec -T postgres psql -U postgres -d evoting_wabisabi -c "SELECT 'Database OK' as status;" 2>/dev/null; then
+    echo "✅ Database connessione OK"
+else
+    echo "❌ Database connessione FALLITA"
+fi
 echo ""
-echo "3. Controlla i log per verificare connessione database"
+
+# 3. Verifica variabili ambiente nei container
+echo "3. 🔧 VARIABILI AMBIENTE AUTH SERVICE:"
+docker compose exec -T auth-service printenv | grep -E "^DB_|^NODE_ENV" || echo "❌ Variabili DB mancanti"
 echo ""
-echo "🗄️ Il sistema dovrebbe ora connettersi a PostgreSQL con dati reali!"
+
+echo "4. 🔧 VARIABILI AMBIENTE VOTE SERVICE:"
+docker compose exec -T vote-service printenv | grep -E "^DB_|^NODE_ENV" || echo "❌ Variabili DB mancanti"
+echo ""
+
+# 5. Test API Health  
+echo "5. 🏥 TEST API HEALTH:"
+for service in 3001:api-gateway 3002:auth-service 3003:vote-service; do
+    port=$(echo $service | cut -d: -f1)
+    name=$(echo $service | cut -d: -f2)
+    
+    if curl -s "http://localhost:$port/api/health" > /dev/null; then
+        echo "✅ $name: OK"
+    else
+        echo "❌ $name: ERRORE"
+    fi
+done
+echo ""
+
+# 6. Test API Stats (senza autenticazione)
+echo "6. 📈 TEST API STATS:"
+stats_response=$(curl -s "http://localhost:3001/api/admin/stats" 2>/dev/null)
+if echo "$stats_response" | grep -q "total\|count\|users"; then
+    echo "✅ API Stats funziona"
+    echo "📊 Risposta: $stats_response" | head -c 200
+    echo "..."
+else
+    echo "❌ API Stats non funziona"
+    echo "📝 Risposta: $stats_response"
+fi
+echo ""
+
+# 7. Logs recenti per errori database
+echo "7. 📝 ERRORI DATABASE RECENTI:"
+echo "Auth Service:"
+docker compose logs auth-service 2>/dev/null | grep -E "(Error|errore|❌|database)" | tail -3
+echo ""
+echo "Vote Service:"  
+docker compose logs vote-service 2>/dev/null | grep -E "(Error|errore|❌|database)" | tail -3
+echo ""
+
+# 8. Test login admin
+echo "8. 🔐 TEST LOGIN ADMIN:"
+login_response=$(curl -s -X POST "http://localhost:3001/api/admin/auth/login" \
+    -H "Content-Type: application/json" \
+    -d '{"username":"admin@example.com","password":"admin123"}' 2>/dev/null)
+
+if echo "$login_response" | grep -q "token"; then
+    echo "✅ Login admin funziona"
+    token=$(echo "$login_response" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+    echo "🎫 Token ottenuto: ${token:0:20}..."
+    
+    # Test API con token
+    echo ""
+    echo "9. 🔑 TEST API CON TOKEN:"
+    stats_with_token=$(curl -s -H "Authorization: Bearer $token" "http://localhost:3001/api/admin/stats" 2>/dev/null)
+    if echo "$stats_with_token" | grep -q "total\|count"; then
+        echo "✅ API con token funziona"
+    else
+        echo "❌ API con token non funziona"
+        echo "📝 Risposta: $stats_with_token"
+    fi
+else
+    echo "❌ Login admin fallito"
+    echo "📝 Risposta: $login_response"
+fi
+
+echo ""
+echo "🏁 DIAGNOSI COMPLETATA"
+echo "====================="
