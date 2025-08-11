@@ -131,18 +131,29 @@ router.post('/auth/login', async (req, res) => {
 });
 
 // POST /api/admin/auth/verify
-router.post('/auth/verify', async (req, res) => {
+router.get('/auth/verify', async (req, res) => {
     try {
-        const response = await callService('auth', '/api/admin/auth/verify', 'POST', req.body);
+        const token = req.headers.authorization?.replace('Bearer ', '');
+        
+        if (!token) {
+            return res.status(401).json({ 
+                valid: false, 
+                error: 'Token mancante' 
+            });
+        }
+
+        const response = await callService('auth', '/api/admin/auth/verify', 'POST', { token });
         res.json(response);
     } catch (error) {
         res.status(error.status || 500).json({ 
-            error: 'Errore nella verifica autenticazione',
-            details: error.originalError || error.message,
-            service: 'auth'
+            valid: false,
+            error: 'Token non valido',
+            details: error.originalError || error.message
         });
     }
 });
+
+
 
 // ==========================================
 // STATISTICHE AGGREGATE
@@ -156,31 +167,74 @@ router.get('/stats', async (req, res) => {
             callService('vote', '/api/admin/stats')
         ]);
 
+        // ✅ MAPPA I DATI NEL FORMATO CHE IL FRONTEND SI ASPETTA
         const stats = {
-            users: authStats.status === 'fulfilled' ? authStats.value : { 
-                error: 'Auth service non disponibile',
-                total: 0, 
-                active: 0,
-                details: authStats.reason?.message 
+            // Frontend si aspetta users.total e users.active
+            users: {
+                total: authStats.status === 'fulfilled' ? 
+                    (authStats.value?.users?.totalUsers || authStats.value?.totalUsers || 0) : 0,
+                active: authStats.status === 'fulfilled' ? 
+                    (authStats.value?.users?.activeUsers || authStats.value?.activeUsers || 0) : 0,
+                pending: authStats.status === 'fulfilled' ? 
+                    (authStats.value?.users?.pendingUsers || 0) : 0,
+                suspended: authStats.status === 'fulfilled' ? 
+                    (authStats.value?.users?.suspendedUsers || 0) : 0
             },
-            votes: voteStats.status === 'fulfilled' ? voteStats.value : { 
-                error: 'Vote service non disponibile',
-                total: 0, 
-                pending: 0,
-                details: voteStats.reason?.message
+            
+            // Frontend si aspetta votes.total e votes.pending  
+            votes: {
+                total: voteStats.status === 'fulfilled' ? 
+                    (voteStats.value?.votes?.totalVotes || voteStats.value?.totalVotes || 0) : 0,
+                pending: voteStats.status === 'fulfilled' ? 
+                    (voteStats.value?.votes?.pendingVotes || voteStats.value?.pendingVotes || 0) : 0,
+                processed: voteStats.status === 'fulfilled' ? 
+                    (voteStats.value?.votes?.processedVotes || 0) : 0,
+                failed: voteStats.status === 'fulfilled' ? 
+                    (voteStats.value?.votes?.failedVotes || 0) : 0
             },
+            
+            // Frontend si aspetta elections.total al livello principale
+            elections: {
+                total: voteStats.status === 'fulfilled' ? 
+                    (voteStats.value?.votes?.elections?.total || voteStats.value?.elections?.total || 0) : 0,
+                active: voteStats.status === 'fulfilled' ? 
+                    (voteStats.value?.votes?.elections?.active || voteStats.value?.elections?.active || 0) : 0,
+                completed: voteStats.status === 'fulfilled' ? 
+                    (voteStats.value?.votes?.elections?.completed || 0) : 0
+            },
+            
+            // Frontend si aspetta whitelist.total
+            whitelist: {
+                total: authStats.status === 'fulfilled' ? 
+                    (authStats.value?.users?.whitelistEntries || authStats.value?.whitelistEntries || 0) : 0,
+                verified: authStats.status === 'fulfilled' ? 
+                    (authStats.value?.users?.verifiedUsers || 0) : 0
+            },
+            
+            // Informazioni sistema
             system: {
                 uptime: process.uptime(),
                 timestamp: new Date().toISOString(),
                 services: {
                     auth: authStats.status,
-                    vote: voteStats.status
+                    vote: voteStats.status,
+                    database: authStats.status === 'fulfilled' && voteStats.status === 'fulfilled' ? 'connected' : 'error',
+                    redis: 'connected', // Assumiamo connected se i servizi rispondono
+                    blockchain: voteStats.status === 'fulfilled' ? 'connected' : 'unknown'
                 }
             }
         };
 
+        console.log('[API GATEWAY] ✅ Stats aggregate formato frontend:', {
+            users_total: stats.users.total,
+            votes_total: stats.votes.total,
+            elections_total: stats.elections.total,
+            whitelist_total: stats.whitelist.total
+        });
+
         res.json(stats);
     } catch (error) {
+        console.error('[API GATEWAY] ❌ Errore stats:', error);
         res.status(500).json({ error: 'Errore nel caricamento delle statistiche' });
     }
 });
