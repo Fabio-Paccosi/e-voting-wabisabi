@@ -40,12 +40,13 @@ async function testDatabaseConnection() {
 // ROUTES
 // ===========================
 
-// Health check
-app.get('/health', (req, res) => {
+// Health check su /api/health 
+app.get('/api/health', (req, res) => {
     res.json({ 
-        status: 'healthy',
-        service: 'vote-processing',
+        status: 'ok',
+        service: 'vote-service',
         timestamp: new Date().toISOString(),
+        port: PORT,
         coinjoinService: CoinJoinTriggerService.isRunning ? 'active' : 'inactive'
     });
 });
