@@ -94,6 +94,7 @@ const AdminDashboard = () => {
       if (!response.ok) throw new Error('Errore nel caricamento dei candidati');
       
       const data = await response.json();
+      console.log(data)
       setCandidates(prev => ({
         ...prev,
         [electionId]: data.candidates || []
@@ -537,7 +538,7 @@ const AdminDashboard = () => {
                     {candidates[election.id].map(candidate => (
                       <div key={candidate.id} className="flex items-center justify-between bg-gray-50 p-2 rounded">
                         <span className="text-sm">
-                          {candidate.firstName} {candidate.lastName} 
+                          {candidate.name} 
                           {candidate.party && ` (${candidate.party})`}
                         </span>
                         <div className="flex items-center">

@@ -455,6 +455,84 @@ router.put('/elections/:id/status', async (req, res) => {
 });
 
 // ==========================================
+// GESTIONE CANDIDATI (Proxy a Vote Service)
+// ==========================================
+
+// GET /api/admin/elections/:id/candidates - Lista candidati di un'elezione
+router.get('/elections/:id/candidates', async (req, res) => {
+    try {
+        const { id } = req.params;
+        console.log(`[API GATEWAY] GET candidati per elezione ${id}`);
+        
+        const response = await callService('vote', `/api/admin/elections/${id}/candidates`);
+        res.json(response);
+    } catch (error) {
+        console.error(`[API GATEWAY] ✗ Errore caricamento candidati elezione ${req.params.id}:`, error.message);
+        res.status(error.status || 500).json({ 
+            error: 'Errore caricamento candidati',
+            details: error.originalError || error.message,
+            service: 'vote'
+        });
+    }
+});
+
+// POST /api/admin/elections/:id/candidates - Aggiungi candidato a un'elezione
+router.post('/elections/:id/candidates', async (req, res) => {
+    console.log("ciao mamma: "+req);
+    try {
+        const { id } = req.params;
+        console.log(`[API GATEWAY] POST nuovo candidato per elezione ${id}:`, req.body);
+        
+        const response = await callService('vote', `/api/admin/elections/${id}/candidates`, 'POST', req.body);
+        console.log(`[API GATEWAY] ✓ Candidato aggiunto con successo`);
+        res.json(response);
+    } catch (error) {
+        console.error(`[API GATEWAY] ✗ Errore aggiunta candidato elezione ${req.params.id}:`, error.message);
+        res.status(error.status || 500).json({ 
+            error: 'Errore nell\'aggiunta del candidato',
+            details: error.originalError || error.message,
+            service: 'vote'
+        });
+    }
+});
+
+// PUT /api/admin/elections/:electionId/candidates/:candidateId - Modifica candidato
+router.put('/elections/:electionId/candidates/:candidateId', async (req, res) => {
+    try {
+        const { electionId, candidateId } = req.params;
+        console.log(`[API GATEWAY] PUT modifica candidato ${candidateId} elezione ${electionId}`);
+        
+        const response = await callService('vote', `/api/admin/elections/${electionId}/candidates/${candidateId}`, 'PUT', req.body);
+        res.json(response);
+    } catch (error) {
+        console.error(`[API GATEWAY] ✗ Errore modifica candidato:`, error.message);
+        res.status(error.status || 500).json({ 
+            error: 'Errore nella modifica del candidato',
+            details: error.originalError || error.message,
+            service: 'vote'
+        });
+    }
+});
+
+// DELETE /api/admin/elections/:electionId/candidates/:candidateId - Elimina candidato
+router.delete('/elections/:electionId/candidates/:candidateId', async (req, res) => {
+    try {
+        const { electionId, candidateId } = req.params;
+        console.log(`[API GATEWAY] DELETE candidato ${candidateId} elezione ${electionId}`);
+        
+        const response = await callService('vote', `/api/admin/elections/${electionId}/candidates/${candidateId}`, 'DELETE');
+        res.json(response);
+    } catch (error) {
+        console.error(`[API GATEWAY] ✗ Errore eliminazione candidato:`, error.message);
+        res.status(error.status || 500).json({ 
+            error: 'Errore nell\'eliminazione del candidato',
+            details: error.originalError || error.message,
+            service: 'vote'
+        });
+    }
+});
+
+// ==========================================
 // IMPOSTAZIONI (Proxy a Auth Service)
 // ==========================================
 

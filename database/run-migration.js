@@ -1,471 +1,389 @@
-// Script di migrazione e inizializzazione del database
-//TODO RIMUOVER EMOTICONS
+#!/usr/bin/env node
 
-const { 
-    sequelize, 
-    User, 
-    Credential, 
-    Election, 
-    Candidate, 
-    VotingSession, 
-    Vote, 
-    Transaction,
-    syncDatabase,
-    seedDatabase 
-} = require('./models');
+// scripts/run-migrations.js
+// Script automatico per eseguire tutte le migrazioni del database
 
-const bcrypt = require('bcrypt');
-const { v4: uuidv4 } = require('uuid');
+const fs = require('fs');
+const path = require('path');
+const { Client } = require('pg');
+require('dotenv').config();
 
 // ====================
-// SCRIPT DI MIGRAZIONE
+// CONFIGURAZIONE
 // ====================
 
-class DatabaseMigration {
+const config = {
+    host: process.env.DB_HOST || 'localhost',
+    port: process.env.DB_PORT || 5432,
+    database: process.env.DB_NAME || 'evoting_wabisabi',
+    user: process.env.DB_USER || 'postgres',
+    password: process.env.DB_PASS || 'password'
+};
+
+const MIGRATIONS_DIR = path.join(__dirname, '../database/migrations');
+const MIGRATIONS_TABLE = 'schema_migrations';
+
+// ====================
+// CLASSE MIGRATION RUNNER
+// ====================
+
+class MigrationRunner {
     constructor() {
-        this.migrations = [];
+        this.client = new Client(config);
+        this.isConnected = false;
     }
 
-    // Inizializza il database con tabelle e indici
-    async initialize() {
+    // Connessione al database
+    async connect() {
         try {
-            console.log('🔄 Inizializzazione database...');
-            
-            // Test connessione
-            await sequelize.authenticate();
-            console.log('✅ Connessione al database stabilita');
-
-            // Sincronizza modelli (crea tabelle)
-            await syncDatabase(false); // false = non elimina tabelle esistenti
-            console.log('✅ Tabelle sincronizzate');
-
-            // Crea indici personalizzati
-            await this.createCustomIndexes();
-            console.log('✅ Indici creati');
-
-            // Crea viste materializzate per performance
-            await this.createMaterializedViews();
-            console.log('✅ Viste materializzate create');
-
-            // Crea trigger e stored procedures
-            await this.createTriggersAndProcedures();
-            console.log('✅ Trigger e procedure create');
-
-            console.log('🎉 Database inizializzato con successo!');
+            await this.client.connect();
+            this.isConnected = true;
+            console.log('✅ Connesso al database:', config.database);
         } catch (error) {
-            console.error('❌ Errore inizializzazione database:', error);
+            console.error('❌ Errore connessione database:', error.message);
             throw error;
         }
     }
 
-    // Crea indici personalizzati per ottimizzare le query
-    async createCustomIndexes() {
-        const queries = [
-            // Indice composito per ricerca voti per sessione e stato
-            `CREATE INDEX IF NOT EXISTS idx_votes_session_status 
-             ON votes(session_id, status) 
-             WHERE status = 'pending'`,
-
-            // Indice per ricerca credenziali non utilizzate
-            `CREATE INDEX IF NOT EXISTS idx_credentials_unused 
-             ON credentials(user_id) 
-             WHERE is_used = false`,
-
-            // Indice per transazioni non confermate
-            `CREATE INDEX IF NOT EXISTS idx_transactions_unconfirmed 
-             ON transactions(type, confirmations) 
-             WHERE confirmations < 6`,
-
-            // Indice full-text per ricerca elezioni
-            `CREATE INDEX IF NOT EXISTS idx_elections_search 
-             ON elections USING gin(to_tsvector('italian', title || ' ' || coalesce(description, '')))`
-        ];
-
-        for (const query of queries) {
-            await sequelize.query(query);
+    // Disconnessione dal database
+    async disconnect() {
+        if (this.isConnected) {
+            await this.client.end();
+            this.isConnected = false;
+            console.log('📡 Disconnesso dal database');
         }
     }
 
-    // Crea viste materializzate per report e statistiche
-    async createMaterializedViews() {
-        // Vista per statistiche elezioni
-        await sequelize.query(`
-            CREATE MATERIALIZED VIEW IF NOT EXISTS election_stats AS
-            SELECT 
-                e.id as election_id,
-                e.title,
-                COUNT(DISTINCT vs.id) as total_sessions,
-                COUNT(DISTINCT v.id) as total_votes,
-                COUNT(DISTINCT v.serial_number) as unique_voters,
-                MIN(vs."startTime") as first_vote_time,
-                MAX(vs."endTime") as last_vote_time
-            FROM elections e
-            LEFT JOIN voting_sessions vs ON e.id = vs.election_id
-            LEFT JOIN votes v ON vs.id = v.session_id
-            GROUP BY e.id, e.title
-        `);
-
-        // Vista per monitoraggio transazioni
-        await sequelize.query(`
-            CREATE MATERIALIZED VIEW IF NOT EXISTS transaction_summary AS
-            SELECT 
-                t.type,
-                DATE(t."createdAt") as date,
-                COUNT(*) as count,
-                AVG(t.confirmations) as avg_confirmations,
-                COUNT(CASE WHEN t.confirmations >= 6 THEN 1 END) as confirmed_count
-            FROM transactions t
-            GROUP BY t.type, DATE(t."createdAt")
-        `);
-
-        // Crea indici sulle viste materializzate
-        await sequelize.query(`
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_election_stats_id 
-            ON election_stats(election_id)
-        `);
-
-        await sequelize.query(`
-            CREATE INDEX IF NOT EXISTS idx_transaction_summary_date 
-            ON transaction_summary(date DESC)
-        `);
-    }
-
-    // Crea trigger per automazioni
-    async createTriggersAndProcedures() {
-        // Trigger per aggiornare hasVoted quando una credenziale viene usata
-        await sequelize.query(`
-            CREATE OR REPLACE FUNCTION update_user_voted_status()
-            RETURNS TRIGGER AS $$
-            BEGIN
-                IF NEW.is_used = true AND OLD.is_used = false THEN
-                    UPDATE users 
-                    SET "hasVoted" = true, "updatedAt" = NOW()
-                    WHERE id = NEW.user_id;
-                END IF;
-                RETURN NEW;
-            END;
-            $$ LANGUAGE plpgsql;
-
-            DROP TRIGGER IF EXISTS trigger_update_user_voted ON credentials;
+    // Crea la tabella per tracciare le migrazioni
+    async createMigrationsTable() {
+        const query = `
+            CREATE TABLE IF NOT EXISTS ${MIGRATIONS_TABLE} (
+                id SERIAL PRIMARY KEY,
+                filename VARCHAR(255) NOT NULL UNIQUE,
+                executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                checksum VARCHAR(64) NOT NULL
+            );
             
-            CREATE TRIGGER trigger_update_user_voted
-            AFTER UPDATE OF is_used ON credentials
-            FOR EACH ROW
-            EXECUTE FUNCTION update_user_voted_status();
-        `);
+            CREATE INDEX IF NOT EXISTS idx_migrations_filename 
+            ON ${MIGRATIONS_TABLE}(filename);
+        `;
 
-        // Trigger per chiudere automaticamente sessioni scadute
-        await sequelize.query(`
-            CREATE OR REPLACE FUNCTION close_expired_sessions()
-            RETURNS void AS $$
-            BEGIN
-                UPDATE voting_sessions
-                SET status = 'closed', "endTime" = NOW(), "updatedAt" = NOW()
-                WHERE status = 'active' 
-                AND "startTime" < NOW() - INTERVAL '30 minutes';
-            END;
-            $$ LANGUAGE plpgsql;
-        `);
-
-        // Stored procedure per conteggio voti aggregato
-        await sequelize.query(`
-            CREATE OR REPLACE FUNCTION count_votes_by_election(election_uuid UUID)
-            RETURNS TABLE(
-                candidate_id UUID,
-                candidate_name VARCHAR,
-                vote_count BIGINT,
-                percentage NUMERIC(5,2)
-            ) AS $$
-            DECLARE
-                total_votes BIGINT;
-            BEGIN
-                -- Conta voti totali
-                SELECT COUNT(DISTINCT v.id) INTO total_votes
-                FROM votes v
-                JOIN voting_sessions vs ON v.session_id = vs.id
-                WHERE vs.election_id = election_uuid
-                AND v.status = 'confirmed';
-
-                -- Ritorna risultati per candidato
-                RETURN QUERY
-                SELECT 
-                    c.id,
-                    c.name,
-                    COUNT(v.id) as vote_count,
-                    CASE 
-                        WHEN total_votes > 0 
-                        THEN ROUND((COUNT(v.id)::NUMERIC / total_votes) * 100, 2)
-                        ELSE 0
-                    END as percentage
-                FROM candidates c
-                LEFT JOIN votes v ON 
-                    -- Qui dovremmo decifrare il commitment per determinare il candidato
-                    -- Per ora simuliamo con modulo sul serial number
-                    MOD(('x' || substr(v.serial_number, 4, 8))::bit(32)::int, 
-                        (SELECT COUNT(*) FROM candidates WHERE election_id = election_uuid)) = c.value_encoding
-                    AND v.status = 'confirmed'
-                LEFT JOIN voting_sessions vs ON v.session_id = vs.id
-                WHERE c.election_id = election_uuid
-                GROUP BY c.id, c.name
-                ORDER BY vote_count DESC;
-            END;
-            $$ LANGUAGE plpgsql;
-        `);
-    }
-
-    // Popola il database con dati di test
-    async seedTestData() {
         try {
-            console.log('🌱 Popolamento database con dati di test...');
-
-            // Crea utenti di test
-            const testUsers = [
-                {
-                    email: 'alice@example.com',
-                    password: await bcrypt.hash('password123', 10),
-                    firstName: 'Alice',
-                    lastName: 'Rossi',
-                    taxCode: 'RSSMRA85M01H501Z',
-                    isAuthorized: true,
-                    authorizationProof: 'whitelist_verified'
-                },
-                {
-                    email: 'bob@example.com',
-                    password: await bcrypt.hash('password123', 10),
-                    firstName: 'Bob',
-                    lastName: 'Verdi',
-                    taxCode: 'VRDGPP90L15H501A',
-                    isAuthorized: true,
-                    authorizationProof: 'whitelist_verified'
-                },
-                {
-                    email: 'charlie@example.com',
-                    password: await bcrypt.hash('password123', 10),
-                    firstName: 'Charlie',
-                    lastName: 'Bianchi',
-                    taxCode: 'BNCLRA88S20H501B',
-                    isAuthorized: true,
-                    authorizationProof: 'whitelist_verified'
-                }
-            ];
-
-            const users = await User.bulkCreate(testUsers, { 
-                ignoreDuplicates: true 
-            });
-            console.log(`✅ ${users.length} utenti creati`);
-
-            // Crea un'elezione di test
-            const election = await Election.findOrCreate({
-                where: { title: 'Elezione Comunale 2025' },
-                defaults: {
-                    description: 'Elezione del sindaco e consiglio comunale',
-                    startDate: new Date(),
-                    endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 giorni
-                    isActive: true,
-                    metadata: {
-                        type: 'municipal',
-                        location: 'Bari',
-                        eligibleVoters: 150000
-                    }
-                }
-            });
-            console.log('✅ Elezione creata');
-
-            // Crea candidati
-            const candidates = [
-                {
-                    electionId: election[0].id,
-                    name: 'Giovanni Rossi',
-                    description: 'Candidato del Partito Democratico',
-                    valueEncoding: 0
-                },
-                {
-                    electionId: election[0].id,
-                    name: 'Maria Bianchi',
-                    description: 'Candidata di Forza Italia',
-                    valueEncoding: 1
-                },
-                {
-                    electionId: election[0].id,
-                    name: 'Luigi Verdi',
-                    description: 'Candidato del Movimento 5 Stelle',
-                    valueEncoding: 2
-                }
-            ];
-
-            await Candidate.bulkCreate(candidates, { 
-                ignoreDuplicates: true 
-            });
-            console.log(`✅ ${candidates.length} candidati creati`);
-
-            // Crea una sessione di voto attiva
-            const session = await VotingSession.findOrCreate({
-                where: { 
-                    electionId: election[0].id,
-                    status: 'active'
-                },
-                defaults: {
-                    status: 'active',
-                    metadata: {
-                        seggio: 'Seggio 1 - Centro',
-                        responsabile: 'Mario Neri'
-                    }
-                }
-            });
-            console.log('✅ Sessione di voto creata');
-
-            console.log('🎉 Database popolato con successo!');
+            await this.client.query(query);
+            console.log('✅ Tabella migrazioni creata/verificata');
         } catch (error) {
-            console.error('❌ Errore nel seed:', error);
+            console.error('❌ Errore creazione tabella migrazioni:', error.message);
             throw error;
         }
     }
 
-    // Crea job schedulati per manutenzione
-    async setupMaintenanceJobs() {
-        console.log('⏰ Configurazione job di manutenzione...');
-
-        // Job per chiudere sessioni scadute (ogni 5 minuti)
-        setInterval(async () => {
-            try {
-                await sequelize.query('SELECT close_expired_sessions()');
-            } catch (error) {
-                console.error('Errore chiusura sessioni:', error);
+    // Ottiene la lista dei file di migrazione
+    getMigrationFiles() {
+        try {
+            if (!fs.existsSync(MIGRATIONS_DIR)) {
+                console.log('⚠️  Cartella migrations non trovata:', MIGRATIONS_DIR);
+                return [];
             }
-        }, 5 * 60 * 1000);
 
-        // Job per aggiornare viste materializzate (ogni ora)
-        setInterval(async () => {
-            try {
-                await sequelize.query('REFRESH MATERIALIZED VIEW CONCURRENTLY election_stats');
-                await sequelize.query('REFRESH MATERIALIZED VIEW CONCURRENTLY transaction_summary');
-            } catch (error) {
-                console.error('Errore refresh viste:', error);
-            }
-        }, 60 * 60 * 1000);
+            const files = fs.readdirSync(MIGRATIONS_DIR)
+                .filter(file => file.endsWith('.sql'))
+                .sort(); // Ordinamento alfabetico (importante per l'ordine)
 
-        console.log('✅ Job di manutenzione configurati');
+            console.log(`📂 Trovati ${files.length} file di migrazione`);
+            return files;
+        } catch (error) {
+            console.error('❌ Errore lettura cartella migrations:', error.message);
+            throw error;
+        }
     }
 
-    // Backup del database
-    async backup(filename) {
-        const { exec } = require('child_process');
-        const path = require('path');
-
-        const backupPath = path.join(__dirname, '..', 'backups', filename || `backup_${Date.now()}.sql`);
-
-        return new Promise((resolve, reject) => {
-            exec(
-                `pg_dump -h ${process.env.DB_HOST} -U ${process.env.DB_USER} -d ${process.env.DB_NAME} -f ${backupPath}`,
-                { env: { ...process.env, PGPASSWORD: process.env.DB_PASS } },
-                (error, stdout, stderr) => {
-                    if (error) {
-                        reject(error);
-                    } else {
-                        resolve(backupPath);
-                    }
-                }
-            );
-        });
+    // Calcola checksum per verificare l'integrità del file
+    calculateChecksum(content) {
+        const crypto = require('crypto');
+        return crypto.createHash('sha256').update(content).digest('hex');
     }
 
-    // Restore del database
-    async restore(filename) {
-        const { exec } = require('child_process');
-        const path = require('path');
+    // Verifica se una migrazione è già stata eseguita
+    async isMigrationExecuted(filename, checksum) {
+        const query = `
+            SELECT filename, checksum 
+            FROM ${MIGRATIONS_TABLE} 
+            WHERE filename = $1
+        `;
 
-        const backupPath = path.join(__dirname, '..', 'backups', filename);
+        try {
+            const result = await this.client.query(query, [filename]);
+            
+            if (result.rows.length === 0) {
+                return false; // Non eseguita
+            }
 
-        return new Promise((resolve, reject) => {
-            exec(
-                `psql -h ${process.env.DB_HOST} -U ${process.env.DB_USER} -d ${process.env.DB_NAME} -f ${backupPath}`,
-                { env: { ...process.env, PGPASSWORD: process.env.DB_PASS } },
-                (error, stdout, stderr) => {
-                    if (error) {
-                        reject(error);
-                    } else {
-                        resolve(true);
+            const existingChecksum = result.rows[0].checksum;
+            if (existingChecksum !== checksum) {
+                throw new Error(
+                    `Checksum non corrisponde per ${filename}. ` +
+                    `Il file di migrazione è stato modificato dopo l'esecuzione!`
+                );
+            }
+
+            return true; // Già eseguita
+        } catch (error) {
+            if (error.message.includes('Checksum non corrisponde')) {
+                throw error;
+            }
+            console.error('❌ Errore verifica migrazione:', error.message);
+            throw error;
+        }
+    }
+
+    // Esegue una singola migrazione
+    async executeMigration(filename) {
+        const filePath = path.join(MIGRATIONS_DIR, filename);
+        
+        try {
+            console.log(`🔄 Eseguendo migrazione: ${filename}`);
+            
+            // Legge il contenuto del file
+            const content = fs.readFileSync(filePath, 'utf8');
+            const checksum = this.calculateChecksum(content);
+
+            // Verifica se già eseguita
+            if (await this.isMigrationExecuted(filename, checksum)) {
+                console.log(`⏭️  Migrazione ${filename} già eseguita, saltando`);
+                return;
+            }
+
+            // Inizia transazione
+            await this.client.query('BEGIN');
+
+            try {
+                // Esegue la migrazione
+                await this.client.query(content);
+
+                // Registra l'esecuzione
+                await this.client.query(
+                    `INSERT INTO ${MIGRATIONS_TABLE} (filename, checksum) VALUES ($1, $2)`,
+                    [filename, checksum]
+                );
+
+                // Conferma transazione
+                await this.client.query('COMMIT');
+                console.log(`✅ Migrazione ${filename} eseguita con successo`);
+
+            } catch (error) {
+                // Rollback in caso di errore
+                await this.client.query('ROLLBACK');
+                throw error;
+            }
+
+        } catch (error) {
+            console.error(`❌ Errore esecuzione migrazione ${filename}:`, error.message);
+            throw error;
+        }
+    }
+
+    // Esegue tutte le migrazioni
+    async runAllMigrations() {
+        try {
+            console.log('🚀 Avvio esecuzione migrazioni...\n');
+
+            await this.connect();
+            await this.createMigrationsTable();
+
+            const migrationFiles = this.getMigrationFiles();
+
+            if (migrationFiles.length === 0) {
+                console.log('ℹ️  Nessuna migrazione da eseguire');
+                return;
+            }
+
+            let executedCount = 0;
+            let skippedCount = 0;
+
+            for (const filename of migrationFiles) {
+                try {
+                    const filePath = path.join(MIGRATIONS_DIR, filename);
+                    const content = fs.readFileSync(filePath, 'utf8');
+                    const checksum = this.calculateChecksum(content);
+
+                    if (await this.isMigrationExecuted(filename, checksum)) {
+                        skippedCount++;
+                        continue;
                     }
+
+                    await this.executeMigration(filename);
+                    executedCount++;
+
+                } catch (error) {
+                    console.error(`\n❌ ERRORE CRITICO nella migrazione ${filename}:`);
+                    console.error(error.message);
+                    console.error('\n🛑 Esecuzione interrotta per preservare l\'integrità del database');
+                    throw error;
                 }
+            }
+
+            console.log('\n🎉 TUTTE LE MIGRAZIONI COMPLETATE!');
+            console.log(`📊 Statistiche:`);
+            console.log(`   • Migrazioni eseguite: ${executedCount}`);
+            console.log(`   • Migrazioni saltate: ${skippedCount}`);
+            console.log(`   • Totale file: ${migrationFiles.length}`);
+
+        } catch (error) {
+            console.error('\n💥 ERRORE DURANTE L\'ESECUZIONE DELLE MIGRAZIONI:');
+            console.error(error.message);
+            process.exit(1);
+        } finally {
+            await this.disconnect();
+        }
+    }
+
+    // Mostra lo stato delle migrazioni
+    async showStatus() {
+        try {
+            await this.connect();
+            await this.createMigrationsTable();
+
+            const migrationFiles = this.getMigrationFiles();
+            const executedQuery = `SELECT filename, executed_at FROM ${MIGRATIONS_TABLE} ORDER BY filename`;
+            const executedResult = await this.client.query(executedQuery);
+            
+            const executed = new Map(
+                executedResult.rows.map(row => [row.filename, row.executed_at])
             );
-        });
+
+            console.log('\n📋 STATO MIGRAZIONI:\n');
+            console.log('File di migrazione | Stato | Data esecuzione');
+            console.log(''.padEnd(70, '-'));
+
+            for (const filename of migrationFiles) {
+                const status = executed.has(filename) ? '✅ Eseguita' : '⏸️  Pendente';
+                const date = executed.get(filename) || 'N/A';
+                
+                console.log(`${filename.padEnd(30)} | ${status.padEnd(10)} | ${date}`);
+            }
+
+            console.log(''.padEnd(70, '-'));
+            console.log(`Totale: ${migrationFiles.length} | Eseguite: ${executed.size} | Pendenti: ${migrationFiles.length - executed.size}`);
+
+        } catch (error) {
+            console.error('❌ Errore visualizzazione stato:', error.message);
+            process.exit(1);
+        } finally {
+            await this.disconnect();
+        }
+    }
+
+    // Crea una nuova migrazione
+    async createMigration(name) {
+        if (!name) {
+            console.error('❌ Nome della migrazione richiesto');
+            console.log('Uso: npm run migration:create <nome>');
+            process.exit(1);
+        }
+
+        const timestamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0];
+        const filename = `${timestamp}_${name.replace(/\s+/g, '_').toLowerCase()}.sql`;
+        const filepath = path.join(MIGRATIONS_DIR, filename);
+
+        const template = `-- Migration: ${name}
+-- Created: ${new Date().toISOString()}
+-- Description: ${name}
+
+-- UP Migration
+BEGIN;
+
+-- Aggiungi qui le modifiche al database
+-- Esempio:
+-- CREATE TABLE example (
+--     id SERIAL PRIMARY KEY,
+--     name VARCHAR(255) NOT NULL,
+--     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- );
+
+COMMIT;
+
+-- Se necessario, aggiungi qui il rollback (commentato)
+-- DOWN Migration (per riferimento, non eseguito automaticamente)
+-- BEGIN;
+-- DROP TABLE IF EXISTS example;
+-- COMMIT;
+`;
+
+        try {
+            // Crea la cartella se non esiste
+            if (!fs.existsSync(MIGRATIONS_DIR)) {
+                fs.mkdirSync(MIGRATIONS_DIR, { recursive: true });
+            }
+
+            fs.writeFileSync(filepath, template);
+            console.log(`✅ Migrazione creata: ${filename}`);
+            console.log(`📁 Percorso: ${filepath}`);
+        } catch (error) {
+            console.error('❌ Errore creazione migrazione:', error.message);
+            process.exit(1);
+        }
     }
 }
 
 // ====================
-// ESECUZIONE SCRIPT
+// CLI HANDLER
 // ====================
 
-if (require.main === module) {
-    const migration = new DatabaseMigration();
-
+async function main() {
+    const runner = new MigrationRunner();
     const command = process.argv[2];
+    const arg = process.argv[3];
+
+    console.log('🗄️  E-Voting WabiSabi - Migration Runner\n');
 
     switch (command) {
-        case 'init':
-            migration.initialize()
-                .then(() => process.exit(0))
-                .catch(err => {
-                    console.error(err);
-                    process.exit(1);
-                });
+        case 'run':
+        case undefined:
+            await runner.runAllMigrations();
             break;
 
-        case 'seed':
-            migration.seedTestData()
-                .then(() => process.exit(0))
-                .catch(err => {
-                    console.error(err);
-                    process.exit(1);
-                });
+        case 'status':
+            await runner.showStatus();
             break;
 
-        case 'backup':
-            migration.backup(process.argv[3])
-                .then(path => {
-                    console.log('✅ Backup salvato:', path);
-                    process.exit(0);
-                })
-                .catch(err => {
-                    console.error(err);
-                    process.exit(1);
-                });
+        case 'create':
+            await runner.createMigration(arg);
             break;
 
-        case 'restore':
-            if (!process.argv[3]) {
-                console.error('❌ Specifica il file di backup');
-                process.exit(1);
-            }
-            migration.restore(process.argv[3])
-                .then(() => {
-                    console.log('✅ Restore completato');
-                    process.exit(0);
-                })
-                .catch(err => {
-                    console.error(err);
-                    process.exit(1);
-                });
+        case 'help':
+        case '--help':
+        case '-h':
+            console.log('Comandi disponibili:');
+            console.log('  run (default)  - Esegue tutte le migrazioni pendenti');
+            console.log('  status         - Mostra lo stato delle migrazioni');
+            console.log('  create <nome>  - Crea una nuova migrazione');
+            console.log('  help           - Mostra questo messaggio');
             break;
 
         default:
-            console.log(`
-Utilizzo: node migrate.js [comando]
-
-Comandi disponibili:
-  init     - Inizializza il database con tabelle e indici
-  seed     - Popola il database con dati di test
-  backup   - Crea un backup del database
-  restore  - Ripristina da un backup
-
-Esempi:
-  node migrate.js init
-  node migrate.js seed
-  node migrate.js backup backup_20240101.sql
-  node migrate.js restore backup_20240101.sql
-            `);
-            process.exit(0);
+            console.error(`❌ Comando sconosciuto: ${command}`);
+            console.log('Usa "help" per vedere i comandi disponibili');
+            process.exit(1);
     }
 }
 
-module.exports = DatabaseMigration;
+// Gestione errori non catturati
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
+    process.exit(1);
+});
+
+process.on('uncaughtException', (error) => {
+    console.error('💥 Uncaught Exception:', error);
+    process.exit(1);
+});
+
+// Esegui solo se chiamato direttamente
+if (require.main === module) {
+    main().catch(error => {
+        console.error('💥 Errore fatale:', error.message);
+        process.exit(1);
+    });
+}
+
+module.exports = MigrationRunner;
