@@ -1,12 +1,10 @@
-// server3/services/coinjoinTrigger.service.js
+// server3/services/coinjoinTrigger.service.js - FIXED VERSION
 const path = require('path');
 const bitcoinjs = require('bitcoinjs-lib');
 const axios = require('axios');
 
-// Importa i modelli dal percorso corretto
-// Assumendo che database/models/index.js sia nella root del progetto
-const modelsPath = path.join(__dirname, '../../../database/models');
-const { Vote, VotingSession, Election, Transaction, Candidate } = require(modelsPath);
+// CORREZIONE: Usa il database_config locale invece del percorso assoluto
+const { Vote, VotingSession, Election, Transaction, Candidate } = require('../database_config');
 
 class CoinJoinTriggerService {
     constructor() {
@@ -73,143 +71,88 @@ class CoinJoinTriggerService {
 
             // Se abbiamo raggiunto il trigger, avvia CoinJoin
             if (pendingVotes >= election.coinjoinTrigger) {
-                console.log(`🚀 [CoinJoin Service] Trigger raggiunto per elezione "${election.title}"! Avvio CoinJoin...`);
-                await this.initiateCoinJoin(election);
+                console.log(`🚀 [CoinJoin Service] Trigger raggiunto per elezione "${election.title}"!`);
+                await this.executeCoinJoin(election);
             }
         } catch (error) {
-            console.error(`❌ [CoinJoin Service] Errore processamento elezione ${election.id}:`, error);
+            console.error('❌ [CoinJoin Service] Errore processamento voti:', error);
         }
     }
 
-    async initiateCoinJoin(election) {
-        let session = null;
-        
+    async executeCoinJoin(election) {
         try {
-            // Crea nuova sessione di voting
-            session = await VotingSession.create({
-                electionId: election.id,
-                status: 'aggregating',
-                startTime: new Date(),
-                metadata: {
-                    triggerThreshold: election.coinjoinTrigger,
-                    network: election.blockchainNetwork
-                }
-            });
+            console.log(`🔄 [CoinJoin Service] Esecuzione CoinJoin per "${election.title}"`);
 
-            console.log(`📝 [CoinJoin Service] Creata sessione ${session.id}`);
-
-            // Recupera tutti i voti pendenti con lock per evitare race conditions
-            const votes = await Vote.findAll({
+            // 1. Raccogli tutti i voti pendenti per questa elezione
+            const pendingVotes = await Vote.findAll({
                 where: { status: 'pending' },
                 include: [{
                     model: VotingSession,
                     as: 'session',
                     where: { electionId: election.id },
                     required: true
-                }],
-                lock: true
+                }]
             });
 
-            if (votes.length === 0) {
+            if (pendingVotes.length === 0) {
                 console.log('⚠️ [CoinJoin Service] Nessun voto pendente trovato');
-                await session.update({ status: 'failed' });
                 return;
             }
 
-            console.log(`🔢 [CoinJoin Service] Aggregazione di ${votes.length} voti`);
+            // 2. Costruisci la transazione CoinJoin
+            const coinjoinTx = await this.buildCoinJoinTransaction(election, pendingVotes);
 
-            // Aggrega i commitment per candidato
-            const aggregatedCommitments = await this.aggregateCommitments(votes);
-
-            // Recupera i candidati
-            const candidates = await Candidate.findAll({
-                where: { electionId: election.id }
-            });
-
-            // Costruisci transazione CoinJoin
-            const coinjoinTx = await this.buildCoinJoinTransaction(
-                election,
-                votes,
-                aggregatedCommitments,
-                candidates
-            );
-
-            // Broadcast alla rete Bitcoin
+            // 3. Broadcast della transazione
             const txId = await this.broadcastTransaction(coinjoinTx, election.blockchainNetwork);
 
-            // Aggiorna stato voti e sessione
-            await this.updateVotesStatus(votes, txId);
-            await session.update({
-                status: 'completed',
-                endTime: new Date(),
-                transactionId: txId,
+            // 4. Aggiorna lo stato dei voti
+            await this.updateVotesStatus(pendingVotes, txId);
+
+            // 5. Salva la transazione nel database
+            await Transaction.create({
+                txId: txId,
+                type: 'coinjoin',
+                electionId: election.id,
+                rawData: coinjoinTx.toHex(),
                 metadata: {
-                    ...session.metadata,
-                    votesProcessed: votes.length,
-                    txId: txId
+                    votesProcessed: pendingVotes.length,
+                    outputs: coinjoinTx.outputs.length,
+                    network: election.blockchainNetwork
                 }
             });
 
-            // Registra transazione
-            await Transaction.create({
-                electionId: election.id,
-                sessionId: session.id,
-                txId,
-                type: 'coinjoin',
-                rawData: coinjoinTx.toHex ? coinjoinTx.toHex() : JSON.stringify(coinjoinTx),
-                metadata: {
-                    voteCount: votes.length,
-                    aggregatedCommitments,
-                    timestamp: new Date().toISOString()
-                },
-                status: 'broadcasted'
-            });
+            // 6. Notifica completamento
+            await this.notifyCoinJoinCompletion(election, txId, pendingVotes.length);
 
-            console.log(`✅ [CoinJoin Service] CoinJoin completato! TxID: ${txId}`);
-            
-            // Notifica admin e utenti
-            await this.notifyCoinJoinCompletion(election, txId, votes.length);
+            console.log(`✅ [CoinJoin Service] CoinJoin completato per "${election.title}"!`);
 
         } catch (error) {
             console.error('❌ [CoinJoin Service] Errore durante CoinJoin:', error);
-            
-            if (session) {
-                await session.update({
-                    status: 'failed',
-                    endTime: new Date(),
-                    metadata: {
-                        ...session.metadata,
-                        error: error.message
-                    }
-                });
-            }
-            
             throw error;
         }
     }
 
-    async aggregateCommitments(votes) {
-        // Implementa aggregazione omomorfica dei commitment
-        const aggregated = {};
-        
-        for (const vote of votes) {
-            // Assumendo che il commitment contenga il valore del candidato
-            const candidateValue = vote.commitment?.candidateValue || vote.metadata?.candidateValue || 0;
-            
-            if (!aggregated[candidateValue]) {
-                aggregated[candidateValue] = 0;
-            }
-            
-            // Somma semplice per ora (in produzione usare aggregazione omomorfica vera)
-            aggregated[candidateValue] += 1;
-        }
-        
-        console.log(`📊 [CoinJoin Service] Risultati aggregati:`, aggregated);
-        return aggregated;
-    }
-
-    async buildCoinJoinTransaction(election, votes, aggregatedCommitments, candidates) {
+    async buildCoinJoinTransaction(election, votes) {
         try {
+            console.log(`🔨 [CoinJoin Service] Costruzione transazione per ${votes.length} voti`);
+
+            // Raggruppa i commitment per candidato
+            const aggregatedCommitments = {};
+            
+            for (const vote of votes) {
+                // Decodifica il commitment (assumiamo sia JSON)
+                const commitment = JSON.parse(vote.commitment);
+                const candidateValue = commitment.candidateValue || 0;
+                
+                aggregatedCommitments[candidateValue] = (aggregatedCommitments[candidateValue] || 0) + 1;
+            }
+
+            // Ottieni candidati dell'elezione
+            const candidates = await Candidate.findAll({
+                where: { electionId: election.id }
+            });
+
+            // Determina la rete Bitcoin
             const network = election.blockchainNetwork === 'mainnet' 
                 ? bitcoinjs.networks.bitcoin 
                 : bitcoinjs.networks.testnet;
@@ -292,6 +235,14 @@ class CoinJoinTriggerService {
     stop() {
         this.isRunning = false;
         console.log('⏹️ [CoinJoin Service] Servizio fermato');
+    }
+
+    // Getter per verificare lo stato del servizio
+    get status() {
+        return {
+            isRunning: this.isRunning,
+            checkInterval: this.checkInterval
+        };
     }
 }
 
