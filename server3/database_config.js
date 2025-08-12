@@ -1,4 +1,4 @@
-// server3/database_config.js - Database Configuration for Vote Service
+// server3/database_config.js - Database Configuration for Vote Service - FIXED VERSION
 console.log('🔗 Inizializzazione database config...');
 
 const { Sequelize, DataTypes } = require('sequelize');
@@ -11,15 +11,25 @@ console.log('Environment vars:', {
     NODE_ENV: process.env.NODE_ENV
 });
 
-// Configurazione database
+// CONFIGURAZIONE CORRETTA con underscored: true
 const sequelize = new Sequelize(
     process.env.DB_NAME || 'evoting_wabisabi',
     process.env.DB_USER || 'postgres',
-    process.env.DB_PASS || 'password',
+    process.env.DB_PASSWORD || 'password',
     {
         host: process.env.DB_HOST || 'localhost',
         dialect: 'postgres',
         logging: process.env.NODE_ENV === 'development' ? console.log : false,
+        
+        // CONFIGURAZIONE CRITICA PER SNAKE_CASE <-> CAMELCASE
+        define: {
+            underscored: true,        // Usa snake_case per le colonne nel DB
+            freezeTableName: true,    // Non pluralizzare i nomi delle tabelle
+            timestamps: true,         // Aggiungi created_at e updated_at
+            createdAt: 'created_at',  // Mappa createdAt -> created_at
+            updatedAt: 'updated_at'   // Mappa updatedAt -> updated_at
+        },
+        
         pool: {
             max: 5,
             min: 0,
@@ -50,45 +60,54 @@ const User = sequelize.define('User', {
     },
     firstName: {
         type: DataTypes.STRING,
-        allowNull: false
+        allowNull: false,
+        field: 'first_name'  // Mappa a first_name nel DB
     },
     lastName: {
         type: DataTypes.STRING,
-        allowNull: false
+        allowNull: false,
+        field: 'last_name'   // Mappa a last_name nel DB
     },
     taxCode: {
         type: DataTypes.STRING(16),
         allowNull: false,
-        unique: true
+        unique: true,
+        field: 'tax_code'    // Mappa a tax_code nel DB
     },
     bitcoinAddress: {
         type: DataTypes.STRING,
         allowNull: true,
-        unique: true
+        unique: true,
+        field: 'bitcoin_address'
     },
     bitcoinPrivateKey: {
         type: DataTypes.TEXT,
-        allowNull: true
+        allowNull: true,
+        field: 'bitcoin_private_key'
     },
     isAuthorized: {
         type: DataTypes.BOOLEAN,
-        defaultValue: false
+        defaultValue: false,
+        field: 'is_authorized'
     },
     authorizationProof: {
         type: DataTypes.STRING,
-        allowNull: true
+        allowNull: true,
+        field: 'authorization_proof'
     },
     hasVoted: {
         type: DataTypes.BOOLEAN,
-        defaultValue: false
+        defaultValue: false,
+        field: 'has_voted'
     }
 }, {
     tableName: 'users',
+    underscored: true,
     timestamps: true
 });
 
 // ====================
-// MODELLO ELECTION
+// MODELLO ELECTION - CORRETTO
 // ====================
 const Election = sequelize.define('Election', {
     id: {
@@ -106,15 +125,18 @@ const Election = sequelize.define('Election', {
     },
     startDate: {
         type: DataTypes.DATE,
-        allowNull: false
+        allowNull: false,
+        field: 'start_date'  // MAPPA a start_date nel DB
     },
     endDate: {
         type: DataTypes.DATE,
-        allowNull: false
+        allowNull: false,
+        field: 'end_date'    // MAPPA a end_date nel DB
     },
     isActive: {
         type: DataTypes.BOOLEAN,
-        defaultValue: false
+        defaultValue: false,
+        field: 'is_active'   // MAPPA a is_active nel DB
     },
     status: {
         type: DataTypes.ENUM('draft', 'active', 'paused', 'completed', 'cancelled'),
@@ -122,35 +144,42 @@ const Election = sequelize.define('Election', {
     },
     finalTallyTransactionId: {
         type: DataTypes.STRING,
-        allowNull: true
+        allowNull: true,
+        field: 'final_tally_transaction_id'
     },
     coinjoinTrigger: {
         type: DataTypes.INTEGER,
-        defaultValue: 10
+        defaultValue: 10,
+        field: 'coinjoin_trigger'
     },
     coinjoinEnabled: {
         type: DataTypes.BOOLEAN,
-        defaultValue: true
+        defaultValue: true,
+        field: 'coinjoin_enabled'
     },
     maxVotersAllowed: {
         type: DataTypes.INTEGER,
-        allowNull: true
+        allowNull: true,
+        field: 'max_voters_allowed'
     },
     votingMethod: {
-        type: DataTypes.STRING(20),
-        defaultValue: 'single'
+        type: DataTypes.STRING,
+        defaultValue: 'single',
+        field: 'voting_method'
     },
     blockchainNetwork: {
-        type: DataTypes.STRING(10),
-        defaultValue: 'testnet'
+        type: DataTypes.STRING,
+        defaultValue: 'testnet',
+        field: 'blockchain_network'
     }
 }, {
     tableName: 'elections',
+    underscored: true,
     timestamps: true
 });
 
 // ====================
-// MODELLO CANDIDATE
+// MODELLO CANDIDATE - CORRETTO
 // ====================
 const Candidate = sequelize.define('Candidate', {
     id: {
@@ -161,6 +190,7 @@ const Candidate = sequelize.define('Candidate', {
     electionId: {
         type: DataTypes.UUID,
         allowNull: false,
+        field: 'election_id',  // MAPPA a election_id nel DB
         references: {
             model: Election,
             key: 'id'
@@ -171,16 +201,14 @@ const Candidate = sequelize.define('Candidate', {
         allowNull: false
     },
     firstName: {
-        type: DataTypes.STRING(100),
-        allowNull: true
+        type: DataTypes.STRING,
+        allowNull: true,
+        field: 'first_name'
     },
     lastName: {
-        type: DataTypes.STRING(100),
-        allowNull: true
-    },
-    party: {
-        type: DataTypes.STRING(100),
-        allowNull: true
+        type: DataTypes.STRING,
+        allowNull: true,
+        field: 'last_name'
     },
     description: {
         type: DataTypes.TEXT,
@@ -190,6 +218,10 @@ const Candidate = sequelize.define('Candidate', {
         type: DataTypes.TEXT,
         allowNull: true
     },
+    party: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
     photo: {
         type: DataTypes.TEXT,
         allowNull: true
@@ -197,27 +229,32 @@ const Candidate = sequelize.define('Candidate', {
     bitcoinAddress: {
         type: DataTypes.STRING,
         allowNull: false,
-        unique: true
+        unique: true,
+        field: 'bitcoin_address'
     },
     bitcoinPublicKey: {
-        type: DataTypes.STRING(130),
-        allowNull: true
+        type: DataTypes.STRING,
+        allowNull: true,
+        field: 'bitcoin_public_key'
     },
-    valueEncoding: {
+    voteEncoding: {
         type: DataTypes.INTEGER,
-        allowNull: false
+        allowNull: false,
+        field: 'vote_encoding'
     },
     totalVotesReceived: {
         type: DataTypes.INTEGER,
-        defaultValue: 0
+        defaultValue: 0,
+        field: 'total_votes_received'
     }
 }, {
     tableName: 'candidates',
+    underscored: true,
     timestamps: true
 });
 
 // ====================
-// MODELLO VOTING SESSION
+// MODELLO VOTING SESSION - CORRETTO
 // ====================
 const VotingSession = sequelize.define('VotingSession', {
     id: {
@@ -228,43 +265,40 @@ const VotingSession = sequelize.define('VotingSession', {
     electionId: {
         type: DataTypes.UUID,
         allowNull: false,
-        references: {
-            model: Election,
-            key: 'id'
-        }
+        field: 'election_id'
     },
     startTime: {
         type: DataTypes.DATE,
         allowNull: false,
-        defaultValue: DataTypes.NOW
+        field: 'start_time'
     },
     endTime: {
         type: DataTypes.DATE,
-        allowNull: true
+        allowNull: true,
+        field: 'end_time'
     },
     status: {
-        type: DataTypes.ENUM('preparing', 'active', 'completed', 'failed'),
+        type: DataTypes.ENUM('preparing', 'input_registration', 'output_registration', 'signing', 'completed', 'failed'),
         defaultValue: 'preparing'
     },
     transactionCount: {
         type: DataTypes.INTEGER,
-        defaultValue: 0
-    },
-    voteCount: {
-        type: DataTypes.INTEGER,
-        defaultValue: 0
+        defaultValue: 0,
+        field: 'transaction_count'
     },
     finalTallyTransactionId: {
         type: DataTypes.STRING,
-        allowNull: true
+        allowNull: true,
+        field: 'final_tally_transaction_id'
     }
 }, {
     tableName: 'voting_sessions',
+    underscored: true,
     timestamps: true
 });
 
 // ====================
-// MODELLO VOTE
+// MODELLO VOTE - CORRETTO
 // ====================
 const Vote = sequelize.define('Vote', {
     id: {
@@ -275,51 +309,45 @@ const Vote = sequelize.define('Vote', {
     sessionId: {
         type: DataTypes.UUID,
         allowNull: false,
-        references: {
-            model: VotingSession,
-            key: 'id'
-        }
+        field: 'session_id'
     },
     serialNumber: {
         type: DataTypes.STRING,
         allowNull: false,
-        unique: true
+        unique: true,
+        field: 'serial_number'
     },
     commitment: {
         type: DataTypes.TEXT,
         allowNull: false
     },
-    zkProof: {
-        type: DataTypes.TEXT,
-        allowNull: true
-    },
-    nonce: {
-        type: DataTypes.STRING,
-        allowNull: true
-    },
     transactionId: {
         type: DataTypes.STRING,
-        allowNull: true
+        allowNull: true,
+        field: 'transaction_id'
     },
     status: {
-        type: DataTypes.ENUM('pending', 'confirmed', 'failed'),
+        type: DataTypes.ENUM('pending', 'processed', 'confirmed', 'failed'),
         defaultValue: 'pending'
     },
     submittedAt: {
         type: DataTypes.DATE,
-        defaultValue: DataTypes.NOW
+        defaultValue: DataTypes.NOW,
+        field: 'submitted_at'
     },
-    confirmedAt: {
+    processedAt: {
         type: DataTypes.DATE,
-        allowNull: true
+        allowNull: true,
+        field: 'processed_at'
     }
 }, {
     tableName: 'votes',
+    underscored: true,
     timestamps: true
 });
 
 // ====================
-// MODELLO TRANSACTION
+// MODELLO TRANSACTION - CORRETTO  
 // ====================
 const Transaction = sequelize.define('Transaction', {
     id: {
@@ -330,23 +358,18 @@ const Transaction = sequelize.define('Transaction', {
     electionId: {
         type: DataTypes.UUID,
         allowNull: true,
-        references: {
-            model: Election,
-            key: 'id'
-        }
+        field: 'election_id'
     },
     sessionId: {
         type: DataTypes.UUID,
         allowNull: true,
-        references: {
-            model: VotingSession,
-            key: 'id'
-        }
+        field: 'session_id'
     },
     txId: {
         type: DataTypes.STRING,
         allowNull: true,
-        unique: true
+        unique: true,
+        field: 'tx_id'
     },
     type: {
         type: DataTypes.ENUM('coinjoin', 'tally', 'funding'),
@@ -354,7 +377,8 @@ const Transaction = sequelize.define('Transaction', {
     },
     rawData: {
         type: DataTypes.TEXT,
-        allowNull: true
+        allowNull: true,
+        field: 'raw_data'
     },
     metadata: {
         type: DataTypes.JSONB,
@@ -366,19 +390,22 @@ const Transaction = sequelize.define('Transaction', {
     },
     blockHeight: {
         type: DataTypes.INTEGER,
-        allowNull: true
+        allowNull: true,
+        field: 'block_height'
     },
     blockHash: {
         type: DataTypes.STRING,
-        allowNull: true
+        allowNull: true,
+        field: 'block_hash'
     }
 }, {
     tableName: 'transactions',
+    underscored: true,
     timestamps: true
 });
 
 // ====================
-// MODELLO CREDENTIAL
+// MODELLO CREDENTIAL - CORRETTO
 // ====================
 const Credential = sequelize.define('Credential', {
     id: {
@@ -389,15 +416,13 @@ const Credential = sequelize.define('Credential', {
     userId: {
         type: DataTypes.UUID,
         allowNull: false,
-        references: {
-            model: User,
-            key: 'id'
-        }
+        field: 'user_id'
     },
     serialNumber: {
         type: DataTypes.STRING,
         allowNull: false,
-        unique: true
+        unique: true,
+        field: 'serial_number'
     },
     nonce: {
         type: DataTypes.STRING,
@@ -409,103 +434,65 @@ const Credential = sequelize.define('Credential', {
     },
     isUsed: {
         type: DataTypes.BOOLEAN,
-        defaultValue: false
+        defaultValue: false,
+        field: 'is_used'
     },
     issuedAt: {
         type: DataTypes.DATE,
-        defaultValue: DataTypes.NOW
+        defaultValue: DataTypes.NOW,
+        field: 'issued_at'
     }
 }, {
     tableName: 'credentials',
+    underscored: true,
     timestamps: true
 });
 
 // ====================
-// DEFINIZIONE RELAZIONI
+// DEFINISCI LE RELAZIONI
 // ====================
 
-// User -> Credentials (1:N)
-User.hasMany(Credential, {
-    foreignKey: 'userId',
-    as: 'credentials',
-    onDelete: 'CASCADE'
-});
-Credential.belongsTo(User, {
-    foreignKey: 'userId',
-    as: 'user'
-});
-
-// Election -> Candidates (1:N)
+// Election -> Candidate (1:N)
 Election.hasMany(Candidate, {
-    foreignKey: 'electionId',
-    as: 'candidates',
-    onDelete: 'CASCADE'
+    foreignKey: 'election_id',
+    as: 'candidates'
 });
 Candidate.belongsTo(Election, {
-    foreignKey: 'electionId',
+    foreignKey: 'election_id',
     as: 'election'
 });
 
-// Election -> VotingSessions (1:N)
+// Election -> VotingSession (1:N)
 Election.hasMany(VotingSession, {
-    foreignKey: 'electionId',
-    as: 'sessions',
-    onDelete: 'CASCADE'
+    foreignKey: 'election_id',
+    as: 'sessions'
 });
 VotingSession.belongsTo(Election, {
-    foreignKey: 'electionId',
+    foreignKey: 'election_id',
     as: 'election'
 });
 
-// VotingSession -> Votes (1:N)
+// VotingSession -> Vote (1:N)
 VotingSession.hasMany(Vote, {
-    foreignKey: 'sessionId',
-    as: 'votes',
-    onDelete: 'CASCADE'
+    foreignKey: 'session_id',
+    as: 'votes'
 });
 Vote.belongsTo(VotingSession, {
-    foreignKey: 'sessionId',
-    as: 'session'
-});
-
-// Election -> Transactions (1:N)
-Election.hasMany(Transaction, {
-    foreignKey: 'electionId',
-    as: 'transactions'
-});
-Transaction.belongsTo(Election, {
-    foreignKey: 'electionId',
-    as: 'election'
-});
-
-// VotingSession -> Transactions (1:N)
-VotingSession.hasMany(Transaction, {
-    foreignKey: 'sessionId',
-    as: 'transactions'
-});
-Transaction.belongsTo(VotingSession, {
-    foreignKey: 'sessionId',
+    foreignKey: 'session_id',
     as: 'session'
 });
 
 // ====================
-// FUNZIONI UTILITY
+// UTILITY FUNCTIONS
 // ====================
 
-// Statistiche rapide per admin dashboard
+// Statistiche rapide
 const getQuickStats = async () => {
     try {
-        const { Op } = require('sequelize');
-
         const [
-            totalVotes,
-            pendingVotes,
-            confirmedVotes,
-            failedVotes,
-            totalElections,
-            activeElections,
-            totalSessions,
-            activeSessions
+            totalVotes, pendingVotes, confirmedVotes, failedVotes,
+            totalElections, activeElections,
+            totalSessions, activeSessions
         ] = await Promise.all([
             Vote.count(),
             Vote.count({ where: { status: 'pending' } }),

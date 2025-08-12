@@ -32,6 +32,12 @@ curl -X POST http://localhost:3001/api/admin/auth/login \
 
 ## Comandi utili
 
+# Esegui tutte le migrazione sospese
+node database/migrations/run-migrations.js run
+
+# Log servizi database 
+ docker compose logs vote-service | grep -i "error\|database"
+
 # Rebuild completo backend
 - Stop tutti i container (se attivi)
 docker compose down
