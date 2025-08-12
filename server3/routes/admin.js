@@ -393,9 +393,14 @@ router.get('/elections/:id/candidates', adminAuth, async (req, res) => {
 router.post('/elections/:electionId/candidates', adminAuth, async (req, res) => {
     try {
         const { electionId } = req.params;
-        const { first_name, last_name, party, biography } = req.body;
-
-        console.log(`🆕 [VOTE ADMIN] Aggiunta candidato all'elezione ${electionId}:`, { first_name, last_name, party });
+        const { 
+            nome, 
+            cognome, 
+            party, 
+            biography 
+        } = req.body;
+        
+        console.log(`🆕 [VOTE ADMIN] Aggiunta candidato all'elezione ${electionId}:`, { nome, cognome, party });
 
         // Verifica che l'elezione esista
         const election = await Election.findByPk(electionId);
@@ -414,17 +419,17 @@ router.post('/elections/:electionId/candidates', adminAuth, async (req, res) => 
         const candidateCount = await Candidate.count({ where: { electionId } });
 
         // Crea il nome completo dal frontend
-        const fullName = `${first_name} ${last_name}`.trim();
+        const fullName = `${nome} ${cognome}`.trim();
 
         // Genera indirizzo Bitcoin univoco per il candidato
         const bitcoinAddress = `candidate_${electionId}_${candidateCount + 1}_${Date.now()}`;
 
-        // CORREZIONE: Crea il candidato con i campi corretti del database
+        // Crea il candidato con i campi corretti del database
         const candidate = await Candidate.create({
             electionId,
             name: fullName,
-            firstName: first_name,
-            lastName: last_name,
+            firstName: nome,
+            lastName: cognome,
             party,
             biography,
             bitcoinAddress,
