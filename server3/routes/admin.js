@@ -98,7 +98,7 @@ router.get('/stats', adminAuth, async (req, res) => {
 });
 
 // ==========================================
-// GESTIONE ELEZIONI - VERSIONE SEMPLIFICATA E FUNZIONANTE
+// GESTIONE ELEZIONI 
 // ==========================================
 
 // GET /api/admin/elections - Lista elezioni dal database (VERSIONE SEMPLIFICATA)
@@ -342,7 +342,227 @@ router.put('/elections/:id/status', adminAuth, async (req, res) => {
 });
 
 // ==========================================
-// ATTIVITÀ RECENTE SEMPLIFICATA
+// GESTIONE CANDIDATI ADMIN
+// ==========================================
+
+// GET /api/admin/elections/:id/candidates - Lista candidati di un'elezione
+router.get('/elections/:id/candidates', adminAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        console.log(`🔍 [VOTE ADMIN] Caricamento candidati elezione ${id}`);
+        
+        // Verifica che l'elezione esista
+        const election = await Election.findByPk(id);
+        if (!election) {
+            return res.status(404).json({ error: 'Elezione non trovata' });
+        }
+
+        const candidates = await Candidate.findAll({
+            where: { electionId: id },
+            order: [['voteEncoding', 'ASC']]  // CORREZIONE: voteEncoding non valueEncoding
+        });
+
+        res.json({
+            success: true,
+            electionId: id,
+            electionTitle: election.title,
+            candidates: candidates.map(c => ({
+                id: c.id,
+                name: c.name,  // CORREZIONE: usa 'name' non firstName/lastName
+                party: c.party,
+                biography: c.biography,
+                photo: c.photo,
+                voteEncoding: c.voteEncoding,  // CORREZIONE: voteEncoding non valueEncoding
+                bitcoinAddress: c.bitcoinAddress,
+                createdAt: c.createdAt,
+                updatedAt: c.updatedAt
+            }))
+        });
+
+    } catch (error) {
+        console.error('❌ [VOTE ADMIN] Errore caricamento candidati:', error);
+        res.status(500).json({ 
+            error: 'Errore nel caricamento dei candidati',
+            details: error.message 
+        });
+    }
+});
+
+// POST /api/admin/elections/:electionId/candidates - Aggiungi candidato
+router.post('/elections/:electionId/candidates', adminAuth, async (req, res) => {
+    try {
+        const { electionId } = req.params;
+        const { nome, cognome, party, biography, photo } = req.body;
+
+        console.log(`🆕 [VOTE ADMIN] Aggiunta candidato all'elezione ${electionId}:`, { nome, cognome, party });
+
+        // Verifica che l'elezione esista
+        const election = await Election.findByPk(electionId);
+        if (!election) {
+            return res.status(404).json({ error: 'Elezione non trovata' });
+        }
+
+        // Non permettere aggiunta candidati se elezione è attiva
+        if (election.status === 'active' || election.status === 'completed') {
+            return res.status(400).json({ 
+                error: 'Non è possibile aggiungere candidati a un\'elezione attiva o completata' 
+            });
+        }
+
+        // Conta candidati esistenti per assegnare voteEncoding
+        const candidateCount = await Candidate.count({ where: { electionId } });
+
+        // Crea il nome completo dal frontend (che invia nome/cognome)
+        const fullName = `${nome} ${cognome}`.trim() || req.body.name;
+
+        // Genera indirizzo Bitcoin univoco per il candidato
+        const bitcoinAddress = `candidate_${electionId}_${candidateCount + 1}_${Date.now()}`;
+
+        // CORREZIONE: Crea il candidato con i campi corretti del database
+        const candidate = await Candidate.create({
+            electionId,
+            name: fullName,  // CORREZIONE: usa 'name' non firstName/lastName
+            party,
+            biography,
+            photo,
+            bitcoinAddress,
+            voteEncoding: candidateCount + 1  // CORREZIONE: voteEncoding non valueEncoding
+        });
+
+        console.log(`✅ [VOTE ADMIN] Candidato ${candidate.id} creato con successo`);
+
+        res.status(201).json({
+            success: true,
+            candidate: {
+                id: candidate.id,
+                name: candidate.name,  // CORREZIONE: usa 'name'
+                party: candidate.party,
+                biography: candidate.biography,
+                photo: candidate.photo,
+                bitcoinAddress: candidate.bitcoinAddress,
+                voteEncoding: candidate.voteEncoding,  // CORREZIONE: voteEncoding
+                electionId: candidate.electionId
+            },
+            message: `Candidato aggiunto con indirizzo Bitcoin: ${candidate.bitcoinAddress}`
+        });
+
+    } catch (error) {
+        console.error('❌ [VOTE ADMIN] Errore aggiunta candidato:', error);
+        res.status(500).json({ 
+            error: 'Errore nell\'aggiunta del candidato',
+            details: error.message
+        });
+    }
+});
+
+// PUT /api/admin/elections/:electionId/candidates/:candidateId - Modifica candidato
+router.put('/elections/:electionId/candidates/:candidateId', adminAuth, async (req, res) => {
+    try {
+        const { electionId, candidateId } = req.params;
+        const updates = req.body;
+
+        console.log(`✏️ [VOTE ADMIN] Modifica candidato ${candidateId} elezione ${electionId}`);
+
+        // Verifica che l'elezione esista
+        const election = await Election.findByPk(electionId);
+        if (!election) {
+            return res.status(404).json({ error: 'Elezione non trovata' });
+        }
+
+        // Non permettere modifiche se elezione è attiva
+        if (election.status === 'active' || election.status === 'completed') {
+            return res.status(400).json({ 
+                error: 'Non è possibile modificare candidati di un\'elezione attiva o completata' 
+            });
+        }
+
+        const candidate = await Candidate.findOne({
+            where: { id: candidateId, electionId }
+        });
+
+        if (!candidate) {
+            return res.status(404).json({ error: 'Candidato non trovato' });
+        }
+
+        // Se vengono inviati nome e cognome separati, uniscili
+        if (updates.nome && updates.cognome) {
+            updates.name = `${updates.nome} ${updates.cognome}`.trim();
+            delete updates.nome;
+            delete updates.cognome;
+        }
+
+        await candidate.update(updates);
+
+        res.json({
+            success: true,
+            candidate: {
+                id: candidate.id,
+                name: candidate.name,
+                party: candidate.party,
+                biography: candidate.biography,
+                photo: candidate.photo,
+                bitcoinAddress: candidate.bitcoinAddress,
+                voteEncoding: candidate.voteEncoding
+            },
+            message: 'Candidato modificato con successo'
+        });
+
+    } catch (error) {
+        console.error('❌ [VOTE ADMIN] Errore modifica candidato:', error);
+        res.status(500).json({ 
+            error: 'Errore nella modifica del candidato',
+            details: error.message
+        });
+    }
+});
+
+// DELETE /api/admin/elections/:electionId/candidates/:candidateId - Elimina candidato
+router.delete('/elections/:electionId/candidates/:candidateId', adminAuth, async (req, res) => {
+    try {
+        const { electionId, candidateId } = req.params;
+
+        console.log(`🗑️ [VOTE ADMIN] Eliminazione candidato ${candidateId} elezione ${electionId}`);
+
+        // Verifica che l'elezione esista
+        const election = await Election.findByPk(electionId);
+        if (!election) {
+            return res.status(404).json({ error: 'Elezione non trovata' });
+        }
+
+        // Non permettere eliminazione se elezione è attiva
+        if (election.status === 'active' || election.status === 'completed') {
+            return res.status(400).json({ 
+                error: 'Non è possibile eliminare candidati di un\'elezione attiva o completata' 
+            });
+        }
+
+        const candidate = await Candidate.findOne({
+            where: { id: candidateId, electionId }
+        });
+
+        if (!candidate) {
+            return res.status(404).json({ error: 'Candidato non trovato' });
+        }
+
+        await candidate.destroy();
+
+        res.json({
+            success: true,
+            message: 'Candidato eliminato con successo'
+        });
+
+    } catch (error) {
+        console.error('❌ [VOTE ADMIN] Errore eliminazione candidato:', error);
+        res.status(500).json({ 
+            error: 'Errore nell\'eliminazione del candidato',
+            details: error.message
+        });
+    }
+});
+
+// ==========================================
+// ATTIVITÀ RECENTE
 // ==========================================
 
 // GET /api/admin/activity - Attività recente vote service
