@@ -478,7 +478,6 @@ router.get('/elections/:id/candidates', async (req, res) => {
 
 // POST /api/admin/elections/:id/candidates - Aggiungi candidato a un'elezione
 router.post('/elections/:id/candidates', async (req, res) => {
-    console.log("ciao mamma: "+req);
     try {
         const { id } = req.params;
         console.log(`[API GATEWAY] POST nuovo candidato per elezione ${id}:`, req.body);

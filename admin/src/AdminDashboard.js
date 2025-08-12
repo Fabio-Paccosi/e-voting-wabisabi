@@ -32,8 +32,8 @@ const AdminDashboard = () => {
   });
 
   const [candidateForm, setCandidateForm] = useState({
-    firstName: '',
-    lastName: '',
+    first_name: '',
+    last_name: '',
     party: '',
     biography: ''
   });
@@ -357,8 +357,8 @@ const AdminDashboard = () => {
     });
     
     setCandidateForm({
-      firstName: '',
-      lastName: '',
+      first_name: '',
+      last_name: '',
       party: '',
       biography: ''
     });
@@ -968,8 +968,8 @@ const AdminDashboard = () => {
                       </label>
                       <input
                         type="text"
-                        value={candidateForm.firstName}
-                        onChange={(e) => setCandidateForm({...candidateForm, firstName: e.target.value})}
+                        value={candidateForm.first_name}
+                        onChange={(e) => setCandidateForm({...candidateForm, first_name: e.target.value})}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
@@ -979,8 +979,8 @@ const AdminDashboard = () => {
                       </label>
                       <input
                         type="text"
-                        value={candidateForm.lastName}
-                        onChange={(e) => setCandidateForm({...candidateForm, lastName: e.target.value})}
+                        value={candidateForm.last_name}
+                        onChange={(e) => setCandidateForm({...candidateForm, last_name: e.target.value})}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>

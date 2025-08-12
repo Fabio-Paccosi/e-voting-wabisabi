@@ -360,7 +360,7 @@ router.get('/elections/:id/candidates', adminAuth, async (req, res) => {
 
         const candidates = await Candidate.findAll({
             where: { electionId: id },
-            order: [['voteEncoding', 'ASC']]  // CORREZIONE: voteEncoding non valueEncoding
+            order: [['voteEncoding', 'ASC']] 
         });
 
         res.json({
@@ -369,11 +369,11 @@ router.get('/elections/:id/candidates', adminAuth, async (req, res) => {
             electionTitle: election.title,
             candidates: candidates.map(c => ({
                 id: c.id,
-                name: c.name,  // CORREZIONE: usa 'name' non firstName/lastName
+                name: c.name, 
                 party: c.party,
                 biography: c.biography,
                 photo: c.photo,
-                voteEncoding: c.voteEncoding,  // CORREZIONE: voteEncoding non valueEncoding
+                voteEncoding: c.voteEncoding, 
                 bitcoinAddress: c.bitcoinAddress,
                 createdAt: c.createdAt,
                 updatedAt: c.updatedAt
@@ -393,9 +393,9 @@ router.get('/elections/:id/candidates', adminAuth, async (req, res) => {
 router.post('/elections/:electionId/candidates', adminAuth, async (req, res) => {
     try {
         const { electionId } = req.params;
-        const { nome, cognome, party, biography, photo } = req.body;
+        const { first_name, last_name, party, biography } = req.body;
 
-        console.log(`🆕 [VOTE ADMIN] Aggiunta candidato all'elezione ${electionId}:`, { nome, cognome, party });
+        console.log(`🆕 [VOTE ADMIN] Aggiunta candidato all'elezione ${electionId}:`, { first_name, last_name, party });
 
         // Verifica che l'elezione esista
         const election = await Election.findByPk(electionId);
@@ -413,8 +413,8 @@ router.post('/elections/:electionId/candidates', adminAuth, async (req, res) => 
         // Conta candidati esistenti per assegnare voteEncoding
         const candidateCount = await Candidate.count({ where: { electionId } });
 
-        // Crea il nome completo dal frontend (che invia nome/cognome)
-        const fullName = `${nome} ${cognome}`.trim() || req.body.name;
+        // Crea il nome completo dal frontend
+        const fullName = `${first_name} ${last_name}`.trim();
 
         // Genera indirizzo Bitcoin univoco per il candidato
         const bitcoinAddress = `candidate_${electionId}_${candidateCount + 1}_${Date.now()}`;
@@ -422,12 +422,13 @@ router.post('/elections/:electionId/candidates', adminAuth, async (req, res) => 
         // CORREZIONE: Crea il candidato con i campi corretti del database
         const candidate = await Candidate.create({
             electionId,
-            name: fullName,  // CORREZIONE: usa 'name' non firstName/lastName
+            name: fullName,
+            firstName: first_name,
+            lastName: last_name,
             party,
             biography,
-            photo,
             bitcoinAddress,
-            voteEncoding: candidateCount + 1  // CORREZIONE: voteEncoding non valueEncoding
+            voteEncoding: candidateCount + 1 
         });
 
         console.log(`✅ [VOTE ADMIN] Candidato ${candidate.id} creato con successo`);
