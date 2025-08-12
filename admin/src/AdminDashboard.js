@@ -450,7 +450,12 @@ const AdminDashboard = () => {
                       election.status === 'completed' ? 'bg-blue-100 text-blue-800' :
                       'bg-yellow-100 text-yellow-800'
                     }`}>
-                      {election.status?.toUpperCase()}
+                      {
+                        election.status === 'active' ? 'In corso...' :
+                        election.status === 'draft' ? 'Bozza' :
+                        election.status === 'completed' ? 'Terminata' :
+                        'Sconosciuto'
+                      }
                     </span>
                   </div>
                 </div>
