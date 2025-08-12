@@ -210,20 +210,12 @@ const Candidate = sequelize.define('Candidate', {
         allowNull: true,
         field: 'last_name'
     },
-    description: {
-        type: DataTypes.TEXT,
-        allowNull: true
-    },
     biography: {
         type: DataTypes.TEXT,
         allowNull: true
     },
     party: {
         type: DataTypes.STRING,
-        allowNull: true
-    },
-    photo: {
-        type: DataTypes.TEXT,
         allowNull: true
     },
     bitcoinAddress: {

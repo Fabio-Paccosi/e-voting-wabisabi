@@ -11,6 +11,10 @@ oppure per rebuildare
 
 docker compose up --build
 
+oppure
+
+docker compose build --no-cache
+
 # Terminale 2: Admin Dashboard  (user: admin@example.com  psw: admin123)
 cd admin && npm start
 
@@ -31,6 +35,9 @@ curl -X POST http://localhost:3001/api/admin/auth/login \
 
 
 ## Comandi utili
+
+# Rimuovere il db
+docker volume rm wabisabi_evoting_postgres_data
 
 # Esegui tutte le migrazione sospese
 node database/migrations/run-migrations.js run
