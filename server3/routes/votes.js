@@ -1,12 +1,10 @@
-// server3/routes/votes.js - Vote Processing Routes
+// server3/routes/votes.js - Vote Processing Routes - FIXED VERSION
 const express = require('express');
 const router = express.Router();
-const path = require('path');
 const crypto = require('crypto');
 
-// Import modelli
-const modelsPath = path.join(__dirname, '../../../database/models');
-const { Vote, VotingSession, Election, Credential } = require(modelsPath);
+// CORREZIONE: Usa database_config locale invece del percorso assoluto
+const { Vote, VotingSession, Election, Credential } = require('../database_config');
 
 // Middleware di autenticazione (da implementare)
 const authMiddleware = (req, res, next) => {
@@ -64,61 +62,65 @@ router.post('/submit', async (req, res) => {
         }
 
         // TODO: Verifica zero-knowledge proof
-        const isValidProof = await verifyZKProof(zkProof, commitment);
-        if (!isValidProof) {
-            return res.status(400).json({ 
-                error: 'Prova crittografica non valida' 
-            });
-        }
+        // const isValidProof = await verifyZKProof(zkProof, commitment, serialNumber);
+        // if (!isValidProof) {
+        //     return res.status(400).json({ 
+        //         error: 'Proof zero-knowledge non valido' 
+        //     });
+        // }
 
-        // Trova o crea sessione di voto attiva
-        let session = await VotingSession.findOne({
+        // Trova o crea sessione di voto attiva per questa elezione
+        let votingSession = await VotingSession.findOne({
             where: {
-                electionId,
-                status: 'open'
+                electionId: electionId,
+                status: 'active'
             }
         });
 
-        if (!session) {
-            session = await VotingSession.create({
-                electionId,
-                status: 'open',
+        if (!votingSession) {
+            // Crea nuova sessione di voto
+            votingSession = await VotingSession.create({
+                electionId: electionId,
+                status: 'active',
                 startTime: new Date()
             });
+            console.log(`📊 [VOTE] Creata nuova sessione di voto: ${votingSession.id}`);
         }
 
-        // Salva il voto
+        // Crea il voto nel database
         const vote = await Vote.create({
-            sessionId: session.id,
-            serialNumber,
-            commitment: JSON.stringify(commitment),
-            metadata: {
-                zkProof,
-                nonce,
-                timestamp: new Date().toISOString()
-            },
-            status: 'pending'
+            sessionId: votingSession.id,
+            serialNumber: serialNumber,
+            commitment: commitment,
+            zkProof: zkProof,
+            nonce: nonce,
+            status: 'pending',
+            submittedAt: new Date()
         });
 
-        console.log('✅ [VOTE] Voto salvato con ID:', vote.id);
+        console.log(`✅ [VOTE] Voto registrato con ID: ${vote.id}`);
+
+        // Aggiorna contatore sessione
+        await votingSession.increment('voteCount');
 
         res.status(201).json({
             success: true,
-            message: 'Voto registrato con successo',
             voteId: vote.id,
-            status: vote.status
+            sessionId: votingSession.id,
+            message: 'Voto registrato con successo',
+            status: 'pending'
         });
 
     } catch (error) {
         console.error('❌ [VOTE] Errore processamento voto:', error);
         res.status(500).json({ 
-            error: 'Errore nel processamento del voto' 
+            error: 'Errore interno durante il processamento del voto' 
         });
     }
 });
 
-// GET /api/votes/verify/:voteId - Verifica stato voto
-router.get('/verify/:voteId', async (req, res) => {
+// GET /api/votes/status/:voteId - Verifica stato di un voto
+router.get('/status/:voteId', async (req, res) => {
     try {
         const { voteId } = req.params;
 
@@ -128,139 +130,185 @@ router.get('/verify/:voteId', async (req, res) => {
                 as: 'session',
                 include: [{
                     model: Election,
-                    as: 'election'
+                    as: 'election',
+                    attributes: ['id', 'title', 'status']
                 }]
             }]
         });
 
         if (!vote) {
-            return res.status(404).json({ 
-                error: 'Voto non trovato' 
+            return res.status(404).json({
+                error: 'Voto non trovato'
             });
         }
 
         res.json({
-            voteId: vote.id,
-            status: vote.status,
-            transactionId: vote.transactionId,
-            confirmedAt: vote.confirmedAt,
-            election: {
-                id: vote.session.election.id,
-                title: vote.session.election.title
+            success: true,
+            vote: {
+                id: vote.id,
+                status: vote.status,
+                submittedAt: vote.submittedAt,
+                confirmedAt: vote.confirmedAt,
+                transactionId: vote.transactionId,
+                election: {
+                    id: vote.session.election.id,
+                    title: vote.session.election.title,
+                    status: vote.session.election.status
+                }
             }
         });
 
     } catch (error) {
-        console.error('❌ [VOTE] Errore verifica voto:', error);
+        console.error('❌ [VOTE] Errore verifica stato voto:', error);
         res.status(500).json({ 
-            error: 'Errore nella verifica del voto' 
+            error: 'Errore durante la verifica dello stato del voto' 
         });
     }
 });
 
-// GET /api/votes/receipt/:serialNumber - Ottieni ricevuta voto
-router.get('/receipt/:serialNumber', async (req, res) => {
-    try {
-        const { serialNumber } = req.params;
-
-        const vote = await Vote.findOne({
-            where: { serialNumber },
-            include: [{
-                model: VotingSession,
-                as: 'session',
-                include: [{
-                    model: Election,
-                    as: 'election'
-                }]
-            }]
-        });
-
-        if (!vote) {
-            return res.status(404).json({ 
-                error: 'Voto non trovato con questo serial number' 
-            });
-        }
-
-        // Genera ricevuta anonima
-        const receipt = {
-            receiptId: crypto.createHash('sha256')
-                .update(vote.id + vote.serialNumber)
-                .digest('hex')
-                .substring(0, 16),
-            election: vote.session.election.title,
-            submittedAt: vote.createdAt,
-            status: vote.status,
-            message: 'Il tuo voto è stato registrato correttamente'
-        };
-
-        // Non includere informazioni che potrebbero violare l'anonimato
-        if (vote.status === 'confirmed' && vote.transactionId) {
-            receipt.blockchainTx = vote.transactionId;
-            receipt.confirmedAt = vote.confirmedAt;
-        }
-
-        res.json(receipt);
-
-    } catch (error) {
-        console.error('❌ [VOTE] Errore generazione ricevuta:', error);
-        res.status(500).json({ 
-            error: 'Errore nella generazione della ricevuta' 
-        });
-    }
-});
-
-// GET /api/votes/session/:sessionId - Ottieni voti di una sessione (admin only)
-router.get('/session/:sessionId', authMiddleware, async (req, res) => {
+// GET /api/votes/session/:sessionId - Statistiche sessione di voto
+router.get('/session/:sessionId', async (req, res) => {
     try {
         const { sessionId } = req.params;
 
         const session = await VotingSession.findByPk(sessionId, {
             include: [
                 {
-                    model: Vote,
-                    as: 'votes'
+                    model: Election,
+                    as: 'election',
+                    attributes: ['id', 'title', 'status', 'coinjoinTrigger']
                 },
                 {
-                    model: Election,
-                    as: 'election'
+                    model: Vote,
+                    as: 'votes',
+                    attributes: ['id', 'status', 'submittedAt']
                 }
             ]
         });
 
         if (!session) {
-            return res.status(404).json({ 
-                error: 'Sessione non trovata' 
+            return res.status(404).json({
+                error: 'Sessione di voto non trovata'
             });
         }
 
-        res.json({
+        const stats = {
             sessionId: session.id,
-            electionTitle: session.election.title,
             status: session.status,
             startTime: session.startTime,
             endTime: session.endTime,
-            totalVotes: session.votes.length,
-            votesByStatus: {
+            election: session.election,
+            votes: {
+                total: session.votes.length,
                 pending: session.votes.filter(v => v.status === 'pending').length,
                 confirmed: session.votes.filter(v => v.status === 'confirmed').length,
                 failed: session.votes.filter(v => v.status === 'failed').length
+            },
+            coinjoinProgress: {
+                current: session.votes.filter(v => v.status === 'pending').length,
+                trigger: session.election.coinjoinTrigger,
+                percentage: Math.round((session.votes.filter(v => v.status === 'pending').length / session.election.coinjoinTrigger) * 100)
             }
+        };
+
+        res.json({
+            success: true,
+            session: stats
         });
 
     } catch (error) {
         console.error('❌ [VOTE] Errore recupero sessione:', error);
         res.status(500).json({ 
-            error: 'Errore nel recupero della sessione' 
+            error: 'Errore durante il recupero della sessione di voto' 
         });
     }
 });
 
-// Funzione helper per verificare ZK proof
-async function verifyZKProof(proof, commitment) {
-    // TODO: Implementa verifica reale della prova zero-knowledge
-    // Per ora restituisce sempre true per testing
-    console.log('🔐 [VOTE] Verifica ZK-proof...');
-    return true;
-}
+// DELETE /api/votes/:voteId - Cancella voto (solo se pending)
+router.delete('/:voteId', authMiddleware, async (req, res) => {
+    try {
+        const { voteId } = req.params;
+
+        const vote = await Vote.findByPk(voteId);
+        
+        if (!vote) {
+            return res.status(404).json({
+                error: 'Voto non trovato'
+            });
+        }
+
+        if (vote.status !== 'pending') {
+            return res.status(400).json({
+                error: 'Impossibile cancellare un voto già processato'
+            });
+        }
+
+        await vote.destroy();
+
+        console.log(`🗑️ [VOTE] Voto ${voteId} cancellato`);
+
+        res.json({
+            success: true,
+            message: 'Voto cancellato con successo'
+        });
+
+    } catch (error) {
+        console.error('❌ [VOTE] Errore cancellazione voto:', error);
+        res.status(500).json({ 
+            error: 'Errore durante la cancellazione del voto' 
+        });
+    }
+});
+
+// GET /api/votes/stats - Statistiche generali sui voti
+router.get('/stats', async (req, res) => {
+    try {
+        const { Op } = require('sequelize');
+        
+        const [
+            totalVotes,
+            pendingVotes,
+            confirmedVotes,
+            failedVotes,
+            activeSessions,
+            activeElections
+        ] = await Promise.all([
+            Vote.count(),
+            Vote.count({ where: { status: 'pending' } }),
+            Vote.count({ where: { status: 'confirmed' } }),
+            Vote.count({ where: { status: 'failed' } }),
+            VotingSession.count({ where: { status: 'active' } }),
+            Election.count({ where: { status: 'active' } })
+        ]);
+
+        const stats = {
+            votes: {
+                total: totalVotes,
+                pending: pendingVotes,
+                confirmed: confirmedVotes,
+                failed: failedVotes,
+                processing_rate: totalVotes > 0 ? Math.round((confirmedVotes / totalVotes) * 100) : 0
+            },
+            sessions: {
+                active: activeSessions
+            },
+            elections: {
+                active: activeElections
+            },
+            timestamp: new Date().toISOString()
+        };
+
+        res.json({
+            success: true,
+            stats
+        });
+
+    } catch (error) {
+        console.error('❌ [VOTE] Errore recupero statistiche:', error);
+        res.status(500).json({ 
+            error: 'Errore durante il recupero delle statistiche' 
+        });
+    }
+});
 
 module.exports = router;

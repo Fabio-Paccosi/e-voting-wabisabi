@@ -62,6 +62,17 @@ const User = sequelize.define('User', {
         unique: true,
         comment: 'Codice fiscale per verifica identità'
     },
+    bitcoinAddress: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        unique: true,
+        comment: 'Indirizzo Bitcoin per il voto su testnet'
+    },
+    bitcoinPrivateKey: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'Chiave privata Bitcoin crittografata'
+    },
     isAuthorized: {
         type: DataTypes.BOOLEAN,
         defaultValue: false,
@@ -88,6 +99,15 @@ const User = sequelize.define('User', {
         {
             unique: true,
             fields: ['taxCode']
+        },
+        {
+            unique: true,
+            fields: ['bitcoinAddress'],
+            where: {
+                bitcoinAddress: {
+                    [Sequelize.Op.ne]: null
+                }
+            }
         }
     ]
 });
@@ -172,37 +192,45 @@ const Election = sequelize.define('Election', {
     description: {
         type: DataTypes.TEXT,
         allowNull: true,
-        comment: 'Descrizione dettagliata dell\'elezione'
+        comment: 'Descrizione dell\'elezione'
     },
     startDate: {
         type: DataTypes.DATE,
         allowNull: false,
-        comment: 'Data e ora di inizio'
+        comment: 'Data di inizio votazioni'
     },
     endDate: {
         type: DataTypes.DATE,
         allowNull: false,
-        comment: 'Data e ora di fine'
+        comment: 'Data di fine votazioni'
     },
     isActive: {
         type: DataTypes.BOOLEAN,
         defaultValue: false,
-        comment: 'Se l\'elezione è attualmente attiva'
+        comment: 'Se l\'elezione è attiva'
     },
-    metadata: {
-        type: DataTypes.JSON,
+    status: {
+        type: DataTypes.ENUM('draft', 'active', 'paused', 'completed', 'cancelled'),
+        defaultValue: 'draft',
+        comment: 'Stato dell\'elezione'
+    },
+    finalTallyTransactionId: {
+        type: DataTypes.STRING,
         allowNull: true,
-        comment: 'Metadati aggiuntivi dell\'elezione'
+        comment: 'ID della transazione finale di conteggio'
     }
 }, {
     tableName: 'elections',
     timestamps: true,
     indexes: [
         {
-            fields: ['isActive']
+            fields: ['status']
         },
         {
             fields: ['startDate', 'endDate']
+        },
+        {
+            fields: ['isActive']
         }
     ]
 });
@@ -224,7 +252,7 @@ const Candidate = sequelize.define('Candidate', {
             model: Election,
             key: 'id'
         },
-        comment: 'ID dell\'elezione di appartenenza'
+        comment: 'ID dell\'elezione'
     },
     name: {
         type: DataTypes.STRING,
@@ -234,12 +262,18 @@ const Candidate = sequelize.define('Candidate', {
     description: {
         type: DataTypes.TEXT,
         allowNull: true,
-        comment: 'Descrizione o biografia del candidato'
+        comment: 'Descrizione del candidato'
     },
-    valueEncoding: {
+    bitcoinAddress: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        unique: true,
+        comment: 'Indirizzo Bitcoin per ricevere i voti'
+    },
+    voteEncoding: {
         type: DataTypes.INTEGER,
         allowNull: false,
-        comment: 'Valore numerico per codifica voto (0, 1, 2...)'
+        comment: 'Encoding numerico del voto'
     }
 }, {
     tableName: 'candidates',
@@ -250,7 +284,10 @@ const Candidate = sequelize.define('Candidate', {
         },
         {
             unique: true,
-            fields: ['electionId', 'valueEncoding']
+            fields: ['bitcoinAddress']
+        },
+        {
+            fields: ['voteEncoding']
         }
     ]
 });
@@ -274,30 +311,31 @@ const VotingSession = sequelize.define('VotingSession', {
         },
         comment: 'ID dell\'elezione'
     },
-    status: {
-        type: DataTypes.ENUM('active', 'closed', 'processing', 'completed'),
-        defaultValue: 'active',
-        comment: 'Stato della sessione'
-    },
     startTime: {
         type: DataTypes.DATE,
+        allowNull: false,
         defaultValue: DataTypes.NOW,
-        comment: 'Ora di inizio della sessione'
+        comment: 'Inizio della sessione'
     },
     endTime: {
         type: DataTypes.DATE,
         allowNull: true,
-        comment: 'Ora di fine della sessione'
+        comment: 'Fine della sessione'
+    },
+    status: {
+        type: DataTypes.ENUM('preparing', 'active', 'completed', 'failed'),
+        defaultValue: 'preparing',
+        comment: 'Stato della sessione'
     },
     transactionCount: {
         type: DataTypes.INTEGER,
         defaultValue: 0,
-        comment: 'Numero di transazioni CoinJoin create'
+        comment: 'Numero di transazioni processate'
     },
-    metadata: {
-        type: DataTypes.JSON,
+    finalTallyTransactionId: {
+        type: DataTypes.STRING,
         allowNull: true,
-        comment: 'Metadati aggiuntivi della sessione'
+        comment: 'ID della transazione finale'
     }
 }, {
     tableName: 'voting_sessions',
@@ -341,24 +379,14 @@ const Vote = sequelize.define('Vote', {
         comment: 'Serial number della credenziale utilizzata'
     },
     commitment: {
-        type: DataTypes.JSON,
+        type: DataTypes.TEXT,
         allowNull: false,
-        comment: 'Commitment omomorfico del voto'
-    },
-    zkProof: {
-        type: DataTypes.JSON,
-        allowNull: true,
-        comment: 'Zero-knowledge proof di validità'
-    },
-    status: {
-        type: DataTypes.ENUM('pending', 'confirmed', 'failed'),
-        defaultValue: 'pending',
-        comment: 'Stato del voto'
+        comment: 'Commitment crittografico del voto'
     },
     transactionId: {
-        type: DataTypes.UUID,
+        type: DataTypes.STRING,
         allowNull: true,
-        comment: 'ID della transazione blockchain'
+        comment: 'ID della transazione Bitcoin'
     }
 }, {
     tableName: 'votes',
@@ -370,9 +398,6 @@ const Vote = sequelize.define('Vote', {
         },
         {
             fields: ['sessionId']
-        },
-        {
-            fields: ['status']
         },
         {
             fields: ['transactionId']
@@ -388,13 +413,7 @@ const Transaction = sequelize.define('Transaction', {
         type: DataTypes.UUID,
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true,
-        comment: 'ID interno della transazione'
-    },
-    txId: {
-        type: DataTypes.STRING,
-        unique: true,
-        allowNull: true,
-        comment: 'Transaction ID sulla blockchain'
+        comment: 'ID univoco della transazione'
     },
     electionId: {
         type: DataTypes.UUID,
@@ -403,7 +422,7 @@ const Transaction = sequelize.define('Transaction', {
             model: Election,
             key: 'id'
         },
-        comment: 'ID dell\'elezione (opzionale)'
+        comment: 'ID dell\'elezione associata'
     },
     sessionId: {
         type: DataTypes.UUID,
@@ -412,20 +431,26 @@ const Transaction = sequelize.define('Transaction', {
             model: VotingSession,
             key: 'id'
         },
-        comment: 'ID della sessione (opzionale)'
+        comment: 'ID della sessione associata'
+    },
+    txId: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        unique: true,
+        comment: 'Transaction ID sulla blockchain'
     },
     type: {
-        type: DataTypes.ENUM('coinjoin', 'setup', 'closing'),
+        type: DataTypes.ENUM('coinjoin', 'tally', 'funding'),
         allowNull: false,
         comment: 'Tipo di transazione'
     },
     rawData: {
         type: DataTypes.TEXT,
         allowNull: true,
-        comment: 'Dati grezzi della transazione'
+        comment: 'Dati raw della transazione'
     },
     metadata: {
-        type: DataTypes.JSON,
+        type: DataTypes.JSONB,
         allowNull: true,
         comment: 'Metadati aggiuntivi'
     },
@@ -541,70 +566,80 @@ Transaction.belongsTo(VotingSession, {
 });
 
 // ====================
-// FUNZIONI DI UTILITÀ
+// FUNZIONI UTILITY
 // ====================
 
-// Sincronizza il database
-const syncDatabase = async (force = false) => {
-    try {
-        await sequelize.sync({ force });
-        console.log('Database sincronizzato con successo');
-    } catch (error) {
-        console.error('Errore sincronizzazione database:', error);
-        throw error;
-    }
-};
-
-// Testa la connessione
-const testConnection = async () => {
+// Test connessione al database
+async function testConnection() {
     try {
         await sequelize.authenticate();
-        console.log('Connessione al database stabilita con successo');
+        console.log('✅ Connessione al database stabilita con successo');
         return true;
     } catch (error) {
-        console.error('Impossibile connettersi al database:', error);
+        console.error('❌ Impossibile connettersi al database:', error);
         return false;
     }
-};
+}
 
-// Seed iniziale per test
-const seedDatabase = async () => {
+// Sincronizzazione del database
+async function syncDatabase(force = false) {
     try {
-        // Crea un'elezione di test
-        const election = await Election.create({
-            title: 'Elezione Test 2025',
-            description: 'Elezione di prova per il sistema WabiSabi',
-            startDate: new Date(),
-            endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 giorni
-            isActive: true
+        await sequelize.sync({ force });
+        console.log('✅ Database sincronizzato');
+        return true;
+    } catch (error) {
+        console.error('❌ Errore durante la sincronizzazione:', error);
+        return false;
+    }
+}
+
+// Seeding del database con dati di esempio
+async function seedDatabase() {
+    const bcrypt = require('bcrypt');
+    const { v4: uuidv4 } = require('uuid');
+    
+    try {
+        // Crea utente admin
+        const hashedPassword = await bcrypt.hash('admin123', 10);
+        const adminUser = await User.findOrCreate({
+            where: { email: 'admin@evoting.local' },
+            defaults: {
+                email: 'admin@evoting.local',
+                password: hashedPassword,
+                firstName: 'Admin',
+                lastName: 'User',
+                taxCode: 'ADMINUSER123456',
+                isAuthorized: true,
+                bitcoinAddress: 'tb1qadmin123456789abcdef'
+            }
         });
 
-        // Crea candidati
-        await Candidate.bulkCreate([
-            {
-                electionId: election.id,
-                name: 'John Doe',
-                description: 'Candidato 1',
-                valueEncoding: 0
-            },
-            {
-                electionId: election.id,
-                name: 'Jane Smith',
-                description: 'Candidato 2',
-                valueEncoding: 1
+        // Crea elezione di test
+        const testElection = await Election.findOrCreate({
+            where: { title: 'Elezione Test' },
+            defaults: {
+                title: 'Elezione Test',
+                description: 'Elezione di prova per testare il sistema',
+                startDate: new Date(),
+                endDate: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 ore
+                status: 'draft'
             }
-        ]);
+        });
 
-        console.log('Database popolato con dati di test');
+        console.log('✅ Database popolato con dati di esempio');
+        return true;
     } catch (error) {
-        console.error('Errore seed database:', error);
-        throw error;
+        console.error('❌ Errore durante il seeding:', error);
+        return false;
     }
-};
+}
 
-// Esporta modelli e utility
+// ====================
+// EXPORT
+// ====================
 module.exports = {
     sequelize,
+    Sequelize,
     User,
     Credential,
     Election,
@@ -612,7 +647,7 @@ module.exports = {
     VotingSession,
     Vote,
     Transaction,
-    syncDatabase,
     testConnection,
+    syncDatabase,
     seedDatabase
 };

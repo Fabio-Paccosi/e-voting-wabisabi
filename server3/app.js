@@ -1,4 +1,4 @@
-// server3/index.js - Vote Processing Server con CoinJoin Service
+// server3/app.js - Vote Processing Server con CoinJoin Service - FIXED VERSION
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -7,9 +7,8 @@ require('dotenv').config();
 // Import servizi
 const CoinJoinTriggerService = require('./services/coinjoinTrigger.service');
 
-// Import modelli database
-const modelsPath = path.join(__dirname, '../../database/models');
-const { sequelize, testConnection } = require(modelsPath);
+// CORREZIONE: Usa database_config locale invece del percorso assoluto
+const { sequelize } = require('./database_config');
 
 const app = express();
 const PORT = process.env.VOTE_SERVICE_PORT || 3003;
@@ -24,6 +23,18 @@ app.use((req, res, next) => {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
     next();
 });
+
+// Test connessione database all'avvio
+async function testDatabaseConnection() {
+    try {
+        await sequelize.authenticate();
+        console.log('✅ [VOTE SERVICE] Database collegato correttamente');
+        return true;
+    } catch (error) {
+        console.error('❌ [VOTE SERVICE] Errore connessione database:', error.message);
+        return false;
+    }
+}
 
 // ===========================
 // ROUTES
@@ -101,139 +112,115 @@ app.get('/api/coinjoin/status', (req, res) => {
         isRunning: CoinJoinTriggerService.isRunning,
         checkInterval: CoinJoinTriggerService.checkInterval,
         message: CoinJoinTriggerService.isRunning 
-            ? 'Servizio CoinJoin attivo e in monitoraggio' 
+            ? 'Servizio CoinJoin attivo e in ascolto'
             : 'Servizio CoinJoin non attivo'
     });
 });
 
-// POST /api/coinjoin/start - Avvia servizio CoinJoin manualmente
+// POST /api/coinjoin/start - Avvia servizio CoinJoin
 app.post('/api/coinjoin/start', (req, res) => {
-    if (CoinJoinTriggerService.isRunning) {
-        return res.status(400).json({ 
-            error: 'Il servizio CoinJoin è già in esecuzione' 
+    try {
+        CoinJoinTriggerService.start();
+        res.json({
+            success: true,
+            message: 'Servizio CoinJoin avviato',
+            isRunning: CoinJoinTriggerService.isRunning
         });
+    } catch (error) {
+        console.error('❌ [COINJOIN] Errore avvio servizio:', error);
+        res.status(500).json({ error: 'Errore nell\'avvio del servizio CoinJoin' });
     }
-    
-    CoinJoinTriggerService.start();
-    res.json({ 
-        success: true,
-        message: 'Servizio CoinJoin avviato con successo' 
-    });
 });
 
 // POST /api/coinjoin/stop - Ferma servizio CoinJoin
 app.post('/api/coinjoin/stop', (req, res) => {
-    if (!CoinJoinTriggerService.isRunning) {
-        return res.status(400).json({ 
-            error: 'Il servizio CoinJoin non è in esecuzione' 
+    try {
+        CoinJoinTriggerService.stop();
+        res.json({
+            success: true,
+            message: 'Servizio CoinJoin fermato',
+            isRunning: CoinJoinTriggerService.isRunning
         });
+    } catch (error) {
+        console.error('❌ [COINJOIN] Errore stop servizio:', error);
+        res.status(500).json({ error: 'Errore nel fermare il servizio CoinJoin' });
     }
-    
-    CoinJoinTriggerService.stop();
-    res.json({ 
-        success: true,
-        message: 'Servizio CoinJoin fermato con successo' 
-    });
 });
 
-// Error handler
-app.use((err, req, res, next) => {
-    console.error('❌ [ERROR]:', err.stack);
-    res.status(500).json({ 
-        error: 'Errore interno del server',
-        message: process.env.NODE_ENV === 'development' ? err.message : undefined
-    });
-});
+// ===========================
+// ERROR HANDLING
+// ===========================
 
 // 404 handler
-app.use((req, res) => {
-    res.status(404).json({ error: 'Endpoint non trovato' });
+app.use('*', (req, res) => {
+    res.status(404).json({
+        error: 'Endpoint non trovato',
+        path: req.originalUrl,
+        method: req.method
+    });
+});
+
+// Global error handler
+app.use((error, req, res, next) => {
+    console.error('❌ [VOTE SERVICE] Errore globale:', error);
+    
+    res.status(500).json({
+        error: 'Errore interno del server',
+        message: process.env.NODE_ENV === 'development' ? error.message : 'Si è verificato un errore'
+    });
 });
 
 // ===========================
-// SERVER INITIALIZATION
+// SERVER STARTUP
 // ===========================
 
-const startServer = async () => {
+async function startServer() {
     try {
-        console.log('🚀 [VOTE SERVICE] Avvio server di processamento voti...');
+        console.log('🚀 [VOTE SERVICE] Avvio server...');
         
         // Test connessione database
-        const dbConnected = await testConnection();
+        const dbConnected = await testDatabaseConnection();
         if (!dbConnected) {
-            console.error('❌ [VOTE SERVICE] Impossibile connettersi al database');
+            console.error('❌ [VOTE SERVICE] Impossibile avviare senza database');
             process.exit(1);
         }
-        
-        console.log('✅ [VOTE SERVICE] Database connesso');
-        
-        // Sincronizza modelli database (solo in development)
-        if (process.env.NODE_ENV === 'development') {
-            await sequelize.sync({ alter: true });
-            console.log('✅ [VOTE SERVICE] Modelli database sincronizzati');
-        }
-        
-        // Avvia il server Express
-        const server = app.listen(PORT, () => {
-            console.log(`✅ [VOTE SERVICE] Server in ascolto su porta ${PORT}`);
-            console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
-            console.log(`   Database: ${process.env.DB_NAME || 'evoting_wabisabi'}`);
-            console.log(`   Bitcoin Network: ${process.env.BITCOIN_NETWORK || 'testnet'}`);
+
+        // Avvia il server
+        app.listen(PORT, () => {
+            console.log(`✅ [VOTE SERVICE] Server avviato sulla porta ${PORT}`);
+            console.log(`🌐 [VOTE SERVICE] Health check: http://localhost:${PORT}/health`);
+            console.log(`🗳️ [VOTE SERVICE] Vote API: http://localhost:${PORT}/api/votes`);
+            console.log(`⚙️ [VOTE SERVICE] Admin API: http://localhost:${PORT}/api/admin`);
         });
-        
-        // Avvia il servizio CoinJoin Trigger se abilitato
-        if (process.env.ENABLE_COINJOIN_TRIGGER === 'true') {
-            console.log('🔄 [COINJOIN] Avvio servizio trigger automatico...');
+
+        // Avvia il servizio CoinJoin automaticamente
+        setTimeout(() => {
+            console.log('🔄 [VOTE SERVICE] Avvio automatico servizio CoinJoin...');
             CoinJoinTriggerService.start();
-        } else {
-            console.log('⏸️  [COINJOIN] Servizio trigger automatico disabilitato');
-        }
-        
-        // Graceful shutdown
-        const gracefulShutdown = async (signal) => {
-            console.log(`\n📍 [VOTE SERVICE] ${signal} ricevuto, chiusura graceful...`);
-            
-            // Ferma il servizio CoinJoin
-            if (CoinJoinTriggerService.isRunning) {
-                console.log('⏹️  [COINJOIN] Arresto servizio trigger...');
-                CoinJoinTriggerService.stop();
-            }
-            
-            // Chiudi il server Express
-            server.close(() => {
-                console.log('🛑 [VOTE SERVICE] Server HTTP chiuso');
-            });
-            
-            // Chiudi connessione database
-            try {
-                await sequelize.close();
-                console.log('🔌 [VOTE SERVICE] Connessione database chiusa');
-            } catch (error) {
-                console.error('❌ [VOTE SERVICE] Errore chiusura database:', error);
-            }
-            
-            process.exit(0);
-        };
-        
-        // Gestione segnali di terminazione
-        process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-        process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-        
-        // Gestione errori non catturati
-        process.on('uncaughtException', (error) => {
-            console.error('❌ [VOTE SERVICE] Uncaught Exception:', error);
-            gracefulShutdown('UNCAUGHT_EXCEPTION');
-        });
-        
-        process.on('unhandledRejection', (reason, promise) => {
-            console.error('❌ [VOTE SERVICE] Unhandled Rejection at:', promise, 'reason:', reason);
-        });
-        
+        }, 2000);
+
     } catch (error) {
         console.error('❌ [VOTE SERVICE] Errore fatale durante l\'avvio:', error);
         process.exit(1);
     }
-};
+}
+
+// Gestione graceful shutdown
+process.on('SIGTERM', () => {
+    console.log('📤 [VOTE SERVICE] Ricevuto SIGTERM, chiusura graceful...');
+    CoinJoinTriggerService.stop();
+    process.exit(0);
+});
+
+process.on('SIGINT', () => {
+    console.log('📤 [VOTE SERVICE] Ricevuto SIGINT, chiusura graceful...');
+    CoinJoinTriggerService.stop();
+    process.exit(0);
+});
 
 // Avvia il server
-startServer();
+if (require.main === module) {
+    startServer();
+}
+
+module.exports = app;
