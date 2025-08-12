@@ -311,6 +311,23 @@ router.get('/users', async (req, res) => {
     }
 });
 
+// POST /api/admin/users - Crea nuovo utente
+router.post('/users', async (req, res) => {
+    try {
+        console.log('[API GATEWAY] Creazione nuovo utente:', req.body.email);
+        const response = await callService('auth', '/api/admin/users', 'POST', req.body);
+        console.log('[API GATEWAY] ✓ Utente creato con successo');
+        res.json(response);
+    } catch (error) {
+        console.error('[API GATEWAY] ✗ Errore creazione utente:', error.message);
+        res.status(error.status || 500).json({ 
+            error: 'Errore nella creazione dell\'utente',
+            details: error.originalError || error.message,
+            service: 'auth'
+        });
+    }
+});
+
 // PUT /api/admin/users/:id/status
 router.put('/users/:id/status', async (req, res) => {
     try {

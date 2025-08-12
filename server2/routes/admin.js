@@ -228,6 +228,88 @@ router.get('/users', adminAuth, async (req, res) => {
     }
 });
 
+// POST /api/admin/users - Crea nuovo utente
+router.post('/users', adminAuth, async (req, res) => {
+    try {
+        const { 
+            firstName, 
+            lastName, 
+            email, 
+            taxCode, 
+            dateOfBirth, 
+            phoneNumber,
+            address,
+            documentType,
+            documentNumber,
+            password 
+        } = req.body;
+
+        console.log('🆕 [AUTH ADMIN] Creazione nuovo utente:', email);
+
+        // Verifica che l'email non esista già
+        const existingUser = await User.findOne({ where: { email } });
+        if (existingUser) {
+            return res.status(400).json({ 
+                error: 'Email già registrata' 
+            });
+        }
+
+        // Verifica che il codice fiscale non esista già
+        const existingTaxCode = await User.findOne({ where: { taxCode } });
+        if (existingTaxCode) {
+            return res.status(400).json({ 
+                error: 'Codice fiscale già registrato' 
+            });
+        }
+
+        // Genera password temporanea se non fornita
+        const tempPassword = password || Math.random().toString(36).slice(-8);
+        const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+        // Crea utente
+        const user = await User.create({
+            firstName,
+            lastName,
+            email,
+            taxCode,
+            dateOfBirth,
+            phoneNumber,
+            address,
+            documentType,
+            documentNumber,
+            password: hashedPassword,
+            status: 'active',
+            isVerified: false
+        });
+
+        console.log('✅ [AUTH ADMIN] Utente creato con successo:', user.id);
+
+        res.status(201).json({
+            success: true,
+            user: {
+                id: user.id,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                email: user.email,
+                taxCode: user.taxCode,
+                dateOfBirth: user.dateOfBirth,
+                phoneNumber: user.phoneNumber,
+                status: user.status,
+                isVerified: user.isVerified,
+                createdAt: user.createdAt
+            },
+            message: 'Utente creato con successo',
+            tempPassword: password ? undefined : tempPassword // Solo se generata automaticamente
+        });
+    } catch (error) {
+        console.error('❌ [AUTH ADMIN] Errore creazione utente:', error);
+        res.status(500).json({ 
+            error: 'Errore nella creazione dell\'utente',
+            details: error.message 
+        });
+    }
+});
+
 // PUT /api/admin/users/:id/status - Aggiorna status utente
 router.put('/users/:id/status', adminAuth, async (req, res) => {
     try {
