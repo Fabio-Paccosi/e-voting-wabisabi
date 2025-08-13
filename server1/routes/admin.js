@@ -347,6 +347,7 @@ router.put('/users/:id/status', async (req, res) => {
 // GESTIONE WHITELIST (Proxy a Auth Service)
 // ==========================================
 
+/*
 // GET /api/admin/whitelist
 router.get('/whitelist', async (req, res) => {
     try {
@@ -384,6 +385,68 @@ router.delete('/whitelist/:email', async (req, res) => {
     } catch (error) {
         res.status(error.status || 500).json({ 
             error: 'Errore rimozione whitelist',
+            details: error.originalError || error.message,
+            service: 'auth'
+        });
+    }
+});
+*/
+
+// ==========================================
+// GESTIONE WHITELIST ELEZIONI (Proxy a Auth Service)
+// ==========================================
+
+// GET /api/admin/elections/:electionId/whitelist
+router.get('/elections/:electionId/whitelist', async (req, res) => {
+    try {
+        const { electionId } = req.params;
+        console.log(`[API GATEWAY] GET whitelist per elezione ${electionId}`);
+        
+        const response = await callService('auth', `/api/admin/elections/${electionId}/whitelist`);
+        console.log(`[API GATEWAY] ✓ Whitelist caricata per elezione ${electionId}`);
+        res.json(response);
+    } catch (error) {
+        console.error(`[API GATEWAY] ✗ Errore caricamento whitelist elezione ${electionId}:`, error.message);
+        res.status(error.status || 500).json({ 
+            error: 'Errore caricamento whitelist elezione',
+            details: error.originalError || error.message,
+            service: 'auth'
+        });
+    }
+});
+
+// POST /api/admin/elections/:electionId/whitelist/add
+router.post('/elections/:electionId/whitelist/add', async (req, res) => {
+    try {
+        const { electionId } = req.params;
+        console.log(`[API GATEWAY] POST aggiungi utenti alla whitelist elezione ${electionId}:`, req.body);
+        
+        const response = await callService('auth', `/api/admin/elections/${electionId}/whitelist/add`, 'POST', req.body);
+        console.log(`[API GATEWAY] ✓ Utenti aggiunti alla whitelist elezione ${electionId}`);
+        res.json(response);
+    } catch (error) {
+        console.error(`[API GATEWAY] ✗ Errore aggiunta whitelist elezione ${electionId}:`, error.message);
+        res.status(error.status || 500).json({ 
+            error: 'Errore nell\'aggiunta alla whitelist',
+            details: error.originalError || error.message,
+            service: 'auth'
+        });
+    }
+});
+
+// DELETE /api/admin/elections/:electionId/whitelist/:userId
+router.delete('/elections/:electionId/whitelist/:userId', async (req, res) => {
+    try {
+        const { electionId, userId } = req.params;
+        console.log(`[API GATEWAY] DELETE utente ${userId} da whitelist elezione ${electionId}`);
+        
+        const response = await callService('auth', `/api/admin/elections/${electionId}/whitelist/${userId}`, 'DELETE');
+        console.log(`[API GATEWAY] ✓ Utente ${userId} rimosso da whitelist elezione ${electionId}`);
+        res.json(response);
+    } catch (error) {
+        console.error(`[API GATEWAY] ✗ Errore rimozione utente da whitelist:`, error.message);
+        res.status(error.status || 500).json({ 
+            error: 'Errore nella rimozione dalla whitelist',
             details: error.originalError || error.message,
             service: 'auth'
         });
@@ -453,6 +516,44 @@ router.put('/elections/:id/status', async (req, res) => {
         });
     }
 });
+
+// POST /api/admin/elections/:id/activate - Attiva elezione
+router.post("/elections/:id/activate", async (req, res) => {
+    try {
+        const { id } = req.params;
+        console.log(`[API GATEWAY] POST attivazione elezione ${id}`);
+        const response = await callService("vote", `/api/admin/elections/${id}/activate`, "POST", req.body);
+        console.log(`[API GATEWAY] ✓ Elezione ${id} attivata con successo`);
+        res.json(response);
+    } catch (error) {
+        console.error(`[API GATEWAY] ✗ Errore attivazione elezione ${id}:`, error.message);
+        res.status(error.status || 500).json({
+            error: "Errore nell'\''attivazione dell'\''elezione",
+            details: error.originalError || error.message,
+            service: "vote"
+        });
+    }
+});
+
+// POST /api/admin/elections/:id/deactivate - Disattiva elezione
+router.post("/elections/:id/deactivate", async (req, res) => {
+    try {
+        const { id } = req.params;
+        console.log(`[API GATEWAY] POST disattivazione elezione ${id}`);
+        
+        const response = await callService("vote", `/api/admin/elections/${id}/deactivate`, "POST", req.body);
+        console.log(`[API GATEWAY] ✓ Elezione ${id} disattivata con successo`);
+        res.json(response);
+    } catch (error) {
+        console.error(`[API GATEWAY] ✗ Errore disattivazione elezione ${id}:`, error.message);
+        res.status(error.status || 500).json({
+            error: "Errore nella disattivazione dell'elezione",
+            details: error.originalError || error.message,
+            service: "vote"
+        });
+    }
+});
+
 
 // ==========================================
 // GESTIONE CANDIDATI (Proxy a Vote Service)

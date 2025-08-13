@@ -639,6 +639,118 @@ router.delete('/elections/:electionId/candidates/:candidateId', adminAuth, async
     }
 });
 
+// POST /api/admin/elections/:id/activate - Attiva elezione
+router.post('/elections/:id/activate', adminAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        console.log(`🔄 [VOTE ADMIN] Attivazione elezione ${id}`);
+
+        const election = await Election.findByPk(id, {
+            include: [
+                { model: Candidate, as: 'candidates' },
+                // Se hai un modello per la whitelist, includilo qui
+                // { model: ElectionWhitelist, as: 'whitelist' }
+            ]
+        });
+
+        if (!election) {
+            return res.status(404).json({ error: 'Elezione non trovata' });
+        }
+
+        // Validazioni
+        if (election.candidates && election.candidates.length < 2) {
+            return res.status(400).json({ 
+                error: 'L\'elezione deve avere almeno 2 candidati per essere attivata' 
+            });
+        }
+
+        if (election.status === 'active') {
+            return res.status(400).json({ 
+                error: 'L\'elezione è già attiva' 
+            });
+        }
+
+        // Verifica date
+        const now = new Date();
+        if (election.startDate && now < new Date(election.startDate)) {
+            return res.status(400).json({ 
+                error: 'L\'elezione non può essere attivata prima della data di inizio' 
+            });
+        }
+
+        // Attiva l'elezione
+        await election.update({ 
+            status: 'active',
+            isActive: true 
+        });
+
+        console.log(`✅ [VOTE ADMIN] Elezione "${election.title}" attivata con successo`);
+
+        res.json({ 
+            success: true, 
+            message: 'Elezione attivata con successo',
+            election: {
+                id: election.id,
+                title: election.title,
+                status: election.status,
+                isActive: election.isActive
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ [VOTE ADMIN] Errore attivazione elezione:', error);
+        res.status(500).json({ 
+            error: 'Errore nell\'attivazione dell\'elezione',
+            details: error.message 
+        });
+    }
+});
+
+// POST /api/admin/elections/:id/deactivate - Disattiva elezione
+router.post('/elections/:id/deactivate', adminAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        console.log(`🔄 [VOTE ADMIN] Disattivazione elezione ${id}`);
+
+        const election = await Election.findByPk(id);
+        if (!election) {
+            return res.status(404).json({ error: 'Elezione non trovata' });
+        }
+
+        if (election.status !== 'active') {
+            return res.status(400).json({ 
+                error: 'L\'elezione non è attiva' 
+            });
+        }
+
+        // termina l'elezione
+        await election.update({ 
+            status: 'completed',
+            isActive: false 
+        });
+
+        console.log(`✅ [VOTE ADMIN] Elezione "${election.title}" terminata`);
+
+        res.json({ 
+            success: true, 
+            message: 'Elezione terminata con successo',
+            election: {
+                id: election.id,
+                title: election.title,
+                status: election.status,
+                isActive: election.isActive
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ [VOTE ADMIN] Errore terminazione elezione:', error);
+        res.status(500).json({ 
+            error: 'Errore nella terminazione dell\'elezione',
+            details: error.message 
+        });
+    }
+});
+
 // ==========================================
 // ATTIVITÀ RECENTE
 // ==========================================
@@ -685,4 +797,5 @@ router.get('/activity', adminAuth, async (req, res) => {
 });
 
 console.log('[VOTE ADMIN ROUTES] ✓ Route admin vote FIXED caricate');
+
 module.exports = router;

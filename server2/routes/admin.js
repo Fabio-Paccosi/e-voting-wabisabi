@@ -346,118 +346,273 @@ router.put('/users/:id/status', adminAuth, async (req, res) => {
 });
 
 // ==========================================
-// GESTIONE WHITELIST REALE DAL DATABASE
+// WHITELIST ELEZIONI (TEMPORANEE)
 // ==========================================
 
-// GET /api/admin/whitelist - Lista whitelist dal database
-router.get('/whitelist', adminAuth, async (req, res) => {
+// GET /api/admin/elections/:electionId/whitelist - Ottieni whitelist reale di un'elezione
+router.get('/elections/:electionId/whitelist', async (req, res) => {
     try {
-        console.log('📝 [AUTH ADMIN] Caricamento whitelist dal database...');
-        
-        const whitelist = await Whitelist.findAll({
-            order: [['createdAt', 'DESC']]
-        });
+        const { electionId } = req.params;
+        console.log(`[AUTH] GET whitelist reale elezione ${electionId}`);
 
-        console.log(`✅ [AUTH ADMIN] Caricati ${whitelist.length} elementi whitelist`);
-
-        res.json({ 
-            whitelist: whitelist.map(item => ({
-                id: item.id,
-                email: item.email,
-                taxCode: item.taxCode,
-                firstName: item.firstName,
-                lastName: item.lastName,
-                addedBy: item.addedBy,
-                addedAt: item.createdAt
-            }))
-        });
-    } catch (error) {
-        console.error('❌ [AUTH ADMIN] Errore whitelist:', error);
-        res.status(500).json({ error: 'Errore caricamento whitelist' });
-    }
-});
-
-// POST /api/admin/whitelist - Aggiungi a whitelist
-router.post('/whitelist', adminAuth, async (req, res) => {
-    try {
-        const { email, taxCode, firstName, lastName, notes } = req.body;
-        
-        console.log('➕ [AUTH ADMIN] Aggiunta a whitelist:', email);
-        
-        // Verifica che non esista già
-        const existing = await Whitelist.findOne({
-            where: {
-                [Op.or]: [
-                    { email },
-                    { taxCode }
-                ]
-            }
-        });
-
-        if (existing) {
-            return res.status(400).json({ 
-                error: 'Email o codice fiscale già presente in whitelist' 
+        // Verifica che l'elezione esista
+        const election = await Election.findByPk(electionId);
+        if (!election) {
+            return res.status(404).json({ 
+                error: 'Elezione non trovata',
+                electionId: electionId 
             });
         }
 
-        const whitelistEntry = await Whitelist.create({
-            email,
-            taxCode,
-            firstName,
-            lastName,
-            notes,
-            addedBy: req.user.username
+        // Recupera la whitelist con i dati degli utenti
+        const whitelist = await ElectionWhitelist.findAll({
+            where: { electionId },
+            include: [{
+                model: User,
+                as: 'user',
+                attributes: ['id', 'firstName', 'lastName', 'email', 'taxCode', 'status']
+            }],
+            order: [['authorizedAt', 'DESC']]
         });
 
-        console.log('✅ [AUTH ADMIN] Aggiunto a whitelist:', email);
+        console.log(`[AUTH] ✅ Trovati ${whitelist.length} utenti nella whitelist elezione ${electionId}`);
 
         res.json({
             success: true,
-            message: 'Utente aggiunto alla whitelist',
-            entry: {
-                id: whitelistEntry.id,
-                email: whitelistEntry.email,
-                taxCode: whitelistEntry.taxCode,
-                firstName: whitelistEntry.firstName,
-                lastName: whitelistEntry.lastName,
-                addedAt: whitelistEntry.createdAt
-            }
+            election: {
+                id: election.id,
+                title: election.title,
+                status: election.status
+            },
+            whitelist: whitelist.map(item => ({
+                id: item.id,
+                user: item.user,
+                authorizedAt: item.authorizedAt,
+                authorizedBy: item.authorizedBy,
+                hasVoted: item.hasVoted,
+                votedAt: item.votedAt
+            })),
+            total: whitelist.length
         });
     } catch (error) {
-        console.error('❌ [AUTH ADMIN] Errore aggiunta whitelist:', error);
-        res.status(500).json({ error: 'Errore aggiunta whitelist' });
+        console.error('❌ [AUTH] Errore recupero whitelist reale:', error);
+        res.status(500).json({ 
+            error: 'Errore nel recupero della whitelist',
+            details: error.message 
+        });
     }
 });
 
-// DELETE /api/admin/whitelist/:email - Rimuovi da whitelist
-router.delete('/whitelist/:email', adminAuth, async (req, res) => {
+// POST /api/admin/elections/:electionId/whitelist/add - Aggiungi utenti reali alla whitelist
+router.post('/elections/:electionId/whitelist/add', async (req, res) => {
     try {
-        const { email } = req.params;
+        const { electionId } = req.params;
+        const { userIds, emails, taxCodes } = req.body;
         
-        console.log('🗑️ [AUTH ADMIN] Rimozione da whitelist:', email);
-        
-        const deleted = await Whitelist.destroy({
-            where: { email }
-        });
+        console.log(`[AUTH] POST aggiungi utenti reali whitelist elezione ${electionId}:`, req.body);
 
-        if (deleted === 0) {
-            return res.status(404).json({ error: 'Email non trovata in whitelist' });
+        // Verifica che l'elezione esista
+        const election = await Election.findByPk(electionId);
+        if (!election) {
+            return res.status(404).json({ error: 'Elezione non trovata' });
         }
 
-        console.log('✅ [AUTH ADMIN] Rimosso da whitelist:', email);
+        let usersToAdd = [];
+
+        // Trova utenti per ID
+        if (userIds && userIds.length > 0) {
+            const usersByIds = await User.findAll({
+                where: { id: { [Op.in]: userIds } }
+            });
+            usersToAdd = [...usersToAdd, ...usersByIds];
+        }
+
+        // Trova utenti per email
+        if (emails && emails.length > 0) {
+            const usersByEmails = await User.findAll({
+                where: { email: { [Op.in]: emails } }
+            });
+            usersToAdd = [...usersToAdd, ...usersByEmails];
+        }
+
+        // Trova utenti per codice fiscale
+        if (taxCodes && taxCodes.length > 0) {
+            const usersByTaxCodes = await User.findAll({
+                where: { taxCode: { [Op.in]: taxCodes } }
+            });
+            usersToAdd = [...usersToAdd, ...usersByTaxCodes];
+        }
+
+        // Rimuovi duplicati
+        const uniqueUsers = Array.from(new Map(usersToAdd.map(u => [u.id, u])).values());
+
+        if (uniqueUsers.length === 0) {
+            return res.status(400).json({ 
+                error: 'Nessun utente trovato con i criteri specificati' 
+            });
+        }
+
+        // Aggiungi alla whitelist
+        const addedUsers = [];
+        const alreadyInWhitelist = [];
+
+        for (const user of uniqueUsers) {
+            // Verifica se già nella whitelist
+            const existing = await ElectionWhitelist.findOne({
+                where: { electionId, userId: user.id }
+            });
+
+            if (existing) {
+                alreadyInWhitelist.push({
+                    email: user.email,
+                    name: `${user.firstName} ${user.lastName}`
+                });
+            } else {
+                await ElectionWhitelist.create({
+                    electionId,
+                    userId: user.id,
+                    authorizedBy: 'admin_001', // TODO: Usare l'ID dell'admin che fa la richiesta
+                    authorizedAt: new Date()
+                });
+                addedUsers.push({
+                    email: user.email,
+                    name: `${user.firstName} ${user.lastName}`,
+                    taxCode: user.taxCode
+                });
+            }
+        }
+
+        console.log(`[AUTH] ✅ Aggiunti ${addedUsers.length} utenti alla whitelist elezione ${electionId}`);
 
         res.json({
             success: true,
-            message: `${email} rimosso dalla whitelist`
+            message: `${addedUsers.length} utenti aggiunti alla whitelist`,
+            election: {
+                id: election.id,
+                title: election.title
+            },
+            addedUsers,
+            alreadyInWhitelist,
+            summary: {
+                total: uniqueUsers.length,
+                added: addedUsers.length,
+                alreadyPresent: alreadyInWhitelist.length
+            }
         });
     } catch (error) {
-        console.error('❌ [AUTH ADMIN] Errore rimozione whitelist:', error);
-        res.status(500).json({ error: 'Errore rimozione whitelist' });
+        console.error('❌ [AUTH] Errore aggiunta whitelist reale:', error);
+        res.status(500).json({ 
+            error: 'Errore nell\'aggiunta alla whitelist',
+            details: error.message 
+        });
+    }
+});
+
+// DELETE /api/admin/elections/:electionId/whitelist/:userId - Rimuovi utente reale dalla whitelist
+router.delete('/elections/:electionId/whitelist/:userId', async (req, res) => {
+    try {
+        const { electionId, userId } = req.params;
+        
+        console.log(`[AUTH] DELETE utente reale ${userId} whitelist elezione ${electionId}`);
+
+        // Trova l'entry nella whitelist
+        const whitelistEntry = await ElectionWhitelist.findOne({
+            where: { electionId, userId },
+            include: [{
+                model: User,
+                as: 'user',
+                attributes: ['firstName', 'lastName', 'email']
+            }]
+        });
+
+        if (!whitelistEntry) {
+            return res.status(404).json({ 
+                error: 'Utente non trovato nella whitelist di questa elezione' 
+            });
+        }
+
+        // Verifica se l'utente ha già votato
+        if (whitelistEntry.hasVoted) {
+            return res.status(400).json({ 
+                error: 'Non è possibile rimuovere un utente che ha già votato',
+                user: whitelistEntry.user,
+                votedAt: whitelistEntry.votedAt
+            });
+        }
+
+        // Rimuovi dalla whitelist
+        const userData = whitelistEntry.user;
+        await whitelistEntry.destroy();
+
+        console.log(`[AUTH] ✅ Utente ${userData.email} rimosso dalla whitelist elezione ${electionId}`);
+
+        res.json({
+            success: true,
+            message: 'Utente rimosso dalla whitelist',
+            removedUser: {
+                id: userId,
+                email: userData.email,
+                name: `${userData.firstName} ${userData.lastName}`
+            }
+        });
+    } catch (error) {
+        console.error('❌ [AUTH] Errore rimozione reale da whitelist:', error);
+        res.status(500).json({ 
+            error: 'Errore nella rimozione dalla whitelist',
+            details: error.message 
+        });
+    }
+});
+
+// GET /api/admin/elections/:electionId/whitelist/stats - Statistiche whitelist elezione
+router.get('/elections/:electionId/whitelist/stats', async (req, res) => {
+    try {
+        const { electionId } = req.params;
+        console.log(`[AUTH] GET statistiche whitelist elezione ${electionId}`);
+
+        const election = await Election.findByPk(electionId);
+        if (!election) {
+            return res.status(404).json({ error: 'Elezione non trovata' });
+        }
+
+        const stats = await ElectionWhitelist.findAll({
+            where: { electionId },
+            attributes: [
+                [sequelize.fn('COUNT', sequelize.col('id')), 'totalUsers'],
+                [sequelize.fn('SUM', sequelize.case().when({ hasVoted: true }, 1).else(0)), 'votedUsers'],
+                [sequelize.fn('SUM', sequelize.case().when({ hasVoted: false }, 1).else(0)), 'pendingUsers']
+            ],
+            raw: true
+        });
+
+        const result = stats[0] || { totalUsers: 0, votedUsers: 0, pendingUsers: 0 };
+
+        res.json({
+            success: true,
+            election: {
+                id: election.id,
+                title: election.title,
+                status: election.status
+            },
+            stats: {
+                totalUsers: parseInt(result.totalUsers) || 0,
+                votedUsers: parseInt(result.votedUsers) || 0,
+                pendingUsers: parseInt(result.pendingUsers) || 0,
+                turnoutPercentage: result.totalUsers > 0 ? 
+                    Math.round((result.votedUsers / result.totalUsers) * 100) : 0
+            }
+        });
+    } catch (error) {
+        console.error('❌ [AUTH] Errore statistiche whitelist:', error);
+        res.status(500).json({ 
+            error: 'Errore nel recupero delle statistiche',
+            details: error.message 
+        });
     }
 });
 
 // ==========================================
-// ATTIVITÀ RECENTE REALE DAL DATABASE
+// ATTIVITÀ RECENTE
 // ==========================================
 
 // GET /api/admin/activity - Attività recente auth service
@@ -508,7 +663,7 @@ router.get('/activity', adminAuth, async (req, res) => {
 });
 
 // ==========================================
-// IMPOSTAZIONI SISTEMA REALI DAL DATABASE
+// IMPOSTAZIONI SISTEMA 
 // ==========================================
 
 // GET /api/admin/settings - Impostazioni sistema dal database
