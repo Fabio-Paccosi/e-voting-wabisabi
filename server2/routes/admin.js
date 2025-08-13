@@ -2,18 +2,19 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const { Op } = require('sequelize');
 const router = express.Router();
 
-// Importa modelli database - PATH CORRETTO PER CONTAINER
+// Importa modelli database 
 const {
     sequelize,
     User,
-    Whitelist,
+    Election,                    
+    ElectionWhitelist,         
     SystemSettings,
+    Whitelist,
     getQuickStats,
     initializeDatabase
-} = require('../database_config'); // PATH CORRETTO
+} = require('../shared/database_config').getModelsForService('auth');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
@@ -207,7 +208,7 @@ router.get('/users', adminAuth, async (req, res) => {
             where,
             limit: parseInt(limit),
             offset,
-            order: [['createdAt', 'DESC']],
+            order: [['created_at', 'DESC']],
             attributes: { exclude: ['password'] } // Escludi password
         });
 
@@ -625,7 +626,7 @@ router.get('/activity', adminAuth, async (req, res) => {
         // Query per attività recenti (registrazioni, login, cambi status)
         const recentUsers = await User.findAll({
             limit: parseInt(limit),
-            order: [['updatedAt', 'DESC']],
+            order: [['updated_at', 'DESC']],
             attributes: ['id', 'email', 'status', 'lastLogin', 'createdAt', 'updatedAt']
         });
 

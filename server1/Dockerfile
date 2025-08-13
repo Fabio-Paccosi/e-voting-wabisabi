@@ -10,17 +10,23 @@ RUN apk add --no-cache \
 # Crea directory di lavoro
 WORKDIR /app
 
-# Copia package.json
-COPY package.json ./
+# Prima copia shared/ (ora funziona perché build context è dalla root)
+COPY shared/ ./shared/
 
-# Rimuovi package-lock.json per evitare conflitti e installa dipendenze
+# Copia package.json del server1
+COPY server1/package.json ./
+
+# Pulisci cache npm e installa dipendenze  
+RUN npm cache clean --force
 RUN npm install --only=production --no-package-lock
 
-# Copia il resto del codice sorgente
-COPY . .
+# Copia tutto il codice del server1
+COPY server1/ ./
 
+# Debug: verifica struttura
 RUN ls -la /app/
 RUN ls -la /app/routes/ || echo "Directory routes non trovata"
+RUN ls -la /app/shared/ || echo "Directory shared non trovata"
 
 # Esponi la porta
 EXPOSE 3001

@@ -301,6 +301,7 @@ const getQuickStats = async () => {
 module.exports = {
     sequelize,
     User,
+    Election,
     ElectionWhitelist,
     initializeDatabase,
     getQuickStats

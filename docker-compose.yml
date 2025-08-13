@@ -38,9 +38,11 @@ services:
       timeout: 3s
       retries: 5
 
-  # Auth Service (SERVER 2) - ✅ CON VARIABILI DB CORRETTE
+  # Auth Service (SERVER 2) - ✅ MODIFICATO PER ACCESSO A SHARED/
   auth-service:
-    build: ./server2
+    build:
+      context: .                    # ← CAMBIATO: build dalla root
+      dockerfile: server2/Dockerfile # ← AGGIUNTO: specifica dockerfile
     container_name: evoting-auth-service
     ports:
       - "3002:3002"
@@ -48,17 +50,17 @@ services:
       - NODE_ENV=production
       - PORT=3002
       - DB_HOST=postgres
-      - DB_NAME=${DB_NAME:-evoting_wabisabi}          # ✅ AGGIUNTO
-      - DB_USER=${DB_USER:-postgres}                  # ✅ AGGIUNTO
-      - DB_PASSWORD=${DB_PASSWORD:-SecurePass123!}    # ✅ AGGIUNTO
+      - DB_NAME=${DB_NAME:-evoting_wabisabi}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-SecurePass123!}
       - JWT_SECRET=${JWT_SECRET:-default-secret-key}
       - REDIS_HOST=redis
       - REDIS_PASSWORD=${REDIS_PASSWORD:-RedisPass456!}
     depends_on:
       postgres:
-        condition: service_healthy  # ✅ ASPETTA CHE POSTGRES SIA PRONTO
+        condition: service_healthy
       redis:
-        condition: service_healthy  # ✅ ASPETTA CHE REDIS SIA PRONTO
+        condition: service_healthy
     networks:
       - evoting-network
     restart: unless-stopped
@@ -68,9 +70,11 @@ services:
     #   timeout: 10s
     #   retries: 3
 
-  # Vote Service (SERVER 3) - ✅ CON VARIABILI DB CORRETTE
+  # Vote Service (SERVER 3) - ✅ MODIFICATO PER ACCESSO A SHARED/
   vote-service:
-    build: ./server3
+    build:
+      context: .                    # ← CAMBIATO: build dalla root
+      dockerfile: server3/Dockerfile # ← AGGIUNTO: specifica dockerfile
     container_name: evoting-vote-service
     ports:
       - "3003:3003"
@@ -78,16 +82,16 @@ services:
       - NODE_ENV=production
       - PORT=3003
       - DB_HOST=postgres
-      - DB_NAME=${DB_NAME:-evoting_wabisabi}          # ✅ AGGIUNTO
-      - DB_USER=${DB_USER:-postgres}                  # ✅ AGGIUNTO
-      - DB_PASSWORD=${DB_PASSWORD:-SecurePass123!}    # ✅ AGGIUNTO
+      - DB_NAME=${DB_NAME:-evoting_wabisabi}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-SecurePass123!}
       - REDIS_HOST=redis
       - REDIS_PASSWORD=${REDIS_PASSWORD:-RedisPass456!}
     depends_on:
       postgres:
-        condition: service_healthy  # ✅ ASPETTA CHE POSTGRES SIA PRONTO
+        condition: service_healthy
       redis:
-        condition: service_healthy  # ✅ ASPETTA CHE REDIS SIA PRONTO
+        condition: service_healthy
     networks:
       - evoting-network
     restart: unless-stopped
@@ -97,9 +101,11 @@ services:
     #   timeout: 10s
     #   retries: 3
 
-  # API Gateway (SERVER 1)
+  # API Gateway (SERVER 1) - ✅ MODIFICATO PER ACCESSO A SHARED/
   api-gateway:
-    build: ./server1
+    build:
+      context: .                    # ← CAMBIATO: build dalla root
+      dockerfile: server1/Dockerfile # ← AGGIUNTO: specifica dockerfile
     container_name: evoting-api-gateway
     ports:
       - "3001:3001"
@@ -110,14 +116,14 @@ services:
       - VOTE_SERVICE_URL=http://vote-service:3003
       - JWT_SECRET=${JWT_SECRET:-default-secret-key}
       - DB_HOST=postgres
-      - DB_NAME=${DB_NAME:-evoting_wabisabi}          # ✅ AGGIUNTO
-      - DB_USER=${DB_USER:-postgres}                  # ✅ AGGIUNTO
-      - DB_PASSWORD=${DB_PASSWORD:-SecurePass123!}    # ✅ AGGIUNTO
+      - DB_NAME=${DB_NAME:-evoting_wabisabi}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-SecurePass123!}
       - REDIS_HOST=redis
       - REDIS_PASSWORD=${REDIS_PASSWORD:-RedisPass456!}
     depends_on:
       auth-service:
-        condition: service_started  # ✅ ASPETTA CHE I SERVIZI SIANO AVVIATI
+        condition: service_started
       vote-service:
         condition: service_started
     networks:

@@ -7,11 +7,10 @@ require('dotenv').config();
 // Import servizi
 const CoinJoinTriggerService = require('./services/coinjoinTrigger.service');
 
-// CORREZIONE: Usa database_config locale invece del percorso assoluto
-const { sequelize } = require('./database_config');
-
 const app = express();
 const PORT = process.env.VOTE_SERVICE_PORT || 3003;
+
+const { sequelize, initializeDatabase } = require('./shared/database_config').getModelsForService('vote');
 
 // Middleware
 app.use(cors());

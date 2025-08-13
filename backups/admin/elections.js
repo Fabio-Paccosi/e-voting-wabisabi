@@ -87,7 +87,6 @@ router.post('/elections', adminAuth, async (req, res) => {
                     lastName: candidateData.lastName,
                     party: candidateData.party,
                     biography: candidateData.biography,
-                    photo: candidateData.photo,
                     bitcoinAddress: address,
                     bitcoinPublicKey: publicKey,
                     valueEncoding: i // Assegna valore progressivo per codifica

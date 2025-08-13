@@ -10,6 +10,8 @@ const jwt = require('jsonwebtoken');
 const app = express();
 const PORT = process.env.PORT || 3002;
 
+const { initializeDatabase } = require('./shared/database_config').getModelsForService('auth');
+
 // Middleware
 app.use(express.json());
 
@@ -32,11 +34,13 @@ app.use('/api/admin', adminRoutes);
 // SIMULAZIONE DATABASE
 // ====================
 // In produzione, usare un vero database (PostgreSQL, MySQL, etc.)
+/*
 const db = {
     users: new Map(),
     credentials: new Map(),
     whitelist: new Map() // Whitelist degli elettori autorizzati
 };
+*/
 
 // ====================
 // AUTHENTICATION SERVICE
@@ -44,9 +48,9 @@ const db = {
 class AuthenticationService {
     constructor() {
         // Inizializza whitelist di esempio
-        this.initializeWhitelist();
+        //this.initializeWhitelist();
     }
-
+    /*
     // Inizializza la whitelist con alcuni utenti di test
     initializeWhitelist() {
         const testVoters = [
@@ -146,6 +150,7 @@ class AuthenticationService {
         const { password: _, ...userWithoutPassword } = user;
         return { user: userWithoutPassword, token };
     }
+    */
 
     // Verifica token JWT
     verifyToken(token) {
@@ -331,6 +336,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Registrazione utente
+/*
 app.post('/api/register', async (req, res) => {
     try {
         const user = await authService.registerUser(req.body);
@@ -347,8 +353,10 @@ app.post('/api/register', async (req, res) => {
         });
     }
 });
+*/
 
 // Login utente
+/*
 app.post('/api/login', async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -366,6 +374,7 @@ app.post('/api/login', async (req, res) => {
         });
     }
 });
+*/
 
 // Richiesta credenziali anonime KVAC
 app.post('/api/credentials/request', async (req, res) => {

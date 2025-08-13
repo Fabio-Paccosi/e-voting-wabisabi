@@ -106,7 +106,7 @@ const User = sequelize.define('User', {
 });
 
 // ====================
-// MODELLO ELECTION - CORRETTO
+// MODELLO ELECTION
 // ====================
 const Election = sequelize.define('Election', {
     id: {
@@ -219,10 +219,6 @@ const Candidate = sequelize.define('Candidate', {
     },
     party: {
         type: DataTypes.STRING,
-        allowNull: true
-    },
-    photo: {
-        type: DataTypes.TEXT,
         allowNull: true
     },
     bitcoinAddress: {
