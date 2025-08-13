@@ -62,7 +62,6 @@ CREATE TABLE IF NOT EXISTS candidates (
     description TEXT,
     biography TEXT,
     party VARCHAR(100),
-    photo TEXT,
     bitcoin_address VARCHAR(255) UNIQUE NOT NULL,
     bitcoin_public_key VARCHAR(130),
     vote_encoding INTEGER NOT NULL,

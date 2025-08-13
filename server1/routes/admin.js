@@ -1,4 +1,4 @@
-// server1/routes/admin.js - API Gateway Admin Routes Complete
+// server1/routes/admin.js - API Gateway
 const express = require('express');
 const axios = require('axios');
 const router = express.Router();

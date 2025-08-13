@@ -1,6 +1,5 @@
 // server3/routes/admin.js - Vote Service Admin Routes FIXED VERSION
 const express = require('express');
-const { Op } = require('sequelize');
 const router = express.Router();
 const crypto = require('crypto');
 const bitcoinjs = require('bitcoinjs-lib');
@@ -9,14 +8,15 @@ const ecc = require('tiny-secp256k1');
 // Importa modelli database
 const {
     sequelize,
+    User,                       
     Election,
     Candidate,
-    Vote,
     VotingSession,
+    Vote,
     Transaction,
     getQuickStats,
     initializeDatabase
-} = require('../database_config');
+} = require('../shared/database_config').getModelsForService('vote');
 
 // Inizializza bitcoinjs-lib con secp256k1
 bitcoinjs.initEccLib(ecc);
@@ -378,7 +378,6 @@ router.get('/elections/:id/candidates', adminAuth, async (req, res) => {
                 name: c.name, 
                 party: c.party,
                 biography: c.biography,
-                photo: c.photo,
                 voteEncoding: c.voteEncoding, 
                 bitcoinAddress: c.bitcoinAddress,
                 createdAt: c.createdAt,
@@ -517,7 +516,6 @@ router.post('/elections/:electionId/candidates', adminAuth, async (req, res) => 
                 name: candidate.name,  // CORREZIONE: usa 'name'
                 party: candidate.party,
                 biography: candidate.biography,
-                photo: candidate.photo,
                 bitcoinAddress: candidate.bitcoinAddress,
                 voteEncoding: candidate.voteEncoding,  // CORREZIONE: voteEncoding
                 electionId: candidate.electionId
@@ -579,7 +577,6 @@ router.put('/elections/:electionId/candidates/:candidateId', adminAuth, async (r
                 name: candidate.name,
                 party: candidate.party,
                 biography: candidate.biography,
-                photo: candidate.photo,
                 bitcoinAddress: candidate.bitcoinAddress,
                 voteEncoding: candidate.voteEncoding
             },

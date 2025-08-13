@@ -9,6 +9,15 @@ const PORT = process.env.PORT || 3001;
 console.log('🚀 [API Gateway] Avvio in corso...');
 console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 
+const { initializeDatabase } = require('./shared/database_config').getModelsForService('gateway');
+
+// In startup:
+initializeDatabase().then(success => {
+    if (success) {
+        console.log('✅ [GATEWAY] Database inizializzato');
+    }
+});
+
 // CORS - permetti tutti durante debug
 app.use(cors({
     origin: '*',

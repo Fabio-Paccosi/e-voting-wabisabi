@@ -152,7 +152,7 @@ router.get('/:id/candidates', async (req, res) => {
 
         const candidates = await Candidate.findAll({
             where: { electionId: id },
-            attributes: ['id', 'firstName', 'lastName', 'party', 'description', 'valueEncoding', 'bitcoinAddress', 'photo'],
+            attributes: ['id', 'firstName', 'lastName', 'party', 'description', 'valueEncoding', 'bitcoinAddress'],
             order: [['valueEncoding', 'ASC']]
         });
 
@@ -167,7 +167,6 @@ router.get('/:id/candidates', async (req, res) => {
                 description: c.description,
                 valueEncoding: c.valueEncoding,
                 bitcoinAddress: c.bitcoinAddress,
-                photo: c.photo
             }))
         });
 
