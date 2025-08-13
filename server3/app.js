@@ -51,14 +51,14 @@ app.get('/api/health', (req, res) => {
 });
 
 // Import routes
-const voteRoutes = require('./routes/votes');
+//const voteRoutes = require('./routes/votes');
 const adminRoutes = require('./routes/admin');
-const electionRoutes = require('./routes/elections');
+//const electionRoutes = require('./routes/elections');
 
 // Mount routes
-app.use('/api/votes', voteRoutes);
+//app.use('/api/votes', voteRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/elections', electionRoutes);
+//app.use('/api/elections', electionRoutes);
 
 // ===========================
 // VOTE PROCESSING ENDPOINTS

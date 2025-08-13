@@ -967,13 +967,12 @@ const AdminDashboard = () => {
                         Metodo di Voto
                       </label>
                       <select
+                        disabled
                         value={electionForm.votingMethod}
                         onChange={(e) => setElectionForm({...electionForm, votingMethod: e.target.value})}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
                         <option value="single">Voto Singolo</option>
-                        <option value="preferential">Voto Preferenziale</option>
-                        <option value="ranked">Voto Classificato</option>
                       </select>
                     </div>
                     <div>

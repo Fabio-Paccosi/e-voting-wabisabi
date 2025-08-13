@@ -16,6 +16,8 @@ const {
     initializeDatabase
 } = require('../shared/database_config').getModelsForService('auth');
 
+const { Op } = require('sequelize');
+
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
 // Inizializza database all'avvio
@@ -472,7 +474,7 @@ router.post('/elections/:electionId/whitelist/add', async (req, res) => {
                 await ElectionWhitelist.create({
                     electionId,
                     userId: user.id,
-                    authorizedBy: 'admin_001', // TODO: Usare l'ID dell'admin che fa la richiesta
+                    authorizedBy: null, // TODO: Usare l'ID dell'admin che fa la richiesta
                     authorizedAt: new Date()
                 });
                 addedUsers.push({

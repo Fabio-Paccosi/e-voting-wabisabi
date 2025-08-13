@@ -4,7 +4,17 @@ const bitcoinjs = require('bitcoinjs-lib');
 const axios = require('axios');
 
 // CORREZIONE: Usa il database_config locale invece del percorso assoluto
-const { Vote, VotingSession, Election, Transaction, Candidate } = require('../database_config');
+const {
+    sequelize,
+    User,                       
+    Election,
+    Candidate,
+    VotingSession,
+    Vote,
+    Transaction,
+    getQuickStats,
+    initializeDatabase
+} = require('../shared/database_config').getModelsForService('vote');
 
 class CoinJoinTriggerService {
     constructor() {

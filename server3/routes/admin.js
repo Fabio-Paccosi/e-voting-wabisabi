@@ -1,4 +1,4 @@
-// server3/routes/admin.js - Vote Service Admin Routes FIXED VERSION
+// server3/routes/admin.js - Vote Service
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
