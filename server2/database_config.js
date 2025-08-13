@@ -88,6 +88,51 @@ const User = sequelize.define('User', {
 });
 
 // ====================
+// MODELLO ELECTION WHITELIST
+// ====================
+const ElectionWhitelist = sequelize.define('ElectionWhitelist', {
+    id: {
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true
+    },
+    electionId: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        field: 'election_id'
+    },
+    userId: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        field: 'user_id'
+    },
+    authorizedAt: {
+        type: DataTypes.DATE,
+        defaultValue: DataTypes.NOW,
+        field: 'authorized_at'
+    },
+    authorizedBy: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'authorized_by'
+    },
+    hasVoted: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        field: 'has_voted'
+    },
+    votedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'voted_at'
+    }
+}, {
+    tableName: 'election_whitelist',
+    underscored: true,
+    timestamps: true
+});
+
+// ====================
 // FUNZIONI DI UTILITÀ
 // ====================
 
@@ -103,7 +148,7 @@ const initializeDatabase = async () => {
         console.log('✅ Modelli sincronizzati');
         
         // Crea dati di esempio se necessario
-        await createSampleData();
+        //await createSampleData();
         
         return true;
     } catch (error) {
@@ -113,6 +158,7 @@ const initializeDatabase = async () => {
 };
 
 // Crea dati di esempio
+/*
 const createSampleData = async () => {
     try {
         // Controlla se ci sono già dati
@@ -216,6 +262,7 @@ const createSampleData = async () => {
         console.error('❌ Errore creazione dati esempio:', error);
     }
 };
+*/
 
 // Statistiche rapide
 const getQuickStats = async () => {
@@ -254,6 +301,7 @@ const getQuickStats = async () => {
 module.exports = {
     sequelize,
     User,
+    ElectionWhitelist,
     initializeDatabase,
     getQuickStats
 };

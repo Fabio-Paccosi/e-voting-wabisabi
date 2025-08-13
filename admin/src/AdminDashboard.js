@@ -320,6 +320,34 @@ const AdminDashboard = () => {
     }
   };
 
+  const deactivateElection = async (electionId) => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_BASE_URL}/elections/${electionId}/deactivate`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Errore nell\'attivazione');
+      }
+      
+      setSuccess('Elezione terminata con successo!');
+      await fetchElections();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const showResults = async (electionId) =>{
+    alert("In sviluppo")
+  };  
+
   const openModal = (type, data = null) => {
     setModalType(type);
     setShowModal(true);
@@ -478,6 +506,26 @@ const AdminDashboard = () => {
                     >
                       Attiva
                     </button>
+                  )}
+                  {
+                    election.status === 'active' && (
+                      <button
+                        onClick={() => deactivateElection(election.id)}
+                        className="px-3 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"
+                        disabled={loading}
+                      >
+                        Termina
+                      </button>
+                  )}
+                  {
+                    election.status === 'completed' && (
+                      <button
+                        onClick={() => showResults(election.id)}
+                        className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                        disabled={loading}
+                      >
+                        Vedi risultati
+                      </button>
                   )}
                 </div>
               </div>
