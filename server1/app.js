@@ -1,12 +1,10 @@
-// server1/app.js - API Gateway Completo
-
 const express = require('express');
 const cors = require('cors');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-console.log('🚀 [API Gateway] Avvio in corso...');
+console.log('🚀 [API GATEWAY] Avvio in corso...');
 console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 
 const { initializeDatabase } = require('./shared/database_config').getModelsForService('gateway');
@@ -47,7 +45,7 @@ app.get('/api/health', (req, res) => {
     });
 });
 
-// Admin routes (ASSICURATI che il file esista)
+// Admin routes (percorso /api/admin/*)
 try {
     const adminRoutes = require('./routes/admin');
     app.use('/api/admin', adminRoutes);
@@ -61,6 +59,25 @@ try {
         res.status(500).json({ 
             error: 'Route admin non disponibili',
             reason: 'File admin.js mancante',
+            path: req.path
+        });
+    });
+}
+
+// Client routes (percorso /api/*)
+try {
+    const clientRoutes = require('./routes/client');
+    app.use('/api', clientRoutes);
+    console.log('✅ Route client caricate correttamente');
+} catch (error) {
+    console.error('❌ Errore caricamento route client:', error.message);
+    console.error('📁 Verifica che esista: ./routes/client.js');
+    
+    // Route client di fallback per alcune route critiche
+    app.post('/api/auth/login', (req, res) => {
+        res.status(500).json({ 
+            error: 'Route client non disponibili',
+            reason: 'File client.js mancante',
             path: req.path
         });
     });
@@ -83,10 +100,26 @@ app.use('*', (req, res) => {
         method: req.method,
         service: 'api-gateway',
         availableRoutes: [
+            // Health e test
             'GET /api/health',
             'GET /api/test',
+            
+            // Route admin
             'GET /api/admin/stats',
-            'POST /api/admin/auth/login'
+            'POST /api/admin/auth/login',
+            'GET /api/admin/elections',
+            'POST /api/admin/elections',
+            'PUT /api/admin/elections/:id/status',
+            
+            // Route client (utenti normali)
+            'POST /api/auth/login',
+            'POST /api/auth/verify',
+            'GET /api/auth/profile',
+            'GET /api/elections',
+            'GET /api/elections/:id',
+            'POST /api/elections/:id/vote',
+            'GET /api/whitelist/check',
+            'POST /api/whitelist/register'
         ]
     });
 });
@@ -97,45 +130,16 @@ app.use((err, req, res, next) => {
     res.status(500).json({ 
         error: 'Errore interno del server',
         message: err.message,
-        timestamp: new Date().toISOString(),
         service: 'api-gateway'
     });
 });
 
-// IMPORTANTE: Avvia il server
-const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 [API Gateway] Server avviato su porta ${PORT}`);
-    console.log(`🌐 URL: http://0.0.0.0:${PORT}`);
-    console.log(`📊 Admin: http://0.0.0.0:${PORT}/api/admin/*`);
-    console.log(`✅ Pronto per le richieste!`);
-});
-
-// Gestione shutdown graceful
-process.on('SIGTERM', () => {
-    console.log('🛑 [API Gateway] Ricevuto SIGTERM, chiusura...');
-    server.close(() => {
-        console.log('✅ [API Gateway] Server chiuso correttamente');
-        process.exit(0);
-    });
-});
-
-process.on('SIGINT', () => {
-    console.log('🛑 [API Gateway] Ricevuto SIGINT, chiusura...');
-    server.close(() => {
-        console.log('✅ [API Gateway] Server chiuso correttamente');
-        process.exit(0);
-    });
-});
-
-// Gestione errori non catturati
-process.on('uncaughtException', (err) => {
-    console.error('💥 [API Gateway] Errore non catturato:', err);
-    process.exit(1);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('💥 [API Gateway] Promise rejection non gestita:', reason);
-    process.exit(1);
+app.listen(PORT, () => {
+    console.log(`🌟 [API GATEWAY] Server avviato su porta ${PORT}`);
+    console.log(`📋 Route disponibili:`);
+    console.log(`   👨‍💼 Admin: http://localhost:${PORT}/api/admin/*`);
+    console.log(`   👤 Client: http://localhost:${PORT}/api/*`);
+    console.log(`   🏥 Health: http://localhost:${PORT}/api/health`);
 });
 
 module.exports = app;
