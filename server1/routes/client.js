@@ -15,26 +15,6 @@ console.log(`  Vote Service: ${VOTE_SERVICE_URL}`);
 const jwt = require('jsonwebtoken');
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
-// Middleware per estrarre utente dal token e aggiungerlo ai header
-const addUserToHeaders = (req, res, next) => {
-    try {
-        const token = req.headers.authorization?.replace('Bearer ', '');
-        
-        if (token) {
-            const decoded = jwt.verify(token, JWT_SECRET);
-            // Aggiungi l'ID utente ai header per i servizi downstream
-            req.headers['x-user-id'] = decoded.id;
-            req.headers['x-user-email'] = decoded.email;
-        }
-        
-        next();
-    } catch (error) {
-        // In caso di errore JWT, lascia che il servizio downstream gestisca l'autenticazione
-        console.log('[CLIENT GATEWAY] ⚠️ Token JWT non valido o mancante');
-        next();
-    }
-};
-
 // Helper per chiamate ai servizi con retry
 const callService = async (service, endpoint, method = 'GET', data = null, headers = {}) => {
     const baseURL = service === 'auth' ? AUTH_SERVICE_URL : VOTE_SERVICE_URL;
@@ -79,6 +59,60 @@ const callService = async (service, endpoint, method = 'GET', data = null, heade
     errorToThrow.status = lastError.response?.status || 503;
     errorToThrow.originalError = lastError.response?.data || lastError.message;
     throw errorToThrow;
+};
+
+// Middleware per estrarre utente dal token e aggiungerlo ai header
+const addUserToHeaders = (req, res, next) => {
+    try {
+        const authHeader = req.headers.authorization;
+        
+        if (!authHeader) {
+            console.log('[CLIENT GATEWAY] ⚠️ Header Authorization mancante');
+            return res.status(401).json({ 
+                error: 'Token di autenticazione richiesto',
+                message: 'Effettua il login per accedere a questa risorsa'
+            });
+        }
+        
+        const token = authHeader.replace('Bearer ', '');
+        
+        if (!token) {
+            console.log('[CLIENT GATEWAY] ⚠️ Token mancante nell\'header');
+            return res.status(401).json({ 
+                error: 'Token non valido',
+                message: 'Formato del token non corretto'
+            });
+        }
+        
+        const decoded = jwt.verify(token, JWT_SECRET);
+        
+        // Aggiungi l'ID utente ai header per i servizi downstream
+        req.headers['x-user-id'] = decoded.id;
+        req.headers['x-user-email'] = decoded.email;
+        
+        console.log(`[CLIENT GATEWAY] ✓ Token validato per utente: ${decoded.email}`);
+        next();
+        
+    } catch (error) {
+        console.error('[CLIENT GATEWAY] ✗ Errore validazione token:', error.message);
+        
+        if (error.name === 'JsonWebTokenError') {
+            return res.status(401).json({ 
+                error: 'Token non valido',
+                message: 'Il token fornito non è valido'
+            });
+        } else if (error.name === 'TokenExpiredError') {
+            return res.status(401).json({ 
+                error: 'Token scaduto',
+                message: 'Effettua nuovamente il login'
+            });
+        } else {
+            return res.status(500).json({ 
+                error: 'Errore interno',
+                message: 'Errore nella validazione del token'
+            });
+        }
+    }
 };
 
 // ==========================================
@@ -285,3 +319,21 @@ router.get('/health', (req, res) => {
 console.log('[CLIENT ROUTES] ✓ Route client caricate');
 
 module.exports = router;
+// GET /api/auth/me - Compatibilità frontend (redirect a profile) 
+router.get('/auth/me', async (req, res) => {
+    try {
+        console.log('[CLIENT GATEWAY] Richiesta auth/me (redirect a profile)');
+        const response = await callService('auth', '/api/auth/profile', 'GET', null, {
+            'Authorization': req.headers.authorization
+        });
+        console.log('[CLIENT GATEWAY] ✓ Auth/me completato');
+        res.json(response);
+    } catch (error) {
+        console.error('[CLIENT GATEWAY] ✗ Errore auth/me:', error.message);
+        res.status(error.status || 500).json({ 
+            error: 'Errore nel recupero profilo utente',
+            details: error.originalError || error.message,
+            service: 'auth'
+        });
+    }
+});

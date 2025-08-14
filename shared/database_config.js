@@ -556,6 +556,7 @@ const getModelsForService = (serviceName) => {
                 sequelize,
                 User,
                 Election,
+                ElectionWhitelist,
                 Candidate,
                 VotingSession,
                 Vote,

@@ -33,7 +33,7 @@ const App = () => {
             <header className="app-header">
               <div className="container">
                 <h1>🗳️ E-Voting WabiSabi</h1>
-                <p>Sistema di Voto Elettronico Anonimo e Sicuro</p>
+                <p>Progetto di Tesi Magistrale di Fabio Paccosi</p>
               </div>
             </header>
             
@@ -72,7 +72,8 @@ const App = () => {
             
             <footer className="app-footer">
               <div className="container">
-                <p>&copy; 2025 E-Voting WabiSabi - Sistema Sicuro e Anonimo</p>
+                <h1>🗳️ E-Voting WabiSabi</h1>
+                <p>Progetto di Tesi Magistrale di Fabio Paccosi</p>
               </div>
             </footer>
           </div>

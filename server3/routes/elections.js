@@ -310,3 +310,23 @@ router.post('/:id/vote', extractUserFromHeaders, async (req, res) => {
 });
 
 module.exports = router;
+// GET /api/elections/debug - Route di debug per verificare header
+router.get('/debug', async (req, res) => {
+    console.log('[VOTE SERVICE DEBUG] Headers ricevuti:');
+    console.log('  Authorization:', req.headers.authorization ? 'PRESENTE' : 'MANCANTE');
+    console.log('  x-user-id:', req.headers['x-user-id'] || 'MANCANTE');
+    console.log('  x-user-email:', req.headers['x-user-email'] || 'MANCANTE');
+    console.log('  User-Agent:', req.headers['user-agent'] || 'N/A');
+    
+    res.json({
+        debug: true,
+        timestamp: new Date().toISOString(),
+        headers: {
+            authorization: !!req.headers.authorization,
+            'x-user-id': req.headers['x-user-id'],
+            'x-user-email': req.headers['x-user-email'],
+            'content-type': req.headers['content-type']
+        },
+        message: 'Headers ricevuti dal vote-service'
+    });
+});
