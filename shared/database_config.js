@@ -423,6 +423,7 @@ const SystemSettings = sequelize.define('SystemSettings', {
 });
 
 // Modello Whitelist legacy (usato da server2)
+/*
 const Whitelist = sequelize.define('Whitelist', {
     id: {
         type: DataTypes.UUID,
@@ -442,6 +443,7 @@ const Whitelist = sequelize.define('Whitelist', {
 }, {
     tableName: 'whitelist'
 });
+*/
 
 // ====================
 // RELAZIONI TRA MODELLI
@@ -451,8 +453,8 @@ const Whitelist = sequelize.define('Whitelist', {
 User.hasMany(ElectionWhitelist, { foreignKey: 'userId', as: 'electionWhitelists' });
 ElectionWhitelist.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 
-User.hasMany(Whitelist, { foreignKey: 'userId', as: 'whitelists' });
-Whitelist.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+//User.hasMany(Whitelist, { foreignKey: 'userId', as: 'whitelists' });
+//Whitelist.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 
 // Election Relations
 Election.hasMany(ElectionWhitelist, { foreignKey: 'electionId', as: 'whitelist' });
@@ -555,7 +557,7 @@ const allModels = {
     Vote,
     Transaction,
     SystemSettings,
-    Whitelist,
+    //Whitelist,
     initializeDatabase,
     getQuickStats
 };
@@ -571,7 +573,7 @@ const getModelsForService = (serviceName) => {
                 Election,
                 ElectionWhitelist,
                 SystemSettings,
-                Whitelist,
+                //Whitelist,
                 initializeDatabase,
                 getQuickStats
             };

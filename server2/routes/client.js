@@ -3,11 +3,12 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const router = express.Router();
 
-// Importa modelli database 
+// Importa modelli database - RIMOSSO Whitelist, aggiunto Election
 const {
     sequelize,
     User,
-    Whitelist,
+    Election,
+    ElectionWhitelist,
     getQuickStats,
     initializeDatabase
 } = require('../shared/database_config').getModelsForService('auth');
@@ -31,14 +32,54 @@ initializeDatabase()
     });
 
 // ==========================================
+// FUNZIONE HELPER PER ELEZIONE ATTIVA
+// ==========================================
+
+/**
+ * Trova l'elezione attiva corrente
+ * Se non specificata, usa quella con status 'active'
+ */
+async function getCurrentElection(electionId = null) {
+    try {
+        if (electionId) {
+            return await Election.findByPk(electionId);
+        }
+        
+        // Cerca l'elezione attiva
+        const activeElection = await Election.findOne({
+            where: {
+                status: 'active',
+                isActive: true,
+                startDate: { [Op.lte]: new Date() },
+                endDate: { [Op.gte]: new Date() }
+            },
+            order: [['startDate', 'DESC']]
+        });
+        
+        if (activeElection) {
+            return activeElection;
+        }
+        
+        // Se non c'è elezione attiva, prende la più recente
+        return await Election.findOne({
+            order: [['createdAt', 'DESC']]
+        });
+        
+    } catch (error) {
+        console.error('❌ Errore ricerca elezione:', error);
+        return null;
+    }
+}
+
+// ==========================================
 // AUTENTICAZIONE UTENTI NORMALI
 // ==========================================
 
 // POST /api/auth/login - Login utenti normali con email e codice fiscale
 router.post('/auth/login', async (req, res) => {
     try {
-        const { email, taxCode } = req.body;
-        console.log('🔐 [AUTH CLIENT] Tentativo login utente:'+ email +" - "+ taxCode);
+        const { email, taxCode, electionId } = req.body;
+        console.log('🔐 [AUTH CLIENT] Tentativo login utente:', email + " - " + taxCode);
 
         // Validazione input
         if (!email || !taxCode) {
@@ -58,30 +99,38 @@ router.post('/auth/login', async (req, res) => {
         if (!user) {
             console.log('❌ [AUTH CLIENT] Utente non trovato:', email);
             return res.status(401).json({ 
-                error: 'Credenziali non valide o utente non autorizzato' 
+                error: 'Credenziali non valide' 
             });
         }
 
-        // Verifica che l'utente sia in whitelist
-        const whitelistEntry = await Whitelist.findOne({
-            where: { 
-                codiceFiscale: taxCode.toUpperCase(),
-                isActive: true 
+        // Trova l'elezione corrente
+        const currentElection = await getCurrentElection(electionId);
+        if (!currentElection) {
+            return res.status(400).json({ 
+                error: 'Nessuna elezione disponibile' 
+            });
+        }
+
+        // Verifica che l'utente sia nella whitelist per questa elezione
+        const whitelistEntry = await ElectionWhitelist.findOne({
+            where: {
+                userId: user.id,
+                electionId: currentElection.id
             }
         });
 
         if (!whitelistEntry) {
-            console.log('❌ [AUTH CLIENT] Utente non in whitelist:', email);
+            console.log('❌ [AUTH CLIENT] Utente non autorizzato per elezione:', user.email, currentElection.id);
             return res.status(403).json({ 
-                error: 'Utente non autorizzato a votare' 
+                error: 'Utente non autorizzato per questa elezione' 
             });
         }
 
-        // Verifica che l'utente sia attivo
-        if (user.status !== 'active') {
-            console.log('❌ [AUTH CLIENT] Utente non attivo:', email);
+        // Verifica se può votare
+        if (whitelistEntry.hasVoted) {
+            console.log('⚠️ [AUTH CLIENT] Utente ha già votato:', user.email);
             return res.status(403).json({ 
-                error: 'Account non attivo' 
+                error: 'Hai già espresso il tuo voto' 
             });
         }
 
@@ -90,14 +139,14 @@ router.post('/auth/login', async (req, res) => {
             { 
                 id: user.id,
                 email: user.email,
-                codiceFiscale: user.codiceFiscale,
-                role: 'voter'
+                electionId: currentElection.id,
+                whitelistId: whitelistEntry.id
             },
             JWT_SECRET,
             { expiresIn: '24h' }
         );
 
-        console.log('✅ [AUTH CLIENT] Login riuscito per:', email);
+        console.log('✅ [AUTH CLIENT] Login riuscito per:', user.email);
 
         res.json({
             success: true,
@@ -105,75 +154,38 @@ router.post('/auth/login', async (req, res) => {
             user: {
                 id: user.id,
                 email: user.email,
-                nome: user.nome,
-                cognome: user.cognome,
-                role: 'voter'
+                nome: user.firstName,
+                cognome: user.lastName,
+                codiceFiscale: user.taxCode,
+                status: user.status
+            },
+            election: {
+                id: currentElection.id,
+                title: currentElection.title,
+                status: currentElection.status
+            },
+            whitelist: {
+                id: whitelistEntry.id,
+                authorizedAt: whitelistEntry.authorizedAt,
+                hasVoted: whitelistEntry.hasVoted,
+                canVote: !whitelistEntry.hasVoted
             }
         });
 
     } catch (error) {
         console.error('❌ [AUTH CLIENT] Errore login:', error);
         res.status(500).json({ 
-            error: 'Errore interno del server',
-            details: error.message 
+            error: 'Errore nell\'autenticazione utente',
+            details: {
+                error: 'Errore interno del server',
+                details: error.message
+            },
+            service: 'auth'
         });
     }
 });
 
-// POST /api/auth/verify - Verifica token utente
-router.post('/auth/verify', async (req, res) => {
-    try {
-        const { token } = req.body;
-        console.log('🔍 [AUTH CLIENT] Verifica token utente');
-
-        if (!token) {
-            return res.status(401).json({ 
-                valid: false, 
-                error: 'Token mancante' 
-            });
-        }
-
-        const decoded = jwt.verify(token, JWT_SECRET);
-
-        // Verifica che sia un token utente normale
-        if (decoded.role !== 'voter') {
-            return res.status(401).json({ 
-                valid: false, 
-                error: 'Token non valido per utenti' 
-            });
-        }
-
-        // Verifica che l'utente esista ancora nel database
-        const user = await User.findByPk(decoded.id);
-        if (!user || user.status !== 'active') {
-            return res.status(401).json({ 
-                valid: false, 
-                error: 'Utente non più valido' 
-            });
-        }
-
-        console.log('✅ [AUTH CLIENT] Token verificato per utente:', decoded.email);
-
-        res.json({
-            valid: true,
-            user: {
-                id: decoded.id,
-                email: decoded.email,
-                codiceFiscale: decoded.codiceFiscale,
-                role: decoded.role
-            }
-        });
-
-    } catch (error) {
-        console.error('❌ [AUTH CLIENT] Errore verifica token:', error);
-        res.status(401).json({ 
-            valid: false, 
-            error: 'Token non valido' 
-        });
-    }
-});
-
-// GET /api/auth/profile - Profilo utente
+// GET /api/auth/profile - Profilo utente autenticato
 router.get('/auth/profile', async (req, res) => {
     try {
         const token = req.headers.authorization?.replace('Bearer ', '');
@@ -193,18 +205,38 @@ router.get('/auth/profile', async (req, res) => {
             });
         }
 
+        // Carica anche i dati della whitelist
+        const whitelistEntry = await ElectionWhitelist.findOne({
+            where: {
+                userId: user.id,
+                electionId: decoded.electionId
+            },
+            include: [{
+                model: Election,
+                as: 'election',
+                attributes: ['id', 'title', 'status', 'startDate', 'endDate']
+            }]
+        });
+
         console.log('👤 [AUTH CLIENT] Profilo caricato per:', user.email);
 
         res.json({
             user: {
                 id: user.id,
                 email: user.email,
-                nome: user.nome,
-                cognome: user.cognome,
-                codiceFiscale: user.codiceFiscale,
+                nome: user.firstName,
+                cognome: user.lastName,
+                codiceFiscale: user.taxCode,
                 status: user.status,
                 createdAt: user.createdAt
-            }
+            },
+            election: whitelistEntry?.election || null,
+            whitelist: whitelistEntry ? {
+                id: whitelistEntry.id,
+                authorizedAt: whitelistEntry.authorizedAt,
+                hasVoted: whitelistEntry.hasVoted,
+                canVote: !whitelistEntry.hasVoted
+            } : null
         });
 
     } catch (error) {
@@ -219,10 +251,10 @@ router.get('/auth/profile', async (req, res) => {
 // WHITELIST MANAGEMENT
 // ==========================================
 
-// GET /api/whitelist/check - Verifica status whitelist
+// GET /api/whitelist/check - Verifica status whitelist per elezione
 router.get('/whitelist/check', async (req, res) => {
     try {
-        const { codice_fiscale, email } = req.query;
+        const { codice_fiscale, email, electionId } = req.query;
         console.log('📋 [AUTH CLIENT] Verifica whitelist per:', codice_fiscale || email);
 
         if (!codice_fiscale && !email) {
@@ -231,28 +263,60 @@ router.get('/whitelist/check', async (req, res) => {
             });
         }
 
+        // Trova l'elezione
+        const currentElection = await getCurrentElection(electionId);
+        if (!currentElection) {
+            return res.status(400).json({ 
+                error: 'Elezione non trovata' 
+            });
+        }
+
+        // Trova l'utente
         const whereClause = {};
         if (codice_fiscale) {
-            whereClause.codiceFiscale = codice_fiscale.toUpperCase();
+            whereClause.taxCode = codice_fiscale.toUpperCase();
         }
         if (email) {
             whereClause.email = email.toLowerCase();
         }
 
-        const whitelistEntry = await Whitelist.findOne({
+        const user = await User.findOne({
             where: whereClause
+        });
+
+        if (!user) {
+            return res.json({
+                inWhitelist: false,
+                isActive: false,
+                canVote: false,
+                message: 'Utente non registrato nel sistema'
+            });
+        }
+
+        // Verifica whitelist per l'elezione
+        const whitelistEntry = await ElectionWhitelist.findOne({
+            where: {
+                userId: user.id,
+                electionId: currentElection.id
+            }
         });
 
         const response = {
             inWhitelist: !!whitelistEntry,
-            isActive: whitelistEntry?.isActive || false,
-            canVote: whitelistEntry?.isActive && !whitelistEntry?.hasVoted
+            isActive: !!whitelistEntry,
+            canVote: whitelistEntry && !whitelistEntry.hasVoted,
+            election: {
+                id: currentElection.id,
+                title: currentElection.title,
+                status: currentElection.status
+            }
         };
 
         if (whitelistEntry) {
             response.details = {
-                addedAt: whitelistEntry.createdAt,
-                hasVoted: whitelistEntry.hasVoted
+                addedAt: whitelistEntry.authorizedAt,
+                hasVoted: whitelistEntry.hasVoted,
+                votedAt: whitelistEntry.votedAt
             };
         }
 
@@ -267,10 +331,10 @@ router.get('/whitelist/check', async (req, res) => {
     }
 });
 
-// POST /api/whitelist/register - Registrazione in whitelist (se abilitata)
+// POST /api/whitelist/register - Registrazione richiesta per whitelist
 router.post('/whitelist/register', async (req, res) => {
     try {
-        const { email, codice_fiscale, nome, cognome } = req.body;
+        const { email, codice_fiscale, nome, cognome, electionId } = req.body;
         console.log('📝 [AUTH CLIENT] Richiesta registrazione whitelist:', email);
 
         // Validazione input
@@ -280,79 +344,135 @@ router.post('/whitelist/register', async (req, res) => {
             });
         }
 
-        // Verifica se già esiste
-        const existingEntry = await Whitelist.findOne({
+        // Trova o crea l'elezione
+        const currentElection = await getCurrentElection(electionId);
+        if (!currentElection) {
+            return res.status(400).json({ 
+                error: 'Elezione non trovata' 
+            });
+        }
+
+        // Verifica se l'utente esiste già
+        const existingUser = await User.findOne({
             where: {
                 [Op.or]: [
                     { email: email.toLowerCase() },
-                    { codiceFiscale: codice_fiscale.toUpperCase() }
+                    { taxCode: codice_fiscale.toUpperCase() }
                 ]
             }
         });
 
-        if (existingEntry) {
-            return res.status(409).json({ 
-                error: 'Email o codice fiscale già registrati' 
+        let user;
+        if (existingUser) {
+            user = existingUser;
+        } else {
+            // Crea nuovo utente
+            user = await User.create({
+                email: email.toLowerCase(),
+                taxCode: codice_fiscale.toUpperCase(),
+                firstName: nome.trim(),
+                lastName: cognome.trim(),
+                status: 'pending' // In attesa di approvazione
             });
         }
 
-        // Crea nuova entry in whitelist
-        const whitelistEntry = await Whitelist.create({
-            email: email.toLowerCase(),
-            codiceFiscale: codice_fiscale.toUpperCase(),
-            nome: nome.trim(),
-            cognome: cognome.trim(),
-            isActive: false, // Deve essere attivata dall'admin
-            hasVoted: false
-        });
-
-        // Crea anche l'utente se non esiste
-        const [user, created] = await User.findOrCreate({
-            where: { 
-                email: email.toLowerCase(),
-                codiceFiscale: codice_fiscale.toUpperCase()
-            },
-            defaults: {
-                email: email.toLowerCase(),
-                codiceFiscale: codice_fiscale.toUpperCase(),
-                nome: nome.trim(),
-                cognome: cognome.trim(),
-                status: 'pending' // In attesa di attivazione
+        // Verifica se già nella whitelist per questa elezione
+        const existingWhitelist = await ElectionWhitelist.findOne({
+            where: {
+                userId: user.id,
+                electionId: currentElection.id
             }
         });
 
-        console.log('✅ [AUTH CLIENT] Registrazione whitelist completata per:', email);
+        if (existingWhitelist) {
+            return res.status(409).json({ 
+                error: 'Già registrato per questa elezione' 
+            });
+        }
+
+        // NOTA: La registrazione crea solo la richiesta, 
+        // l'admin deve poi approvare aggiungendo alla whitelist
+        console.log('✅ [AUTH CLIENT] Registrazione richiesta per:', email);
 
         res.status(201).json({
             success: true,
-            message: 'Registrazione completata. In attesa di approvazione da parte degli amministratori.',
-            whitelistId: whitelistEntry.id,
-            userId: user.id
+            message: 'Richiesta di registrazione ricevuta. L\'approvazione è richiesta dagli amministratori.',
+            user: {
+                id: user.id,
+                email: user.email,
+                nome: user.firstName,
+                cognome: user.lastName
+            },
+            election: {
+                id: currentElection.id,
+                title: currentElection.title
+            }
         });
 
     } catch (error) {
-        console.error('❌ [AUTH CLIENT] Errore registrazione whitelist:', error);
+        console.error('❌ [AUTH CLIENT] Errore registrazione:', error);
         res.status(500).json({ 
             error: 'Errore nella registrazione',
-            details: error.message 
+            details: error.message
+        });
+    }
+});
+
+// GET /api/elections/current - Ottieni elezione corrente
+router.get('/elections/current', async (req, res) => {
+    try {
+        const currentElection = await getCurrentElection();
+        
+        if (!currentElection) {
+            return res.status(404).json({ 
+                error: 'Nessuna elezione disponibile' 
+            });
+        }
+
+        res.json({
+            success: true,
+            election: {
+                id: currentElection.id,
+                title: currentElection.title,
+                description: currentElection.description,
+                status: currentElection.status,
+                startDate: currentElection.startDate,
+                endDate: currentElection.endDate,
+                votingMethod: currentElection.votingMethod
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ [AUTH CLIENT] Errore elezione corrente:', error);
+        res.status(500).json({ 
+            error: 'Errore nel recupero dell\'elezione corrente' 
         });
     }
 });
 
 // ==========================================
-// HEALTH CHECK
+// STATISTICHE E SALUTE
 // ==========================================
 
 // GET /api/health - Health check
-router.get('/health', (req, res) => {
-    res.json({ 
-        status: 'ok', 
-        service: 'auth-client',
-        timestamp: new Date().toISOString(),
-        database: sequelize.authenticate ? 'connected' : 'disconnected'
-    });
+router.get('/health', async (req, res) => {
+    try {
+        const stats = await getQuickStats();
+        
+        res.json({
+            status: 'ok',
+            service: 'auth-client',
+            timestamp: new Date().toISOString(),
+            database: 'connected',
+            stats
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            service: 'auth-client',
+            error: error.message
+        });
+    }
 });
-
-console.log('[AUTH CLIENT ROUTES] ✓ Route client auth caricate');
 
 module.exports = router;
