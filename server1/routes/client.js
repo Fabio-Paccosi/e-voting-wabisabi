@@ -11,6 +11,30 @@ console.log('[CLIENT ROUTES] Configurazione servizi:');
 console.log(`  Auth Service: ${AUTH_SERVICE_URL}`);
 console.log(`  Vote Service: ${VOTE_SERVICE_URL}`);
 
+// Token di autenticazione
+const jwt = require('jsonwebtoken');
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+
+// Middleware per estrarre utente dal token e aggiungerlo ai header
+const addUserToHeaders = (req, res, next) => {
+    try {
+        const token = req.headers.authorization?.replace('Bearer ', '');
+        
+        if (token) {
+            const decoded = jwt.verify(token, JWT_SECRET);
+            // Aggiungi l'ID utente ai header per i servizi downstream
+            req.headers['x-user-id'] = decoded.id;
+            req.headers['x-user-email'] = decoded.email;
+        }
+        
+        next();
+    } catch (error) {
+        // In caso di errore JWT, lascia che il servizio downstream gestisca l'autenticazione
+        console.log('[CLIENT GATEWAY] ⚠️ Token JWT non valido o mancante');
+        next();
+    }
+};
+
 // Helper per chiamate ai servizi con retry
 const callService = async (service, endpoint, method = 'GET', data = null, headers = {}) => {
     const baseURL = service === 'auth' ? AUTH_SERVICE_URL : VOTE_SERVICE_URL;
@@ -117,19 +141,18 @@ router.get('/auth/profile', async (req, res) => {
 });
 
 // ==========================================
-// VOTAZIONI
+// ELEZIONI E VOTAZIONI
 // ==========================================
 
 // GET /api/elections - Lista elezioni disponibili per l'utente
-router.get('/elections', async (req, res) => {
+router.get('/elections', addUserToHeaders, async (req, res) => {
     try {
         console.log('[CLIENT GATEWAY] Richiesta elezioni disponibili');
         const queryString = new URLSearchParams(req.query).toString();
         const endpoint = `/api/elections${queryString ? '?' + queryString : ''}`;
         
-        const response = await callService('vote', endpoint, 'GET', null, {
-            'Authorization': req.headers.authorization
-        });
+        // Passa tutti i header inclusi quelli con informazioni utente
+        const response = await callService('vote', endpoint, 'GET', null, req.headers);
         console.log('[CLIENT GATEWAY] ✓ Elezioni caricate');
         res.json(response);
     } catch (error) {
@@ -142,15 +165,35 @@ router.get('/elections', async (req, res) => {
     }
 });
 
+// GET /api/elections/available - Lista elezioni disponibili per l'utente (alias semantico)
+router.get('/elections/available', addUserToHeaders, async (req, res) => {
+    try {
+        console.log('[CLIENT GATEWAY] Richiesta elezioni disponibili (available endpoint)');
+        const queryString = new URLSearchParams(req.query).toString();
+        const endpoint = `/api/elections${queryString ? '?' + queryString : ''}`;
+        
+        // Passa tutti i header inclusi quelli con informazioni utente
+        const response = await callService('vote', endpoint, 'GET', null, req.headers);
+        console.log('[CLIENT GATEWAY] ✓ Elezioni disponibili caricate');
+        res.json(response);
+    } catch (error) {
+        console.error('[CLIENT GATEWAY] ✗ Errore caricamento elezioni disponibili:', error.message);
+        res.status(error.status || 500).json({ 
+            error: 'Errore nel caricamento delle elezioni',
+            details: error.originalError || error.message,
+            service: 'vote'
+        });
+    }
+});
+
 // GET /api/elections/:id - Dettagli elezione specifica
-router.get('/elections/:id', async (req, res) => {
+router.get('/elections/:id', addUserToHeaders, async (req, res) => {
     try {
         const { id } = req.params;
         console.log(`[CLIENT GATEWAY] Richiesta dettagli elezione ${id}`);
         
-        const response = await callService('vote', `/api/elections/${id}`, 'GET', null, {
-            'Authorization': req.headers.authorization
-        });
+        // Passa tutti i header inclusi quelli con informazioni utente
+        const response = await callService('vote', `/api/elections/${id}`, 'GET', null, req.headers);
         console.log(`[CLIENT GATEWAY] ✓ Dettagli elezione ${id} caricati`);
         res.json(response);
     } catch (error) {
@@ -164,14 +207,13 @@ router.get('/elections/:id', async (req, res) => {
 });
 
 // POST /api/elections/:id/vote - Invio voto
-router.post('/elections/:id/vote', async (req, res) => {
+router.post('/elections/:id/vote', addUserToHeaders, async (req, res) => {
     try {
         const { id } = req.params;
         console.log(`[CLIENT GATEWAY] Invio voto per elezione ${id}`);
         
-        const response = await callService('vote', `/api/elections/${id}/vote`, 'POST', req.body, {
-            'Authorization': req.headers.authorization
-        });
+        // Passa tutti i header inclusi quelli con informazioni utente
+        const response = await callService('vote', `/api/elections/${id}/vote`, 'POST', req.body, req.headers);
         console.log(`[CLIENT GATEWAY] ✓ Voto inviato per elezione ${id}`);
         res.json(response);
     } catch (error) {
@@ -188,6 +230,7 @@ router.post('/elections/:id/vote', async (req, res) => {
 // REGISTRAZIONE WHITELIST
 // ==========================================
 
+/*
 // GET /api/whitelist/check - Verifica se l'utente è in whitelist
 router.get('/whitelist/check', async (req, res) => {
     try {
@@ -226,6 +269,7 @@ router.post('/whitelist/register', async (req, res) => {
         });
     }
 });
+*/
 
 // ==========================================
 // HEALTH CHECK
