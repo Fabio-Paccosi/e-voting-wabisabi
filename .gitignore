@@ -1,3 +1,4 @@
 /backup/
 /admin.logs/
 /debug/
+/client/node_modules/.cache/
