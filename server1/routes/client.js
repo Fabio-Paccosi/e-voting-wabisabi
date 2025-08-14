@@ -227,10 +227,9 @@ router.post('/elections/:id/vote', addUserToHeaders, async (req, res) => {
 });
 
 // ==========================================
-// REGISTRAZIONE WHITELIST
+// WHITELIST
 // ==========================================
 
-/*
 // GET /api/whitelist/check - Verifica se l'utente è in whitelist
 router.get('/whitelist/check', async (req, res) => {
     try {
@@ -269,7 +268,6 @@ router.post('/whitelist/register', async (req, res) => {
         });
     }
 });
-*/
 
 // ==========================================
 // HEALTH CHECK
