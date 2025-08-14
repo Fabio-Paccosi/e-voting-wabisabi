@@ -466,6 +466,7 @@ const AdminDashboard = () => {
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h3 className="text-xl font-semibold text-gray-800">{election.title}</h3>
+                  <h4 className="text-xs font-normal text-gray-400">ID elezione: {election.id}</h4>
                   <p className="text-gray-600 mt-1">{election.description}</p>
                   <div className="flex items-center mt-2 space-x-4 text-sm text-gray-500">
                     <span className="flex items-center">
