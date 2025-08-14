@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Calendar, Users, Vote, Clock, CheckCircle, AlertTriangle, LogOut } from 'lucide-react';
+import { Calendar, Users, Vote, Clock, CheckCircle, AlertTriangle, List, LogOut } from 'lucide-react';
 import api from '../services/api';
 
 const ElectionSelectionPage = () => {
@@ -75,7 +75,7 @@ const ElectionSelectionPage = () => {
       <div className="page-header">
         <div className="user-info">
           <div className="user-details">
-            <h2>Benvenuto, {user?.firstName} {user?.lastName}</h2>
+            <h2>Benvenuto/a, {user?.nome} {user?.cognome}</h2>
             <p>Seleziona un'elezione per esprimere il tuo voto anonimo</p>
           </div>
           <button onClick={handleLogout} className="logout-button">
@@ -134,7 +134,7 @@ const ElectionSelectionPage = () => {
                     </div>
                     <div className="detail-item">
                       <Users size={16} />
-                      <span>{election.candidatesCount || 0} candidati</span>
+                      <span>{election.candidates.length || 0} candidati</span>
                     </div>
                   </div>
 
@@ -191,15 +191,77 @@ const ElectionSelectionPage = () => {
         </div>
       )}
 
-      <div className="page-footer">
-        <div className="privacy-info">
-          <h4>🔒 Protezione della Privacy</h4>
-          <p>
-            Il sistema WabiSabi garantisce l'anonimato completo del tuo voto attraverso 
-            l'uso di credenziali crittografiche avanzate e protocolli di mixing Bitcoin.
-          </p>
+    <div class="page-footer">
+            <h3 className="elections-title">
+                <List size={24} />
+                Informativa sul sistama di E-Voting WabiSabi
+            </h3>
+            <div class="privacy-info">
+                <h4>🔒 Protezione della Privacy</h4>
+                <p>
+                    Il sistema WabiSabi garantisce l'anonimato completo del tuo voto attraverso
+                    l'uso di credenziali crittografiche avanzate (KVAC) e commitment omomorfi.
+                    Tutti i dati sensibili passano attraverso reti anonime come Tor, impedendo
+                    la raccolta di metadati e garantendo che nemmeno il coordinatore possa
+                    collegare i voti alle identità degli elettori.
+                </p>
+                <ul class="feature-list">
+                    <li>Credenziali anonime verificabili (KVAC)</li>
+                    <li>Commitment omomorfi per nascondere il contenuto del voto</li>
+                    <li>Traffico automatico attraverso rete Tor</li>
+                    <li>Impossibilità di tracciamento dell'identità del votante</li>
+                </ul>
+            </div>
+
+            <div class="privacy-info">
+                <h4>🛡️ Sicurezza e Integrità</h4>
+                <p>
+                    Il protocollo WabiSabi implementa controlli crittografici robusti basati su
+                    zero-knowledge proofs e registrazione immutabile su blockchain Bitcoin.
+                    I serial numbers univoci prevengono il doppio voto e le frodi, mentre
+                    i commitment garantiscono che i voti siano registrati esattamente come espressi.
+                </p>
+                <ul class="feature-list">
+                    <li>Zero-knowledge proofs per validazione sicura</li>
+                    <li>Serial numbers univoci anti-frode</li>
+                    <li>Registrazione immutabile su blockchain</li>
+                    <li>Prevenzione automatica del doppio voto</li>
+                </ul>
+            </div>
+
+            <div class="privacy-info">
+                <h4>🔍 Verificabilità Pubblica</h4>
+                <p>
+                    Ogni voto è registrato pubblicamente sulla blockchain e può essere verificato
+                    matematicamente senza rivelare il contenuto o l'identità del votante.
+                    I commitment e i seriali vengono validati crittograficamente durante
+                    l'intero processo, garantendo trasparenza e auditabilità.
+                </p>
+                <ul class="feature-list">
+                    <li>Registrazione pubblica verificabile</li>
+                    <li>Validazione matematica dei commitment</li>
+                    <li>Auditabilità completa del processo</li>
+                    <li>Trasparenza senza compromettere la privacy</li>
+                </ul>
+            </div>
+
+            <div class="privacy-info">
+                <h4>⚡ Affidabilità e Decentralizzazione</h4>
+                <p>
+                    La struttura decentralizzata della blockchain Bitcoin, combinata con
+                    i controlli crittografici distribuiti, rende il sistema altamente
+                    resistente a guasti e comportamenti malevoli. Il protocollo mantiene
+                    la neutralità e confidenzialità dei dati anche in caso di compromissione
+                    parziale del coordinatore.
+                </p>
+                <ul class="feature-list">
+                    <li>Architettura completamente decentralizzata</li>
+                    <li>Resistenza a guasti e attacchi</li>
+                    <li>Controlli distribuiti multi-livello</li>
+                    <li>Funzionamento anche con coordinatore compromesso</li>
+                </ul>
+            </div>
         </div>
-      </div>
     </div>
   );
 };
