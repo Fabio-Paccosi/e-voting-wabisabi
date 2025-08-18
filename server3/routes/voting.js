@@ -38,7 +38,7 @@ const extractUserFromHeaders = (req, res, next) => {
 
 // Configurazione WabiSabi
 const WABISABI_CONFIG = {
-    COINJOIN_THRESHOLD: 5, // Minimo voti per trigger CoinJoin
+    COINJOIN_THRESHOLD: 2, // Minimo voti per trigger CoinJoin
     CREDENTIAL_EXPIRY: 3600000, // 1 ora in millisecondi
     MAX_VOTING_SESSIONS: 10, // Massimo sessioni attive per elezione
     NETWORK: process.env.BITCOIN_NETWORK || 'testnet'
