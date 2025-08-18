@@ -144,56 +144,78 @@ class CoinJoinTriggerService {
 
     async buildCoinJoinTransaction(election, votes) {
         try {
-            console.log(`🔨 [CoinJoin Service] Costruzione transazione per ${votes.length} voti`);
-
-            // Raggruppa i commitment per candidato
+            console.log(`[CoinJoin Service] Costruzione transazione per ${votes.length} voti`);
+    
             const aggregatedCommitments = {};
             
             for (const vote of votes) {
-                // Decodifica il commitment (assumiamo sia JSON)
-                const commitment = JSON.parse(vote.commitment);
-                const candidateValue = commitment.candidateValue || 0;
-                
-                aggregatedCommitments[candidateValue] = (aggregatedCommitments[candidateValue] || 0) + 1;
-            }
-
-            // Ottieni candidati dell'elezione
-            const candidates = await Candidate.findAll({
-                where: { electionId: election.id }
-            });
-
-            // Determina la rete Bitcoin
-            const network = election.blockchainNetwork === 'mainnet' 
-                ? bitcoinjs.networks.bitcoin 
-                : bitcoinjs.networks.testnet;
-
-            // Per ora restituiamo una transazione mock
-            // In produzione, costruire vera transazione Bitcoin
-            const mockTx = {
-                network: election.blockchainNetwork,
-                inputs: votes.length,
-                outputs: [],
-                toHex: () => `mock_tx_${Date.now()}`
-            };
-
-            // Aggiungi output per ogni candidato con voti
-            for (const candidate of candidates) {
-                const voteCount = aggregatedCommitments[candidate.valueEncoding] || 0;
-                if (voteCount > 0) {
-                    mockTx.outputs.push({
-                        address: candidate.bitcoinAddress,
-                        votes: voteCount,
-                        candidateId: candidate.id
-                    });
+                try {
+                    let commitment;
+                    
+                    // Gestione sicura del parsing del commitment
+                    if (typeof vote.commitment === 'string') {
+                        // Verifica se è un JSON valido
+                        if (vote.commitment.startsWith('{') || vote.commitment.startsWith('[')) {
+                            try {
+                                commitment = JSON.parse(vote.commitment);
+                            } catch (parseError) {
+                                console.error(`[CoinJoin] Errore parsing JSON per voto ${vote.id}:`, parseError);
+                                console.log(`[CoinJoin] Commitment raw:`, vote.commitment);
+                                
+                                // Fallback: tratta come commitment semplice
+                                commitment = { candidateValue: vote.commitment };
+                            }
+                        } else {
+                            // Commitment è una stringa semplice, non JSON
+                            commitment = { candidateValue: vote.commitment };
+                        }
+                    } else if (typeof vote.commitment === 'object') {
+                        // Commitment è già un oggetto
+                        commitment = vote.commitment;
+                    } else {
+                        console.error(`[CoinJoin] Tipo commitment non supportato per voto ${vote.id}:`, typeof vote.commitment);
+                        continue;
+                    }
+    
+                    const candidateValue = commitment.candidateValue || commitment.candidate || 0;
+                    
+                    aggregatedCommitments[candidateValue] = (aggregatedCommitments[candidateValue] || 0) + 1;
+                    
+                    console.log(`[CoinJoin] Voto ${vote.id} processato per candidato ${candidateValue}`);
+                    
+                } catch (voteError) {
+                    console.error(`[CoinJoin] Errore processamento voto ${vote.id}:`, voteError);
+                    continue;
                 }
             }
-
-            console.log(`🔨 [CoinJoin Service] Transazione costruita con ${mockTx.outputs.length} output`);
-            return mockTx;
+    
+            console.log(`[CoinJoin] Aggregazione completata:`, aggregatedCommitments);
+    
+            // Continua con la costruzione della transazione...
+            return await this.buildBitcoinTransaction(election, aggregatedCommitments);
+    
         } catch (error) {
-            console.error('❌ [CoinJoin Service] Errore costruzione transazione:', error);
+            console.error(`[CoinJoin] Errore costruzione transazione:`, error);
             throw error;
         }
+    }
+    
+    // Funzione helper per validare il formato del commitment
+    validateCommitment(commitment) {
+        if (typeof commitment === 'string') {
+            // Se è una stringa, verifica se è JSON valido
+            try {
+                const parsed = JSON.parse(commitment);
+                return { valid: true, data: parsed };
+            } catch (e) {
+                // Non è JSON, trattalo come valore semplice
+                return { valid: true, data: { candidateValue: commitment } };
+            }
+        } else if (typeof commitment === 'object' && commitment !== null) {
+            return { valid: true, data: commitment };
+        }
+        
+        return { valid: false, error: 'Formato commitment non valido' };
     }
 
     async broadcastTransaction(tx, network) {
