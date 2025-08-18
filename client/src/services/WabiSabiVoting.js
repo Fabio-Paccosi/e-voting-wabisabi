@@ -168,12 +168,14 @@ class WabiSabiVoting {
     try {
       console.log('[WABISABI] 🔐 Generazione prova zero-knowledge...');
       
+      const timestamp = Date.now();
+      
       // Create proof data structure
       const proofData = {
         commitment: voteCommitment.commitment,
         serialNumber: credentialData.serialNumber,
         candidateEncoding: candidateEncoding,
-        timestamp: Date.now(),
+        timestamp: timestamp,
         nonce: randomBytes(16).toString('hex')
       };
       
@@ -181,21 +183,28 @@ class WabiSabiVoting {
       const proofString = JSON.stringify(proofData);
       const proof = createHash('sha256').update(proofString).digest('hex');
       
-      // ✅ FIXED: Struttura che il server si aspetta
+      // CREATE PUBLIC INPUTS - questo era mancante!
+      const publicInputs = [
+        credentialData.serialNumber.substring(0, 16), // Partial serial per verifica
+        voteCommitment.commitment.substring(0, 32),    // Partial commitment
+        timestamp.toString(),                          // Timestamp per verifica età
+        candidateEncoding || 'default'                 // Encoding candidato
+      ];
+      
+      console.log('[WABISABI] ✅ Prova zero-knowledge generata con public inputs');
+      
+      // RETURN COMPLETE ZK PROOF STRUCTURE
       return {
-        proof,
-        publicInputs: [
-          credentialData.serialNumber,           // Include serial number
-          voteCommitment.commitment,             // Include commitment
-          candidateEncoding.toString(),          // Include candidate encoding
-          proofData.timestamp.toString()         // Include timestamp
-        ],
-        timestamp: proofData.timestamp,          //Aggiungi timestamp per verifica età
-        isValid: true
+        proof: proof,                    // Hash della prova
+        publicInputs: publicInputs,      // Input pubblici richiesti dal server
+        timestamp: timestamp,            // Timestamp esplicito
+        proofData: proofData,           // Dati originali per debug
+        nonce: proofData.nonce          // Nonce per unicità
       };
+      
     } catch (error) {
       console.error('[WABISABI] ❌ Errore generazione ZK proof:', error.message);
-      throw new Error(`Errore generazione prova zero-knowledge: ${error.message}`);
+      throw new Error(`Errore generazione ZK proof: ${error.message}`);
     }
   }
 

@@ -288,27 +288,27 @@ router.post('/submit', async (req, res) => {
             submittedAt: new Date()   
         });
 
-        // 7. ✅ CORRETTO: marca credenziale come usata
+        // 7. marca credenziale come usata
         await credential.update({
-            isUsed: true,           // ✅ camelCase
-            usedAt: new Date()      // ✅ camelCase (se il campo esiste)
+            isUsed: true,          
+            usedAt: new Date()   
         });
 
-        // 8. ✅ CORRETTO: marca utente come votato
+        // 8. marca utente come votato
         await ElectionWhitelist.update(
             { 
-                hasVoted: true,       // ✅ camelCase
-                votedAt: new Date()   // ✅ camelCase
+                hasVoted: true,     
+                votedAt: new Date()  
             },
             { 
                 where: { 
-                    userId: credential.userId,    // ✅ camelCase
-                    electionId: electionId        // ✅ camelCase
+                    userId: credential.user_id,   
+                    electionId: electionId      
                 } 
             }
         );
 
-        // 9. ✅ CORRETTO: conteggio voti pending
+        // 9. conteggio voti pending
         const pendingVotes = await Vote.count({
             where: {
                 sessionId: votingSession.id,  // ✅ camelCase
