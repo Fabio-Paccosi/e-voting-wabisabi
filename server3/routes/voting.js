@@ -163,9 +163,9 @@ router.post('/credentials', extractUserFromHeaders, async (req, res) => {
         // Verifica che non esistano già credenziali non usate per questo utente/elezione
         const existingCredential = await Credential.findOne({
             where: {
-                userId,
-                isUsed: false,
-                createdAt: {
+                user_id: userId,
+                is_used: false,
+                created_at: {
                     [require('sequelize').Op.gt]: new Date(Date.now() - WABISABI_CONFIG.CREDENTIAL_EXPIRY)
                 }
             }
@@ -176,17 +176,17 @@ router.post('/credentials', extractUserFromHeaders, async (req, res) => {
             return res.json({
                 success: true,
                 credentialId: existingCredential.id,
-                serialNumber: existingCredential.serialNumber,
+                serialNumber: existingCredential.serial_number,
                 signature: existingCredential.signature,
                 nonce: existingCredential.nonce,
-                issuedAt: existingCredential.issuedAt,
-                expiresAt: new Date(existingCredential.createdAt.getTime() + WABISABI_CONFIG.CREDENTIAL_EXPIRY)
+                issuedAt: existingCredential.issued_at,
+                expiresAt: new Date(existingCredential.created_at.getTime() + WABISABI_CONFIG.CREDENTIAL_EXPIRY)
             });
         }
 
         // Genera nuove credenziali KVAC
         const credentialData = await WabiSabiKVACService.generateCredentials({
-            userId,
+            user_id: userId,        
             electionId,
             nonce,
             userEmail: req.user.email
@@ -194,12 +194,12 @@ router.post('/credentials', extractUserFromHeaders, async (req, res) => {
 
         // Salva nel database
         const credential = await Credential.create({
-            userId,
-            serialNumber: credentialData.serialNumber,
+            user_id: userId,        
+            serial_number: credentialData.serialNumber,  
             nonce,
             signature: credentialData.signature,
-            isUsed: false,
-            issuedAt: new Date()
+            is_used: false,         
+            issued_at: new Date()  
         });
 
         console.log(`[VOTING] ✅ Credenziali KVAC generate: ${credential.id}`);
@@ -207,11 +207,11 @@ router.post('/credentials', extractUserFromHeaders, async (req, res) => {
         res.json({
             success: true,
             credentialId: credential.id,
-            serialNumber: credential.serialNumber,
+            serialNumber: credential.serial_number,
             signature: credential.signature,
             nonce: credential.nonce,
-            issuedAt: credential.issuedAt,
-            expiresAt: new Date(credential.createdAt.getTime() + WABISABI_CONFIG.CREDENTIAL_EXPIRY)
+            issuedAt: credential.issued_at,
+            expiresAt: new Date(credential.created_at.getTime() + WABISABI_CONFIG.CREDENTIAL_EXPIRY)
         });
 
     } catch (error) {
@@ -245,19 +245,21 @@ router.post('/submit', async (req, res) => {
 
         // 2. Valida credenziale KVAC
         const credential = await Credential.findOne({
-            where: { serialNumber }
+            where: { 
+                serial_number: serialNumber  // ✅ CORRETTO: usa serialNumber dal req.body
+            }
         });
 
         if (!credential) {
             return res.status(400).json({ error: 'Credenziale non valida' });
         }
 
-        if (credential.isUsed) {
+        if (credential.is_used) {  // ✅ CORRETTO: snake_case
             return res.status(400).json({ error: 'Credenziale già utilizzata (double voting prevented)' });
         }
 
         // Verifica che la credenziale non sia scaduta
-        const credentialAge = Date.now() - credential.createdAt.getTime();
+        const credentialAge = Date.now() - credential.created_at.getTime();  // ✅ CORRETTO: snake_case
         if (credentialAge > WABISABI_CONFIG.CREDENTIAL_EXPIRY) {
             return res.status(400).json({ error: 'Credenziale scaduta' });
         }
@@ -277,7 +279,7 @@ router.post('/submit', async (req, res) => {
         // 4. Trova sessione di voto attiva
         let votingSession = await VotingSession.findOne({
             where: {
-                electionId,
+                election_id: electionId,  // ✅ CORRETTO: snake_case se il campo è così nel DB
                 status: ['input_registration', 'output_registration']
             }
         });
@@ -288,29 +290,37 @@ router.post('/submit', async (req, res) => {
 
         // 5. Salva il voto anonimo
         const vote = await Vote.create({
-            sessionId: votingSession.id,
-            serialNumber,
+            session_id: votingSession.id,  // ✅ CORRETTO: snake_case
+            serial_number: serialNumber,   // ✅ CORRETTO: snake_case
             commitment,
             status: 'pending',
-            submittedAt: new Date()
+            submitted_at: new Date()       // ✅ CORRETTO: snake_case se il campo è così nel DB
         });
 
         // 6. Marca la credenziale come usata
         await credential.update({
-            isUsed: true,
-            usedAt: new Date()
+            is_used: true,         // ✅ CORRETTO: snake_case
+            used_at: new Date()    // ✅ CORRETTO: snake_case se il campo esiste
         });
 
         // 7. Marca l'utente come votato (mantenendo l'anonimato del voto)
         await ElectionWhitelist.update(
-            { hasVoted: true, votedAt: new Date() },
-            { where: { userId: credential.userId, electionId } }
+            { 
+                has_voted: true,      // ✅ CORRETTO: snake_case
+                voted_at: new Date()  // ✅ CORRETTO: snake_case
+            },
+            { 
+                where: { 
+                    user_id: credential.user_id,  // ✅ CORRETTO: snake_case
+                    election_id: electionId       // ✅ CORRETTO: snake_case
+                } 
+            }
         );
 
         // 8. Controlla se raggiunta soglia per CoinJoin
         const pendingVotes = await Vote.count({
             where: {
-                sessionId: votingSession.id,
+                session_id: votingSession.id,  // ✅ CORRETTO: snake_case
                 status: 'pending'
             }
         });
