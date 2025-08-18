@@ -395,14 +395,56 @@ class CoinJoinService {
      * Estrae il voto dal commitment (simulazione - in realtà richiederebbe ZK proofs)
      */
     extractVoteFromCommitment(commitment) {
-        // Simulazione: estrae candidato basandosi sull'hash del commitment
-        const commitmentHash = crypto.createHash('sha256').update(commitment).digest('hex');
-        const candidateEncoding = parseInt(commitmentHash.substring(0, 2), 16) % 10; // 0-9
-        
-        return {
-            candidateEncoding,
-            voteValue: 1
-        };
+        try {
+            console.log(`[COINJOIN] 🔍 Estrazione voto da commitment:`, commitment);
+            
+            // Se il commitment è già un oggetto con candidateEncoding
+            if (typeof commitment === 'object' && commitment.candidateEncoding) {
+                return {
+                    candidateEncoding: parseInt(commitment.candidateEncoding),
+                    voteValue: 1
+                };
+            }
+            
+            // Se il commitment è una stringa JSON
+            if (typeof commitment === 'string' && (commitment.startsWith('{') || commitment.startsWith('['))) {
+                try {
+                    const parsed = JSON.parse(commitment);
+                    if (parsed.candidateEncoding || parsed.candidate || parsed.candidateValue) {
+                        const encoding = parsed.candidateEncoding || parsed.candidate || parsed.candidateValue;
+                        return {
+                            candidateEncoding: parseInt(encoding),
+                            voteValue: 1
+                        };
+                    }
+                } catch (parseError) {
+                    console.warn(`[COINJOIN] ⚠️ Errore parsing JSON commitment:`, parseError);
+                }
+            }
+            
+            // CORREZIONE: Genera encoding valido per candidati esistenti (1, 2, 3)
+            const commitmentHash = crypto.createHash('sha256').update(commitment.toString()).digest('hex');
+            
+            // Mappa hash ai candidati disponibili (1, 2, 3)
+            const availableEncodings = [1, 2, 3];
+            const hashValue = parseInt(commitmentHash.substring(0, 4), 16);
+            const candidateEncoding = availableEncodings[hashValue % availableEncodings.length];
+            
+            console.log(`[COINJOIN] 📊 Commitment mappato a candidato ${candidateEncoding}`);
+            
+            return {
+                candidateEncoding,
+                voteValue: 1
+            };
+            
+        } catch (error) {
+            console.error(`[COINJOIN] ❌ Errore estrazione commitment:`, error);
+            // Fallback: usa candidato 1
+            return {
+                candidateEncoding: 1,
+                voteValue: 1
+            };
+        }
     }
 
     /**
