@@ -12,14 +12,15 @@ import {
   ArrowLeft,
   Lock,
   Bitcoin,
-  Users
+  Users,
+  User
 } from 'lucide-react';
 import WabiSabiVoting from '../services/WabiSabiVoting';
 import api from '../services/api';
 
 const VotingPage = () => {
   const { electionId } = useParams();
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const { voting, setVoting } = useVoting();
   const navigate = useNavigate();
 
@@ -37,30 +38,79 @@ const VotingPage = () => {
 
   const wabiSabiVoting = new WabiSabiVoting();
 
+  // Verifica autenticazione
   useEffect(() => {
+    if (!isAuthenticated || !user) {
+      console.log('[VOTING] Utente non autenticato, reindirizzando al login...');
+      navigate('/login');
+      return;
+    }
+    
     loadElectionData();
-  }, [electionId]);
+  }, [electionId, isAuthenticated, user]);
 
   const loadElectionData = async () => {
     try {
-        setLoading(true);
-        
-        const electionResponse = await api.get(`/elections/${electionId}`);
+      setLoading(true);
+      setError('');
+      
+      console.log('[VOTING] 📋 Caricamento dati elezione:', electionId);
+      console.log('[VOTING] 👤 Utente autenticato:', user.email);
+      
+      // Inizializza il servizio WabiSabi con i dati utente autenticato
+      try {
+        wabiSabiVoting.initialize();
+        console.log('[VOTING] ✅ Servizio WabiSabi inizializzato');
+      } catch (wabiError) {
+        console.error('[VOTING] ❌ Errore inizializzazione WabiSabi:', wabiError.message);
+        setError('Errore di autenticazione. Effettua nuovamente il login.');
+        setTimeout(() => navigate('/login'), 2000);
+        return;
+      }
+      
+      // Verifica eligibilità per questa elezione
+      try {
+        await wabiSabiVoting.validateVotingEligibility(electionId);
+        console.log('[VOTING] ✅ Eligibilità confermata');
+      } catch (eligibilityError) {
+        console.error('[VOTING] ❌ Verifica eligibilità fallita:', eligibilityError.message);
+        setError(eligibilityError.message);
+        return;
+      }
+      
+      // Carica dati elezione
+      const electionResponse = await api.get(`/elections/${electionId}`);
+      
+      if (!electionResponse.data.success) {
+        throw new Error(electionResponse.data.error || 'Errore caricamento elezione');
+      }
 
-        setElection(electionResponse.data.election);
-        setCandidates(electionResponse.data.election.candidates || []);
-        
-        // Controlla se l'utente ha gia votato
-        if (electionResponse.data.election.hasVoted) {
-            setError('Hai già votato in questa elezione');
-            setTimeout(() => navigate('/elections'), 3000);
-            return;
-        }
-        
-        setCurrentStep('selection');
+      setElection(electionResponse.data.election);
+      setCandidates(electionResponse.data.election.candidates || []);
+      
+      // Controlla se l'utente ha già votato
+      if (electionResponse.data.election.hasVoted || electionResponse.data.hasVoted) {
+        setError('Hai già votato in questa elezione');
+        setTimeout(() => navigate('/elections'), 3000);
+        return;
+      }
+      
+      console.log('[VOTING] ✅ Dati elezione caricati con successo');
+      setCurrentStep('selection');
+      
     } catch (err) {
-      console.error('Error loading election:', err);
-      setError('Errore nel caricamento dell\'elezione');
+      console.error('[VOTING] ❌ Errore caricamento elezione:', err.message);
+      
+      if (err.status === 401) {
+        setError('Sessione scaduta. Effettua nuovamente il login.');
+        setTimeout(() => navigate('/login'), 2000);
+      } else if (err.status === 403) {
+        setError('Non sei autorizzato a votare in questa elezione.');
+      } else if (err.status === 404) {
+        setError('Elezione non trovata.');
+      } else {
+        setError(err.message || 'Errore nel caricamento dell\'elezione');
+      }
     } finally {
       setLoading(false);
     }
@@ -69,6 +119,7 @@ const VotingPage = () => {
   const handleCandidateSelect = (candidate) => {
     setSelectedCandidate(candidate);
     setError('');
+    console.log('[VOTING] 🎯 Candidato selezionato:', candidate.name);
   };
 
   const startVotingProcess = async () => {
@@ -77,47 +128,52 @@ const VotingPage = () => {
       return;
     }
 
+    console.log('[VOTING] 🚀 Avvio processo di voto WabiSabi...');
     setCurrentStep('crypto');
     setCryptoStatus('Inizializzazione processo crittografico...');
     setVotingProgress(0);
 
     try {
       // Step 1: Generate Bitcoin address for this voting session
-      setCryptoStatus('Generazione indirizzo Bitcoin...');
-      setVotingProgress(20);
+      setCryptoStatus('Generazione indirizzo Bitcoin per sessione anonima...');
+      setVotingProgress(15);
       
-      const addressData = await wabiSabiVoting.generateVotingAddress(user.id, electionId);
+      const addressData = await wabiSabiVoting.generateVotingAddress(electionId);
       setBitcoinAddress(addressData.address);
+      console.log('[VOTING] ✅ Indirizzo Bitcoin generato:', addressData.address);
 
       // Step 2: Request KVAC credentials
       setCryptoStatus('Richiesta credenziali anonime KVAC...');
-      setVotingProgress(40);
+      setVotingProgress(35);
       
-      const credentialData = await wabiSabiVoting.requestCredentials(user.id, electionId);
+      const credentialData = await wabiSabiVoting.requestCredentials(electionId);
       setCredential(credentialData);
+      console.log('[VOTING] ✅ Credenziali KVAC ricevute');
 
       // Step 3: Create vote commitment
-      setCryptoStatus('Creazione commitment crittografico...');
-      setVotingProgress(60);
+      setCryptoStatus('Creazione commitment crittografico del voto...');
+      setVotingProgress(55);
       
       const voteCommitment = await wabiSabiVoting.createVoteCommitment(
         selectedCandidate.id,
         credentialData.serialNumber,
         addressData.privateKey
       );
+      console.log('[VOTING] ✅ Commitment voto creato');
 
       // Step 4: Generate zero-knowledge proof
-      setCryptoStatus('Generazione prova zero-knowledge...');
-      setVotingProgress(80);
+      setCryptoStatus('Generazione prova zero-knowledge per privacy...');
+      setVotingProgress(75);
       
       const zkProof = await wabiSabiVoting.generateZKProof(
         voteCommitment,
         credentialData,
-        selectedCandidate.valueEncoding
+        selectedCandidate.voteEncoding || selectedCandidate.id
       );
+      console.log('[VOTING] ✅ Prova zero-knowledge generata');
 
       // Step 5: Submit anonymous vote
-      setCryptoStatus('Invio voto anonimo...');
+      setCryptoStatus('Invio voto anonimo al sistema...');
       setVotingProgress(90);
       setCurrentStep('voting');
 
@@ -128,22 +184,40 @@ const VotingPage = () => {
         serialNumber: credentialData.serialNumber,
         bitcoinAddress: addressData.address
       });
+      console.log('[VOTING] ✅ Voto anonimo inviato');
 
       // Step 6: Wait for CoinJoin completion
-      setCryptoStatus('Attesa aggregazione CoinJoin...');
-      setVotingProgress(100);
+      setCryptoStatus('Attesa aggregazione CoinJoin e registrazione blockchain...');
+      setVotingProgress(95);
 
       await wabiSabiVoting.waitForCoinJoinCompletion(voteSubmissionResult.voteId);
+      console.log('[VOTING] ✅ Processo completato');
 
       // Complete
       setCurrentStep('complete');
-      setCryptoStatus('Voto registrato con successo sulla blockchain!');
+      setCryptoStatus('Voto registrato con successo sulla blockchain Bitcoin!');
+      setVotingProgress(100);
 
     } catch (err) {
-      console.error('Voting process error:', err);
-      setError(`Errore durante il processo di voto: ${err.message}`);
+      console.error('[VOTING] ❌ Errore processo di voto:', err.message);
+      
+      let errorMessage = 'Errore durante il processo di voto';
+      
+      if (err.message.includes('non autorizzato')) {
+        errorMessage = 'Non sei autorizzato a votare in questa elezione';
+      } else if (err.message.includes('già votato')) {
+        errorMessage = 'Hai già espresso il tuo voto';
+      } else if (err.message.includes('token')) {
+        errorMessage = 'Sessione scaduta. Effettua nuovamente il login.';
+        setTimeout(() => navigate('/login'), 2000);
+      } else {
+        errorMessage = `Errore: ${err.message}`;
+      }
+      
+      setError(errorMessage);
       setCurrentStep('selection');
       setVotingProgress(0);
+      setCryptoStatus('');
     }
   };
 
@@ -188,92 +262,94 @@ const VotingPage = () => {
         <div className="election-info">
           <h2>{election?.title}</h2>
           <p>{election?.description}</p>
+          
+          {/* Info utente autenticato */}
+          <div className="user-info-badge">
+            <User size={16} />
+            <span>Autenticato come: {user?.firstName} {user?.lastName} ({user?.email})</span>
+          </div>
         </div>
       </div>
 
       {/* Step Indicator */}
       <div className="step-indicator">
         <div className={`step ${currentStep === 'selection' || currentStep === 'crypto' || currentStep === 'voting' || currentStep === 'complete' ? 'active' : ''}`}>
-          <Users size={24} />
-          <span>Selezione</span>
+          <div className="step-number">1</div>
+          <div className="step-label">Selezione Candidato</div>
         </div>
         <div className={`step ${currentStep === 'crypto' || currentStep === 'voting' || currentStep === 'complete' ? 'active' : ''}`}>
-          <Shield size={24} />
-          <span>Crittografia</span>
+          <div className="step-number">2</div>
+          <div className="step-label">Crittografia WabiSabi</div>
         </div>
         <div className={`step ${currentStep === 'voting' || currentStep === 'complete' ? 'active' : ''}`}>
-          <Vote size={24} />
-          <span>Voto</span>
+          <div className="step-number">3</div>
+          <div className="step-label">Invio Voto</div>
         </div>
         <div className={`step ${currentStep === 'complete' ? 'active' : ''}`}>
-          <CheckCircle size={24} />
-          <span>Completato</span>
+          <div className="step-number">4</div>
+          <div className="step-label">Completato</div>
         </div>
       </div>
 
-      {/* Candidate Selection Step */}
+      {/* Error Alert */}
+      {error && (
+        <div className="alert alert-error">
+          <AlertCircle size={20} />
+          {error}
+        </div>
+      )}
+
+      {/* Step 1: Candidate Selection */}
       {currentStep === 'selection' && (
         <div className="voting-step">
           <div className="step-header">
-            <h3>Seleziona il Candidato</h3>
-            <p>Scegli il candidato per il quale vuoi esprimere il tuo voto anonimo</p>
+            <Vote size={32} />
+            <h3>Seleziona il tuo candidato</h3>
+            <p>Scegli il candidato per cui vuoi esprimere il tuo voto anonimo</p>
           </div>
 
           <div className="candidates-grid">
             {candidates.map((candidate) => (
-              <div 
-                key={candidate.id} 
+              <div
+                key={candidate.id}
                 className={`candidate-card ${selectedCandidate?.id === candidate.id ? 'selected' : ''}`}
                 onClick={() => handleCandidateSelect(candidate)}
               >
                 <div className="candidate-info">
-                  <h4>{candidate.firstName} {candidate.lastName}</h4>
-                  {candidate.party && <p className="party">{candidate.party}</p>}
-                  {candidate.biography && <p className="biography">{candidate.biography}</p>}
+                  <h4>{candidate.name || `${candidate.firstName} ${candidate.lastName}`}</h4>
+                  {candidate.party && <p className="candidate-party">{candidate.party}</p>}
                 </div>
-                {selectedCandidate?.id === candidate.id && (
-                  <div className="selected-indicator">
+                <div className="candidate-select">
+                  {selectedCandidate?.id === candidate.id ? (
                     <CheckCircle size={24} />
-                  </div>
-                )}
+                  ) : (
+                    <div className="select-circle"></div>
+                  )}
+                </div>
               </div>
             ))}
           </div>
 
-          {error && (
-            <div className="alert alert-error">
-              <AlertCircle size={20} />
-              {error}
-            </div>
-          )}
-
-          <div className="step-actions">
+          <div className="voting-actions">
             <button 
               onClick={startVotingProcess}
-              disabled={!selectedCandidate}
               className="button primary large"
+              disabled={!selectedCandidate}
             >
               <Shield size={20} />
               Procedi con Voto Anonimo
             </button>
           </div>
-
-          <div className="privacy-notice">
-            <Lock size={16} />
-            <p>
-              Il tuo voto sarà completamente anonimo grazie al protocollo WabiSabi. 
-              Nessuno potrà collegare il tuo voto alla tua identità.
-            </p>
-          </div>
         </div>
       )}
 
-      {/* Cryptographic Process Step */}
+      {/* Step 2: Cryptographic Process */}
       {(currentStep === 'crypto' || currentStep === 'voting') && (
         <div className="voting-step">
           <div className="step-header">
+            <Key size={32} />
             <h3>Processo Crittografico WabiSabi</h3>
-            <p>Stiamo rendendo il tuo voto completamente anonimo...</p>
+            <p>Il tuo voto viene processato in modo anonimo e sicuro</p>
           </div>
 
           <div className="crypto-progress">
@@ -283,55 +359,32 @@ const VotingPage = () => {
                 style={{ width: `${votingProgress}%` }}
               ></div>
             </div>
-            <p className="progress-text">{votingProgress}%</p>
+            <div className="progress-text">{votingProgress}%</div>
           </div>
 
           <div className="crypto-status">
-            <Loader size={20} className="spinning" />
-            <span>{cryptoStatus}</span>
+            <Loader size={24} className="spinner" />
+            <p>{cryptoStatus}</p>
           </div>
 
           {bitcoinAddress && (
-            <div className="bitcoin-info">
-              <div className="info-item">
-                <Bitcoin size={16} />
-                <span>Indirizzo Bitcoin generato:</span>
+            <div className="crypto-details">
+              <div className="detail-item">
+                <Bitcoin size={20} />
+                <span>Indirizzo Bitcoin Generato: {bitcoinAddress.substring(0, 20)}...</span>
               </div>
-              <code className="bitcoin-address">{bitcoinAddress}</code>
             </div>
           )}
-
-          {credential && (
-            <div className="credential-info">
-              <div className="info-item">
-                <Key size={16} />
-                <span>Credenziale KVAC ricevuta</span>
-              </div>
-              <code className="serial-number">Serial: {credential.serialNumber.substring(0, 16)}...</code>
-            </div>
-          )}
-
-          <div className="crypto-explanation">
-            <h4>Cosa sta succedendo:</h4>
-            <ul>
-              <li>✅ Generazione di un indirizzo Bitcoin unico per questa votazione</li>
-              <li>✅ Richiesta di credenziali anonime KVAC</li>
-              <li>✅ Creazione di un commitment crittografico del voto</li>
-              <li>✅ Generazione di prove zero-knowledge</li>
-              <li>🔄 Invio del voto anonimo al coordinatore</li>
-              <li>⏳ Attesa dell'aggregazione CoinJoin</li>
-            </ul>
-          </div>
         </div>
       )}
 
-      {/* Completion Step */}
+      {/* Step 3: Vote Complete */}
       {currentStep === 'complete' && (
         <div className="voting-step">
-          <div className="completion-header">
-            <CheckCircle size={64} className="success-icon" />
+          <div className="step-header success">
+            <CheckCircle size={48} />
             <h3>Voto Registrato con Successo!</h3>
-            <p>Il tuo voto anonimo è stato registrato sulla blockchain Bitcoin</p>
+            <p>Il tuo voto anonimo è stato registrato in modo sicuro sulla blockchain</p>
           </div>
 
           <div className="completion-details">

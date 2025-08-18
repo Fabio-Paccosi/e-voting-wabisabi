@@ -1,5 +1,5 @@
 const express = require('express');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const router = express.Router();
 
@@ -76,6 +76,7 @@ async function getCurrentElection(electionId = null) {
 // ==========================================
 
 // POST /api/auth/login - Login utenti normali con email e codice fiscale
+/*
 router.post('/auth/login', async (req, res) => {
     try {
         const { email, taxCode, electionId } = req.body;
@@ -184,6 +185,111 @@ router.post('/auth/login', async (req, res) => {
         });
     }
 });
+*/
+
+router.post('/auth/login', async (req, res) => {
+    try {
+        const { email, password, taxCode } = req.body;
+        console.log('🔐 [AUTH CLIENT] Tentativo login utente:', email || taxCode);
+        
+        if (!email && !taxCode) {
+            return res.status(400).json({ 
+                error: 'Email o codice fiscale richiesti' 
+            });
+        }
+        
+        if (!password) {
+            return res.status(400).json({ 
+                error: 'Password richiesta' 
+            });
+        }
+        
+        // Trova l'utente per email o codice fiscale
+        const whereClause = {};
+        if (email) {
+            whereClause.email = email.toLowerCase();
+        }
+        if (taxCode) {
+            whereClause.taxCode = taxCode.toUpperCase();
+        }
+        
+        const user = await User.findOne({
+            where: whereClause
+        });
+        
+        if (!user) {
+            console.log('❌ [AUTH CLIENT] Utente non trovato:', email || taxCode);
+            return res.status(401).json({ 
+                error: 'Credenziali non valide' 
+            });
+        }
+        
+        // Verifica password
+        const isPasswordValid = await bcrypt.compare(password, user.password);
+        
+        if (!isPasswordValid) {
+            console.log('❌ [AUTH CLIENT] Password non valida per:', user.email);
+            return res.status(401).json({ 
+                error: 'Credenziali non valide' 
+            });
+        }
+        
+        // Verifica che l'utente sia attivo
+        if (user.status !== 'active') {
+            console.log('❌ [AUTH CLIENT] Utente non attivo:', user.email);
+            return res.status(403).json({ 
+                error: 'Account non attivo. Contattare l\'amministratore.' 
+            });
+        }
+        
+        // Verifica che l'utente sia autorizzato
+        if (!user.isAuthorized) {
+            console.log('❌ [AUTH CLIENT] Utente non autorizzato:', user.email);
+            return res.status(403).json({ 
+                error: 'Account non autorizzato per il voto. Contattare l\'amministratore.' 
+            });
+        }
+        
+        // Genera token JWT
+        const token = jwt.sign(
+            { 
+                userId: user.id,
+                id: user.id, // Compatibilità con diversi formati
+                email: user.email,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                role: 'user',
+                isAuthorized: user.isAuthorized,
+                iat: Math.floor(Date.now() / 1000)
+            },
+            JWT_SECRET,
+            { expiresIn: '24h' }
+        );
+        
+        console.log('✅ [AUTH CLIENT] Login riuscito per:', user.email);
+        
+        res.json({
+            success: true,
+            token,
+            user: {
+                id: user.id,
+                email: user.email,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                taxCode: user.taxCode,
+                role: 'user',
+                isAuthorized: user.isAuthorized,
+                status: user.status
+            }
+        });
+        
+    } catch (error) {
+        console.error('❌ [AUTH CLIENT] Errore login:', error);
+        res.status(500).json({ 
+            error: 'Errore interno del server' 
+        });
+    }
+});
 
 // GET /api/auth/profile - Profilo utente autenticato
 router.get('/auth/profile', async (req, res) => {
@@ -243,6 +349,104 @@ router.get('/auth/profile', async (req, res) => {
         console.error('❌ [AUTH CLIENT] Errore profilo:', error);
         res.status(401).json({ 
             error: 'Token non valido' 
+        });
+    }
+});
+
+// GET /api/auth/verify - Verifica autenticazione utente
+router.post('/auth/verify', async (req, res) => {
+    try {
+        const { token } = req.body;
+        
+        if (!token) {
+            return res.status(400).json({ 
+                valid: false,
+                error: 'Token richiesto' 
+            });
+        }
+        
+        console.log('🔍 [AUTH CLIENT] Verifica token utente normale');
+        
+        // Verifica il token JWT
+        const decoded = jwt.verify(token, JWT_SECRET);
+        
+        console.log('🔍 [AUTH CLIENT] Token decodificato:', {
+            userId: decoded.userId || decoded.id,
+            email: decoded.email,
+            role: decoded.role
+        });
+        
+        // Trova l'utente nel database per verificare che esista ancora
+        let user = null;
+        if (decoded.userId || decoded.id) {
+            user = await User.findByPk(decoded.userId || decoded.id);
+        } else if (decoded.email) {
+            user = await User.findOne({
+                where: { email: decoded.email }
+            });
+        }
+        
+        if (!user) {
+            console.log('❌ [AUTH CLIENT] Utente non trovato nel database');
+            return res.status(401).json({ 
+                valid: false,
+                error: 'Utente non trovato' 
+            });
+        }
+        
+        // Verifica che l'utente sia attivo
+        if (user.status !== 'active') {
+            console.log('❌ [AUTH CLIENT] Utente non attivo');
+            return res.status(401).json({ 
+                valid: false,
+                error: 'Utente non attivo' 
+            });
+        }
+        
+        // Verifica che l'utente sia autorizzato
+        if (!user.isAuthorized) {
+            console.log('❌ [AUTH CLIENT] Utente non autorizzato');
+            return res.status(403).json({ 
+                valid: false,
+                error: 'Utente non autorizzato' 
+            });
+        }
+        
+        console.log('✅ [AUTH CLIENT] Token valido per utente:', user.email);
+        
+        res.json({
+            valid: true,
+            user: {
+                id: user.id,
+                email: user.email,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                role: decoded.role || 'user',
+                isAuthorized: user.isAuthorized,
+                status: user.status
+            }
+        });
+        
+    } catch (error) {
+        console.error('❌ [AUTH CLIENT] Errore verifica token:', error);
+        
+        if (error.name === 'JsonWebTokenError') {
+            return res.status(401).json({ 
+                valid: false,
+                error: 'Token non valido' 
+            });
+        }
+        
+        if (error.name === 'TokenExpiredError') {
+            return res.status(401).json({ 
+                valid: false,
+                error: 'Token scaduto' 
+            });
+        }
+        
+        res.status(500).json({ 
+            valid: false,
+            error: 'Errore interno del server' 
         });
     }
 });

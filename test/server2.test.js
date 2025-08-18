@@ -2,7 +2,7 @@
 
 const request = require('supertest');
 const { app, authService, credentialManager } = require('../server2/app');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 
 describe('Server 2 - Authentication & Credentials', () => {
     // Setup prima dei test
