@@ -145,9 +145,14 @@ class WabiSabiKVACService {
      */
     async verifyZKProof({ zkProof, commitment, serialNumber, electionId }) {
         try {
-            console.log(`[KVAC] 🔍 Verifica ZK proof per serial=${serialNumber.substring(0, 8)}...`);
-
-            // Verifica che il proof contenga i campi necessari
+            console.log('[KVAC] Debug ZK proof:', {
+                hasProof: !!zkProof?.proof,
+                hasPublicInputs: !!zkProof?.publicInputs,
+                publicInputsLength: zkProof?.publicInputs?.length,
+                timestamp: zkProof?.timestamp,
+                serialNumber: serialNumber.substring(0, 8)
+            });
+                        // Verifica che il proof contenga i campi necessari
             if (!zkProof || !zkProof.proof || !zkProof.publicInputs) {
                 return { valid: false, error: 'ZK proof malformato' };
             }

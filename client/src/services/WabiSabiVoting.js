@@ -164,15 +164,15 @@ class WabiSabiVoting {
   /**
    * Generate zero-knowledge proof for vote validity
    */
-  async generateZKProof(voteCommitment, credentialData, candidateValueEncoding) {
+  async generateZKProof(voteCommitment, credentialData, candidateEncoding) {
     try {
-      console.log('[WABISABI] 🔍 Generazione prova zero-knowledge...');
+      console.log('[WABISABI] 🔐 Generazione prova zero-knowledge...');
       
-      // Simplified ZK proof generation for demo
+      // Create proof data structure
       const proofData = {
         commitment: voteCommitment.commitment,
         serialNumber: credentialData.serialNumber,
-        candidateEncoding: candidateValueEncoding,
+        candidateEncoding: candidateEncoding,
         timestamp: Date.now(),
         nonce: randomBytes(16).toString('hex')
       };
@@ -181,11 +181,16 @@ class WabiSabiVoting {
       const proofString = JSON.stringify(proofData);
       const proof = createHash('sha256').update(proofString).digest('hex');
       
-      console.log('[WABISABI] ✅ Prova zero-knowledge generata');
-      
+      // ✅ FIXED: Struttura che il server si aspetta
       return {
         proof,
-        proofData,
+        publicInputs: [
+          credentialData.serialNumber,           // Include serial number
+          voteCommitment.commitment,             // Include commitment
+          candidateEncoding.toString(),          // Include candidate encoding
+          proofData.timestamp.toString()         // Include timestamp
+        ],
+        timestamp: proofData.timestamp,          //Aggiungi timestamp per verifica età
         isValid: true
       };
     } catch (error) {
