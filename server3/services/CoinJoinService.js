@@ -26,33 +26,36 @@ class CoinJoinService {
     async triggerCoinJoin(sessionId, electionId) {
         try {
             console.log(`[COINJOIN] 🚀 Avvio CoinJoin per sessione ${sessionId}`);
-
+    
             // Verifica che la sessione non sia già in elaborazione
             if (this.activeSessions.has(sessionId)) {
                 console.log(`[COINJOIN] ⚠️ Sessione ${sessionId} già in elaborazione`);
                 return;
             }
-
+    
             // Carica i voti pending per questa sessione
             const pendingVotes = await Vote.findAll({
                 where: {
                     sessionId: sessionId,
                     status: 'pending'
                 },
-                order: [['submittedAt', 'ASC']]
+                // CORREZIONE: Usa submitted_at invece di submittedAt
+                order: [['submitted_at', 'ASC']]
             });
-
+    
+            console.log(`[COINJOIN] 📊 Trovati ${pendingVotes.length} voti pendenti`);
+    
             if (pendingVotes.length < this.MIN_PARTICIPANTS) {
                 console.log(`[COINJOIN] ⚠️ Voti insufficienti: ${pendingVotes.length} < ${this.MIN_PARTICIPANTS}`);
                 return;
             }
-
+    
             // Aggiorna stato sessione
             await VotingSession.update(
                 { status: 'output_registration' },
                 { where: { id: sessionId } }
             );
-
+    
             // Crea sessione CoinJoin
             const coinJoinSession = {
                 sessionId,
@@ -63,18 +66,23 @@ class CoinJoinService {
                 round: 1,
                 transactions: []
             };
-
+    
+            // CORREZIONE: Salva correttamente la sessione nella mappa
             this.activeSessions.set(sessionId, coinJoinSession);
-
+    
+            console.log(`[COINJOIN] ✅ Sessione CoinJoin creata per ${coinJoinSession.participants.length} partecipanti`);
+    
             // Avvia il processo in background
             this.processCoinJoinRounds(coinJoinSession)
                 .catch(error => {
                     console.error(`[COINJOIN] ❌ Errore processo CoinJoin:`, error);
                     this.handleCoinJoinError(sessionId, error);
                 });
-
+    
             console.log(`[COINJOIN] ✅ CoinJoin avviato per ${coinJoinSession.participants.length} partecipanti`);
-
+    
+            return coinJoinSession;
+    
         } catch (error) {
             console.error(`[COINJOIN] ❌ Errore trigger CoinJoin:`, error);
             throw error;

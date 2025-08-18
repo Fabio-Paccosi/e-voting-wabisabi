@@ -120,7 +120,7 @@ app.get('/api/coinjoin/status', (req, res) => {
 // POST /api/coinjoin/start - Avvia servizio CoinJoin
 app.post('/api/coinjoin/start', (req, res) => {
     try {
-        CoinJoinTriggerService.start();
+        //CoinJoinTriggerService.start();
         res.json({
             success: true,
             message: 'Servizio CoinJoin avviato',
