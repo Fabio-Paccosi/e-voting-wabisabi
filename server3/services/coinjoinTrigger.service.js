@@ -96,7 +96,7 @@ class CoinJoinTriggerService {
     async executeCoinJoin(election) {
         try {
             console.log(`🔄 [CoinJoin Service] Esecuzione CoinJoin per "${election.title}"`);
-
+    
             // 1. Raccogli tutti i voti pendenti per questa elezione
             const pendingVotes = await Vote.findAll({
                 where: { status: 'pending' },
@@ -107,22 +107,25 @@ class CoinJoinTriggerService {
                     required: true
                 }]
             });
-
+    
             if (pendingVotes.length === 0) {
                 console.log('⚠️ [CoinJoin Service] Nessun voto pendente trovato');
                 return;
             }
-
-            // 2. Costruisci la transazione CoinJoin - METODO CORRETTO
+    
+            // 2. Costruisci la transazione CoinJoin
             const coinjoinTx = await this.buildCoinJoinTransaction(election, pendingVotes);
-
+    
             // 3. Broadcast della transazione
             const txId = await this.broadcastTransaction(coinjoinTx, election.blockchainNetwork);
-
-            // 4. Aggiorna lo stato dei voti
+    
+            // 4. Aggiorna lo stato dei voti - METODO CORRETTO
             await this.updateVotesStatus(pendingVotes, txId);
-
-            // 5. Salva la transazione nel database
+    
+            // 5. Aggiorna conteggi candidati - AGGIUNTO
+            await this.updateCandidateVoteCounts(election, pendingVotes);
+    
+            // 6. Salva la transazione nel database
             await Transaction.create({
                 txId: txId,
                 type: 'coinjoin',
@@ -134,12 +137,12 @@ class CoinJoinTriggerService {
                     network: election.blockchainNetwork
                 }
             });
-
-            // 6. Notifica completamento
+    
+            // 7. Notifica completamento
             await this.notifyCoinJoinCompletion(election, txId, pendingVotes.length);
-
+    
             console.log(`✅ [CoinJoin Service] CoinJoin completato per "${election.title}"!`);
-
+    
         } catch (error) {
             console.error('❌ [CoinJoin Service] Errore durante CoinJoin:', error);
             throw error;
@@ -346,20 +349,91 @@ class CoinJoinTriggerService {
         }
     }
 
-    async updateVotesStatus(votes, txId) {
+    async updateVotesStatus(pendingVotes, txId) {
         try {
-            const updatePromises = votes.map(vote => 
-                vote.update({
+            console.log(`[CoinJoin Service] Aggiornamento stato di ${pendingVotes.length} voti`);
+            
+            // Aggiorna tutti i voti da 'pending' a 'confirmed'
+            const voteIds = pendingVotes.map(vote => vote.id);
+            
+            const updateResult = await Vote.update(
+                { 
                     status: 'confirmed',
                     transactionId: txId,
-                    confirmedAt: new Date()
-                })
+                    processedAt: new Date()
+                },
+                { 
+                    where: { 
+                        id: voteIds 
+                    } 
+                }
             );
+    
+            console.log(`✅ [CoinJoin Service] ${updateResult[0]} voti aggiornati a 'confirmed'`);
+            return updateResult;
             
-            await Promise.all(updatePromises);
-            console.log(`✅ [CoinJoin Service] Aggiornati ${votes.length} voti con txId: ${txId}`);
         } catch (error) {
-            console.error('❌ [CoinJoin Service] Errore aggiornamento voti:', error);
+            console.error('❌ [CoinJoin Service] Errore aggiornamento stato voti:', error);
+            throw error;
+        }
+    }
+    
+    // aggiornare i conteggi dei candidati
+    async updateCandidateVoteCounts(election, pendingVotes) {
+        try {
+            console.log(`[CoinJoin Service] Aggiornamento conteggi candidati per elezione ${election.id}`);
+            
+            // Conta i voti per candidato
+            const voteCounts = new Map();
+            
+            for (const vote of pendingVotes) {
+                try {
+                    let commitment;
+                    
+                    // Parse del commitment
+                    if (typeof vote.commitment === 'string') {
+                        if (vote.commitment.startsWith('{') || vote.commitment.startsWith('[')) {
+                            commitment = JSON.parse(vote.commitment);
+                        } else {
+                            commitment = { candidateValue: vote.commitment };
+                        }
+                    } else {
+                        commitment = vote.commitment;
+                    }
+                    
+                    // Trova candidato
+                    const candidateValue = commitment.candidateValue || commitment.candidate || vote.candidateEncoding;
+                    if (candidateValue) {
+                        const candidate = await this.findCandidateByEncoding(election.id, candidateValue);
+                        if (candidate) {
+                            const current = voteCounts.get(candidate.id) || 0;
+                            voteCounts.set(candidate.id, current + 1);
+                        }
+                    }
+                    
+                } catch (voteError) {
+                    console.error(`[CoinJoin Service] Errore processamento voto ${vote.id}:`, voteError);
+                }
+            }
+            
+            // Aggiorna contatori nel database
+            for (const [candidateId, voteCount] of voteCounts) {
+                await Candidate.increment(
+                    'totalVotesReceived',
+                    { 
+                        by: voteCount,
+                        where: { id: candidateId }
+                    }
+                );
+                
+                console.log(`[CoinJoin Service] Candidato ${candidateId}: +${voteCount} voti`);
+            }
+            
+            console.log(`✅ [CoinJoin Service] Aggiornati contatori per ${voteCounts.size} candidati`);
+            return voteCounts;
+            
+        } catch (error) {
+            console.error('❌ [CoinJoin Service] Errore aggiornamento conteggi candidati:', error);
             throw error;
         }
     }
