@@ -15,7 +15,7 @@ class CoinJoinService {
     constructor() {
         this.activeSessions = new Map(); // sessionId -> CoinJoinSession
         this.ROUND_TIMEOUT = 300000; // 5 minuti timeout per round
-        this.MIN_PARTICIPANTS = 3; // Minimo partecipanti per CoinJoin
+        this.MIN_PARTICIPANTS = 2; // Minimo partecipanti per CoinJoin
         this.MAX_PARTICIPANTS = 50; // Massimo partecipanti per round
         this.COINJOIN_FEE = 1000; // Fee in satoshi
     }

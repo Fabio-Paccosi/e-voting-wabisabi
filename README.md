@@ -11,7 +11,7 @@ oppure per rebuildare
 
 docker compose up --build
 
-oppure
+oppure se modifiche complesse
 
 docker compose build --no-cache
 
