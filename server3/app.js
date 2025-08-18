@@ -51,14 +51,14 @@ app.get('/api/health', (req, res) => {
 });
 
 // Import routes
-//const voteRoutes = require('./routes/votes');
 const adminRoutes = require('./routes/admin');
 const electionRoutes = require('./routes/elections');
+const votingRoutes = require('./routes/voting');
 
 // Mount routes
-//app.use('/api/votes', voteRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/elections', electionRoutes);
+app.use('/api/voting', votingRoutes);
 
 // ===========================
 // VOTE PROCESSING ENDPOINTS
@@ -156,7 +156,17 @@ app.use('*', (req, res) => {
     res.status(404).json({
         error: 'Endpoint non trovato',
         path: req.originalUrl,
-        method: req.method
+        method: req.method,
+        availableRoutes: [
+            'GET /api/elections',
+            'GET /api/elections/:id',
+            'POST /api/elections/:id/vote',
+            'POST /api/voting/address',
+            'POST /api/voting/credentials',
+            'POST /api/voting/submit',
+            'GET /api/voting/status/:voteId',
+            'GET /api/voting/debug'
+        ]
     });
 });
 
