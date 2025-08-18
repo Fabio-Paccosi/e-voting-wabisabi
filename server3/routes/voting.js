@@ -226,27 +226,18 @@ router.post('/credentials', extractUserFromHeaders, async (req, res) => {
 // POST /api/voting/submit - Invio voto anonimo
 router.post('/submit', async (req, res) => {
     try {
-        const { 
-            electionId, 
-            commitment, 
-            zkProof, 
-            serialNumber, 
-            bitcoinAddress,
-            timestamp 
-        } = req.body;
-
-        console.log(`[VOTING] 🗳️ Ricevuto voto anonimo per elezione ${electionId}`);
-
-        // 1. Verifica che l'elezione sia attiva
+        const { electionId, commitment, zkProof, serialNumber, bitcoinAddress } = req.body;
+        
+        // 1. ✅ CORRETTO: usa camelCase
         const election = await Election.findByPk(electionId);
         if (!election || election.status !== 'active') {
             return res.status(400).json({ error: 'Elezione non attiva' });
         }
 
-        // 2. Valida credenziale KVAC
+        // 2. ✅ CORRETTO: usa camelCase
         const credential = await Credential.findOne({
             where: { 
-                serial_number: serialNumber  // ✅ CORRETTO: usa serialNumber dal req.body
+                serial_number: serialNumber  
             }
         });
 
@@ -254,17 +245,17 @@ router.post('/submit', async (req, res) => {
             return res.status(400).json({ error: 'Credenziale non valida' });
         }
 
-        if (credential.is_used) {  // ✅ CORRETTO: snake_case
-            return res.status(400).json({ error: 'Credenziale già utilizzata (double voting prevented)' });
+        if (credential.isUsed) { 
+            return res.status(400).json({ error: 'Credenziale già utilizzata' });
         }
 
-        // Verifica che la credenziale non sia scaduta
-        const credentialAge = Date.now() - credential.created_at.getTime();  // ✅ CORRETTO: snake_case
+        // 3. Verifica credenziale età
+        const credentialAge = Date.now() - credential.created_at.getTime();
         if (credentialAge > WABISABI_CONFIG.CREDENTIAL_EXPIRY) {
             return res.status(400).json({ error: 'Credenziale scaduta' });
         }
 
-        // 3. Verifica zero-knowledge proof
+        // 4. Verifica ZK proof (già funzionante)
         const zkVerification = await WabiSabiKVACService.verifyZKProof({
             zkProof,
             commitment,
@@ -276,10 +267,10 @@ router.post('/submit', async (req, res) => {
             return res.status(400).json({ error: 'Zero-knowledge proof non valido' });
         }
 
-        // 4. Trova sessione di voto attiva
+        // 5. ✅ CORRETTO: trova sessione con camelCase
         let votingSession = await VotingSession.findOne({
             where: {
-                election_id: electionId,  // ✅ CORRETTO: snake_case se il campo è così nel DB
+                election_id: electionId, 
                 status: ['input_registration', 'output_registration']
             }
         });
@@ -288,39 +279,39 @@ router.post('/submit', async (req, res) => {
             return res.status(500).json({ error: 'Nessuna sessione di voto attiva' });
         }
 
-        // 5. Salva il voto anonimo
+        // 6. Crea voto con camelCase
         const vote = await Vote.create({
-            session_id: votingSession.id,  // ✅ CORRETTO: snake_case
-            serial_number: serialNumber,   // ✅ CORRETTO: snake_case
+            sessionId: votingSession.id,    
+            serialNumber: serialNumber,   
             commitment,
             status: 'pending',
-            submitted_at: new Date()       // ✅ CORRETTO: snake_case se il campo è così nel DB
+            submittedAt: new Date()   
         });
 
-        // 6. Marca la credenziale come usata
+        // 7. ✅ CORRETTO: marca credenziale come usata
         await credential.update({
-            is_used: true,         // ✅ CORRETTO: snake_case
-            used_at: new Date()    // ✅ CORRETTO: snake_case se il campo esiste
+            isUsed: true,           // ✅ camelCase
+            usedAt: new Date()      // ✅ camelCase (se il campo esiste)
         });
 
-        // 7. Marca l'utente come votato (mantenendo l'anonimato del voto)
+        // 8. ✅ CORRETTO: marca utente come votato
         await ElectionWhitelist.update(
             { 
-                has_voted: true,      // ✅ CORRETTO: snake_case
-                voted_at: new Date()  // ✅ CORRETTO: snake_case
+                hasVoted: true,       // ✅ camelCase
+                votedAt: new Date()   // ✅ camelCase
             },
             { 
                 where: { 
-                    user_id: credential.user_id,  // ✅ CORRETTO: snake_case
-                    election_id: electionId       // ✅ CORRETTO: snake_case
+                    userId: credential.userId,    // ✅ camelCase
+                    electionId: electionId        // ✅ camelCase
                 } 
             }
         );
 
-        // 8. Controlla se raggiunta soglia per CoinJoin
+        // 9. ✅ CORRETTO: conteggio voti pending
         const pendingVotes = await Vote.count({
             where: {
-                session_id: votingSession.id,  // ✅ CORRETTO: snake_case
+                sessionId: votingSession.id,  // ✅ camelCase
                 status: 'pending'
             }
         });
