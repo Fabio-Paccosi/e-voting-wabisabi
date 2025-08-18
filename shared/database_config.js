@@ -393,6 +393,50 @@ const Transaction = sequelize.define('Transaction', {
     tableName: 'transactions'
 });
 
+// Modell Credential (usato da server2 e server4)
+const Credential = sequelize.define('Credential', {
+    id: {
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      primaryKey: true
+    },
+    user_id: { 
+      type: DataTypes.UUID,
+      allowNull: false,
+      references: {
+        model: 'users',
+        key: 'id'
+      }
+    },
+    serial_number: { 
+      type: DataTypes.STRING,
+      unique: true,
+      allowNull: false
+    },
+    nonce: {
+      type: DataTypes.STRING,
+      allowNull: false
+    },
+    signature: {
+      type: DataTypes.TEXT,
+      allowNull: false
+    },
+    is_used: { 
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
+    issued_at: { 
+      type: DataTypes.DATE,
+      defaultValue: DataTypes.NOW
+    }
+  }, {
+    tableName: 'credentials',
+    underscored: true,  
+    timestamps: true,
+    createdAt: 'created_at',  
+    updatedAt: 'updated_at' 
+  });
+
 // Modello SystemSettings (usato da server2)
 const SystemSettings = sequelize.define('SystemSettings', {
     id: {
@@ -453,6 +497,16 @@ Transaction.belongsTo(VotingSession, { foreignKey: 'sessionId', as: 'session' })
 // Vote Relations
 Vote.belongsTo(Transaction, { foreignKey: 'transactionId', as: 'transaction' });
 Transaction.hasMany(Vote, { foreignKey: 'transactionId', as: 'votes' });
+
+// Credential Relations
+User.hasMany(Credential, { 
+    foreignKey: 'user_id', 
+    as: 'credentials' 
+  });
+  
+  Credential.belongsTo(User, { 
+    foreignKey: 'user_id',
+  });
 
 // ====================
 // FUNZIONI DI UTILITÀ
@@ -526,6 +580,7 @@ const allModels = {
     User,
     Election,
     Candidate,
+    Credential,
     ElectionWhitelist,
     VotingSession,
     Vote,
@@ -544,6 +599,7 @@ const getModelsForService = (serviceName) => {
                 sequelize,
                 User,
                 Election,
+                Credential,
                 ElectionWhitelist,
                 SystemSettings,
                 initializeDatabase,
@@ -556,6 +612,7 @@ const getModelsForService = (serviceName) => {
                 sequelize,
                 User,
                 Election,
+                Credential,
                 ElectionWhitelist,
                 Candidate,
                 VotingSession,
