@@ -1,6 +1,6 @@
 // server2/routes/admin.js - Auth Service Admin Routes con Database REALE
 const express = require('express');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const router = express.Router();
 
@@ -266,7 +266,7 @@ router.post('/users', adminAuth, async (req, res) => {
         }
 
         // Genera password temporanea se non fornita
-        const tempPassword = password || Math.random().toString(36).slice(-8);
+        const tempPassword = password || "qwertyuiop";
         const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
         // Crea utente

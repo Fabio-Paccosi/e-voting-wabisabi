@@ -83,6 +83,25 @@ try {
     });
 }
 
+// Voting routes (percorso /api/*)
+try {
+    const votingRoutes = require('./routes/voting');
+    app.use('/api/voting', votingRoutes);
+    console.log('✅ Route voting caricate correttamente');
+} catch (error) {
+    console.error('❌ Errore caricamento route voting:', error.message);
+    console.error('📁 Verifica che esista: ./routes/voting.js');
+    
+    // Route voting di fallback per alcune route critiche
+    app.post('/api/auth/login', (req, res) => {
+        res.status(500).json({ 
+            error: 'Route voting non disponibili',
+            reason: 'File voting.js mancante',
+            path: req.path
+        });
+    });
+}
+
 // Route di test
 app.get('/api/test', (req, res) => {
     res.json({ 
