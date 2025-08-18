@@ -84,7 +84,7 @@ const AdminDashboard = () => {
 
   const fetchCandidates = async (electionId) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/elections/${electionId}/candidates`, {
+      const response = await fetch(`${API_BASE_URL}/elections/${electionId}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
           'Content-Type': 'application/json'
@@ -97,7 +97,7 @@ const AdminDashboard = () => {
       console.log(data)
       setCandidates(prev => ({
         ...prev,
-        [electionId]: data.candidates || []
+        [electionId]: data.election.candidates || []
       }));
     } catch (err) {
       console.error('Errore fetch candidati:', err);

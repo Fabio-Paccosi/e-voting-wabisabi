@@ -43,25 +43,21 @@ const VotingPage = () => {
 
   const loadElectionData = async () => {
     try {
-      setLoading(true);
-      
-      // Load election details and candidates
-      const [electionResponse, candidatesResponse] = await Promise.all([
-        api.get(`/elections/${electionId}`),
-        api.get(`/elections/${electionId}/candidates`)
-      ]);
+        setLoading(true);
+        
+        const electionResponse = await api.get(`/elections/${electionId}`);
 
-      setElection(electionResponse.data.election);
-      setCandidates(candidatesResponse.data.candidates || []);
-      
-      // Check if user has already voted
-      if (electionResponse.data.election.hasVoted) {
-        setError('Hai già votato in questa elezione');
-        setTimeout(() => navigate('/elections'), 3000);
-        return;
-      }
-      
-      setCurrentStep('selection');
+        setElection(electionResponse.data.election);
+        setCandidates(electionResponse.data.election.candidates || []);
+        
+        // Controlla se l'utente ha gia votato
+        if (electionResponse.data.election.hasVoted) {
+            setError('Hai già votato in questa elezione');
+            setTimeout(() => navigate('/elections'), 3000);
+            return;
+        }
+        
+        setCurrentStep('selection');
     } catch (err) {
       console.error('Error loading election:', err);
       setError('Errore nel caricamento dell\'elezione');
