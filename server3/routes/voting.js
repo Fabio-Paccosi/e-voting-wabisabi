@@ -1,10 +1,25 @@
-// server3/routes/voting.js
-// Route per il processo di voto WabiSabi
-
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
-const { randomBytes, createHash } = require('crypto');
+const { randomBytes, createHash, createHmac } = require('crypto');
+
+// Import dei modelli dal database_config.js
+const {
+    sequelize,
+    User,                       
+    Election,
+    Candidate,
+    VotingSession,
+    Vote,
+    Transaction,
+    getQuickStats,
+    initializeDatabase
+} = require('../shared/database_config').getModelsForService('vote');
+
+// Import servizi
+const CoinJoinService = require('../services/CoinJoinService');
+const WabiSabiKVACService = require('../services/WabiSabiKVACService');
+const BitcoinService = require('../services/BitcoinService');
 
 // Middleware per estrarre informazioni utente dagli header
 const extractUserFromHeaders = (req, res, next) => {
@@ -19,6 +34,14 @@ const extractUserFromHeaders = (req, res, next) => {
     next();
 };
 
+// Configurazione WabiSabi
+const WABISABI_CONFIG = {
+    COINJOIN_THRESHOLD: 5, // Minimo voti per trigger CoinJoin
+    CREDENTIAL_EXPIRY: 3600000, // 1 ora in millisecondi
+    MAX_VOTING_SESSIONS: 10, // Massimo sessioni attive per elezione
+    NETWORK: process.env.BITCOIN_NETWORK || 'testnet'
+};
+
 // POST /api/voting/address - Genera indirizzo Bitcoin per sessione di voto
 router.post('/address', extractUserFromHeaders, async (req, res) => {
     try {
@@ -27,35 +50,77 @@ router.post('/address', extractUserFromHeaders, async (req, res) => {
 
         console.log(`[VOTING] 🪙 Richiesta indirizzo Bitcoin per utente ${requestUserId}, elezione ${electionId}`);
 
-        // Verifica che l'utente richiesto corrisponda all'utente autenticato
+        // Verifica autorizzazione
         if (userId !== requestUserId) {
             return res.status(403).json({ error: 'Utente non autorizzato' });
         }
 
-        // Genera un session ID unico per questa sessione di voto
-        const sessionId = crypto.randomUUID();
-        const timestamp = new Date().toISOString();
+        // Verifica che l'elezione esista e sia attiva
+        const election = await Election.findByPk(electionId);
+        if (!election) {
+            return res.status(404).json({ error: 'Elezione non trovata' });
+        }
 
-        // TODO: Salvare l'associazione nel database
-        // await VotingSession.create({
-        //     sessionId,
-        //     userId,
-        //     electionId, 
-        //     bitcoinAddress,
-        //     publicKey,
-        //     status: 'address_generated',
-        //     createdAt: timestamp
-        // });
+        if (election.status !== 'active' || !election.isActive) {
+            return res.status(400).json({ error: 'Elezione non attiva' });
+        }
 
-        console.log(`[VOTING] ✅ Indirizzo Bitcoin generato per sessione ${sessionId}`);
+        // Verifica che l'utente sia in whitelist e non abbia già votato
+        const whitelistEntry = await ElectionWhitelist.findOne({
+            where: { userId, electionId }
+        });
+
+        if (!whitelistEntry) {
+            return res.status(403).json({ error: 'Utente non autorizzato per questa elezione' });
+        }
+
+        if (whitelistEntry.hasVoted) {
+            return res.status(400).json({ error: 'Utente ha già votato' });
+        }
+
+        // Trova o crea sessione di voto attiva
+        let votingSession = await VotingSession.findOne({
+            where: {
+                electionId,
+                status: ['preparing', 'input_registration']
+            }
+        });
+
+        if (!votingSession) {
+            // Crea nuova sessione di voto
+            votingSession = await VotingSession.create({
+                electionId,
+                startTime: new Date(),
+                status: 'input_registration',
+                transactionCount: 0
+            });
+            console.log(`[VOTING] 🆕 Nuova sessione di voto creata: ${votingSession.id}`);
+        }
+
+        // Verifica che l'indirizzo Bitcoin sia valido
+        if (!BitcoinService.isValidAddress(bitcoinAddress, WABISABI_CONFIG.NETWORK)) {
+            return res.status(400).json({ error: 'Indirizzo Bitcoin non valido' });
+        }
+
+        // Registra l'indirizzo per questa sessione
+        const addressRecord = {
+            sessionId: votingSession.id,
+            userId,
+            bitcoinAddress,
+            publicKey,
+            registeredAt: new Date()
+        };
+
+        // TODO: Salvare nel database (tabella user_addresses o simile)
+        console.log(`[VOTING] ✅ Indirizzo registrato per sessione ${votingSession.id}`);
 
         res.json({
             success: true,
-            sessionId,
+            sessionId: votingSession.id,
             bitcoinAddress,
             publicKey,
-            status: 'address_generated',
-            timestamp
+            status: 'address_registered',
+            timestamp: new Date().toISOString()
         });
 
     } catch (error) {
@@ -80,38 +145,71 @@ router.post('/credentials', extractUserFromHeaders, async (req, res) => {
             return res.status(403).json({ error: 'Utente non autorizzato' });
         }
 
-        // TODO: Verificare che l'utente sia in whitelist per l'elezione
-        // TODO: Verificare che non abbia già votato
+        // Verifica che l'utente sia autorizzato per l'elezione
+        const whitelistEntry = await ElectionWhitelist.findOne({
+            where: { userId, electionId }
+        });
 
-        // Genera credenziali KVAC mock (sostituire con logica reale)
-        const serialNumber = `ser_${Date.now()}_${crypto.randomBytes(8).toString('hex')}`;
-        const credentialId = crypto.randomUUID();
-        
-        // Genera firma mock delle credenziali
-        const dataToSign = `${serialNumber}:${nonce}:${userId}:${electionId}`;
-        const signature = createHash('sha256').update(dataToSign).digest('hex');
+        if (!whitelistEntry) {
+            return res.status(403).json({ error: 'Utente non in whitelist per questa elezione' });
+        }
 
-        // TODO: Salvare nel database
-        // await Credential.create({
-        //     credentialId,
-        //     userId,
-        //     electionId,
-        //     serialNumber,
-        //     signature,
-        //     nonce,
-        //     isUsed: false
-        // });
+        if (whitelistEntry.hasVoted) {
+            return res.status(400).json({ error: 'Utente ha già votato' });
+        }
 
-        console.log(`[VOTING] ✅ Credenziali KVAC generate: ${credentialId}`);
+        // Verifica che non esistano già credenziali non usate per questo utente/elezione
+        const existingCredential = await Credential.findOne({
+            where: {
+                userId,
+                isUsed: false,
+                createdAt: {
+                    [require('sequelize').Op.gt]: new Date(Date.now() - WABISABI_CONFIG.CREDENTIAL_EXPIRY)
+                }
+            }
+        });
+
+        if (existingCredential) {
+            console.log(`[VOTING] ♻️ Riutilizzo credenziali esistenti per utente ${userId}`);
+            return res.json({
+                success: true,
+                credentialId: existingCredential.id,
+                serialNumber: existingCredential.serialNumber,
+                signature: existingCredential.signature,
+                nonce: existingCredential.nonce,
+                issuedAt: existingCredential.issuedAt,
+                expiresAt: new Date(existingCredential.createdAt.getTime() + WABISABI_CONFIG.CREDENTIAL_EXPIRY)
+            });
+        }
+
+        // Genera nuove credenziali KVAC
+        const credentialData = await WabiSabiKVACService.generateCredentials({
+            userId,
+            electionId,
+            nonce,
+            userEmail: req.user.email
+        });
+
+        // Salva nel database
+        const credential = await Credential.create({
+            userId,
+            serialNumber: credentialData.serialNumber,
+            nonce,
+            signature: credentialData.signature,
+            isUsed: false,
+            issuedAt: new Date()
+        });
+
+        console.log(`[VOTING] ✅ Credenziali KVAC generate: ${credential.id}`);
 
         res.json({
             success: true,
-            credentialId,
-            serialNumber,
-            signature,
-            nonce,
-            issuedAt: new Date().toISOString(),
-            expiresIn: 3600 // 1 ora
+            credentialId: credential.id,
+            serialNumber: credential.serialNumber,
+            signature: credential.signature,
+            nonce: credential.nonce,
+            issuedAt: credential.issuedAt,
+            expiresAt: new Date(credential.createdAt.getTime() + WABISABI_CONFIG.CREDENTIAL_EXPIRY)
         });
 
     } catch (error) {
@@ -137,51 +235,107 @@ router.post('/submit', async (req, res) => {
 
         console.log(`[VOTING] 🗳️ Ricevuto voto anonimo per elezione ${electionId}`);
 
-        // TODO: Validare credenziale KVAC
-        // TODO: Verificare zero-knowledge proof  
-        // TODO: Controllare che il serial number non sia già stato usato
-        // TODO: Validare il commitment
+        // 1. Verifica che l'elezione sia attiva
+        const election = await Election.findByPk(electionId);
+        if (!election || election.status !== 'active') {
+            return res.status(400).json({ error: 'Elezione non attiva' });
+        }
 
-        // Genera ID del voto
-        const voteId = `vote_${Date.now()}_${crypto.randomBytes(8).toString('hex')}`;
-        const sessionId = crypto.randomUUID();
+        // 2. Valida credenziale KVAC
+        const credential = await Credential.findOne({
+            where: { serialNumber }
+        });
 
-        // TODO: Salvare il voto nel database
-        // await Vote.create({
-        //     voteId,
-        //     electionId,
-        //     commitment,
-        //     serialNumber,
-        //     bitcoinAddress,
-        //     sessionId,
-        //     status: 'pending',
-        //     zkProof,
-        //     receivedAt: new Date()
-        // });
+        if (!credential) {
+            return res.status(400).json({ error: 'Credenziale non valida' });
+        }
 
-        // TODO: Marcare la credenziale come usata
-        // await Credential.update(
-        //     { isUsed: true, usedAt: new Date() },
-        //     { where: { serialNumber } }
-        // );
+        if (credential.isUsed) {
+            return res.status(400).json({ error: 'Credenziale già utilizzata (double voting prevented)' });
+        }
 
-        // TODO: Trigger CoinJoin se soglia raggiunta
-        // const pendingVotes = await Vote.count({ 
-        //     where: { electionId, status: 'pending' } 
-        // });
-        // if (pendingVotes >= COINJOIN_THRESHOLD) {
-        //     await triggerCoinJoin(electionId);
-        // }
+        // Verifica che la credenziale non sia scaduta
+        const credentialAge = Date.now() - credential.createdAt.getTime();
+        if (credentialAge > WABISABI_CONFIG.CREDENTIAL_EXPIRY) {
+            return res.status(400).json({ error: 'Credenziale scaduta' });
+        }
 
-        console.log(`[VOTING] ✅ Voto anonimo ricevuto: ${voteId}`);
+        // 3. Verifica zero-knowledge proof
+        const zkVerification = await WabiSabiKVACService.verifyZKProof({
+            zkProof,
+            commitment,
+            serialNumber,
+            electionId
+        });
+
+        if (!zkVerification.valid) {
+            return res.status(400).json({ error: 'Zero-knowledge proof non valido' });
+        }
+
+        // 4. Trova sessione di voto attiva
+        let votingSession = await VotingSession.findOne({
+            where: {
+                electionId,
+                status: ['input_registration', 'output_registration']
+            }
+        });
+
+        if (!votingSession) {
+            return res.status(500).json({ error: 'Nessuna sessione di voto attiva' });
+        }
+
+        // 5. Salva il voto anonimo
+        const vote = await Vote.create({
+            sessionId: votingSession.id,
+            serialNumber,
+            commitment,
+            status: 'pending',
+            submittedAt: new Date()
+        });
+
+        // 6. Marca la credenziale come usata
+        await credential.update({
+            isUsed: true,
+            usedAt: new Date()
+        });
+
+        // 7. Marca l'utente come votato (mantenendo l'anonimato del voto)
+        await ElectionWhitelist.update(
+            { hasVoted: true, votedAt: new Date() },
+            { where: { userId: credential.userId, electionId } }
+        );
+
+        // 8. Controlla se raggiunta soglia per CoinJoin
+        const pendingVotes = await Vote.count({
+            where: {
+                sessionId: votingSession.id,
+                status: 'pending'
+            }
+        });
+
+        console.log(`[VOTING] 📊 Voti pending in sessione ${votingSession.id}: ${pendingVotes}`);
+
+        if (pendingVotes >= WABISABI_CONFIG.COINJOIN_THRESHOLD) {
+            console.log(`[VOTING] 🚀 Soglia CoinJoin raggiunta, avvio aggregazione...`);
+            
+            // Trigger CoinJoin in background
+            CoinJoinService.triggerCoinJoin(votingSession.id, electionId)
+                .catch(error => {
+                    console.error(`[VOTING] ❌ Errore CoinJoin per sessione ${votingSession.id}:`, error);
+                });
+        }
+
+        console.log(`[VOTING] ✅ Voto anonimo registrato: ${vote.id}`);
 
         res.json({
             success: true,
-            voteId,
-            sessionId,
+            voteId: vote.id,
+            sessionId: votingSession.id,
             status: 'submitted',
-            message: 'Voto ricevuto e in elaborazione per aggregazione CoinJoin',
-            estimatedConfirmationTime: '5-10 minuti'
+            message: 'Voto ricevuto e in elaborazione',
+            pendingVotes,
+            coinjoinTriggered: pendingVotes >= WABISABI_CONFIG.COINJOIN_THRESHOLD,
+            estimatedConfirmationTime: '5-15 minuti'
         });
 
     } catch (error) {
@@ -200,26 +354,50 @@ router.get('/status/:voteId', async (req, res) => {
 
         console.log(`[VOTING] 📊 Controllo stato voto ${voteId}`);
 
-        // TODO: Recuperare stato dal database
-        // const vote = await Vote.findOne({ 
-        //     where: { voteId },
-        //     include: [{ model: Transaction, as: 'transaction' }]
-        // });
+        // Trova il voto
+        const vote = await Vote.findByPk(voteId, {
+            include: [
+                {
+                    model: VotingSession,
+                    as: 'session',
+                    include: [
+                        {
+                            model: Transaction,
+                            as: 'transactions',
+                            where: { type: 'coinjoin' },
+                            required: false
+                        }
+                    ]
+                }
+            ]
+        });
 
-        // Mock response per ora
-        const mockStatuses = ['pending', 'confirmed', 'failed'];
-        const randomStatus = mockStatuses[Math.floor(Math.random() * mockStatuses.length)];
-        
+        if (!vote) {
+            return res.status(404).json({ error: 'Voto non trovato' });
+        }
+
         const response = {
-            voteId,
-            status: randomStatus,
-            timestamp: new Date().toISOString()
+            voteId: vote.id,
+            status: vote.status,
+            submittedAt: vote.submittedAt,
+            processedAt: vote.processedAt,
+            sessionId: vote.sessionId
         };
 
-        if (randomStatus === 'confirmed') {
-            response.transactionId = `tx_${crypto.randomBytes(16).toString('hex')}`;
-            response.confirmations = Math.floor(Math.random() * 6) + 1;
-            response.blockHeight = 850000 + Math.floor(Math.random() * 1000);
+        // Se il voto è stato processato, includi dettagli transazione
+        if (vote.status === 'confirmed' && vote.transactionId) {
+            const transaction = await Transaction.findOne({
+                where: { txId: vote.transactionId }
+            });
+
+            if (transaction) {
+                response.transaction = {
+                    txId: transaction.txId,
+                    confirmations: transaction.confirmations,
+                    blockHeight: transaction.blockHeight,
+                    blockHash: transaction.blockHash
+                };
+            }
         }
 
         res.json(response);
@@ -233,19 +411,89 @@ router.get('/status/:voteId', async (req, res) => {
     }
 });
 
+// GET /api/voting/session/:sessionId/stats - Statistiche sessione
+router.get('/session/:sessionId/stats', async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+
+        const session = await VotingSession.findByPk(sessionId, {
+            include: [
+                { model: Vote, as: 'votes' },
+                { model: Transaction, as: 'transactions' }
+            ]
+        });
+
+        if (!session) {
+            return res.status(404).json({ error: 'Sessione non trovata' });
+        }
+
+        const stats = {
+            sessionId: session.id,
+            status: session.status,
+            startTime: session.startTime,
+            endTime: session.endTime,
+            totalVotes: session.votes.length,
+            votesByStatus: {
+                pending: session.votes.filter(v => v.status === 'pending').length,
+                processed: session.votes.filter(v => v.status === 'processed').length,
+                confirmed: session.votes.filter(v => v.status === 'confirmed').length,
+                failed: session.votes.filter(v => v.status === 'failed').length
+            },
+            transactions: session.transactions.map(tx => ({
+                txId: tx.txId,
+                type: tx.type,
+                confirmations: tx.confirmations,
+                blockHeight: tx.blockHeight
+            }))
+        };
+
+        res.json(stats);
+
+    } catch (error) {
+        console.error('[VOTING] ❌ Errore statistiche sessione:', error);
+        res.status(500).json({ 
+            error: 'Errore nel recupero delle statistiche',
+            details: error.message 
+        });
+    }
+});
+
 // GET /api/voting/debug - Route di debug
-router.get('/debug', (req, res) => {
-    res.json({
-        service: 'WabiSabi Voting Service',
-        timestamp: new Date().toISOString(),
-        routes: [
-            'POST /api/voting/address',
-            'POST /api/voting/credentials', 
-            'POST /api/voting/submit',
-            'GET /api/voting/status/:voteId'
-        ],
-        status: 'active'
-    });
+router.get('/debug', async (req, res) => {
+    try {
+        const activeElections = await Election.count({ where: { status: 'active' } });
+        const activeSessions = await VotingSession.count({ 
+            where: { status: ['preparing', 'input_registration', 'output_registration'] } 
+        });
+        const pendingVotes = await Vote.count({ where: { status: 'pending' } });
+        const unusedCredentials = await Credential.count({ where: { isUsed: false } });
+
+        res.json({
+            service: 'WabiSabi Voting Service',
+            timestamp: new Date().toISOString(),
+            config: WABISABI_CONFIG,
+            stats: {
+                activeElections,
+                activeSessions,
+                pendingVotes,
+                unusedCredentials
+            },
+            routes: [
+                'POST /api/voting/address',
+                'POST /api/voting/credentials', 
+                'POST /api/voting/submit',
+                'GET /api/voting/status/:voteId',
+                'GET /api/voting/session/:sessionId/stats'
+            ],
+            status: 'active'
+        });
+    } catch (error) {
+        res.json({
+            service: 'WabiSabi Voting Service',
+            status: 'error',
+            error: error.message
+        });
+    }
 });
 
 module.exports = router;
