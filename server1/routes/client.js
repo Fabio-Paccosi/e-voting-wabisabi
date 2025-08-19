@@ -260,6 +260,45 @@ router.post('/elections/:id/vote', addUserToHeaders, async (req, res) => {
     }
 });
 
+// GET /api/elections/voted - Lista elezioni a cui l'utente ha partecipato
+router.get('/elections/voted', addUserToHeaders, async (req, res) => {
+    try {
+        console.log('[CLIENT GATEWAY] Richiesta elezioni votate');
+        
+        // Passa tutti i header inclusi quelli con informazioni utente
+        const response = await callService('vote', '/api/elections/voted', 'GET', null, req.headers);
+        console.log('[CLIENT GATEWAY] ✓ Elezioni votate caricate');
+        res.json(response);
+    } catch (error) {
+        console.error('[CLIENT GATEWAY] ✗ Errore caricamento elezioni votate:', error.message);
+        res.status(error.status || 500).json({ 
+            error: 'Errore nel caricamento delle elezioni votate',
+            details: error.originalError || error.message,
+            service: 'vote'
+        });
+    }
+});
+
+// GET /api/elections/:id/results - Risultati di un'elezione specifica
+router.get('/elections/:id/results', addUserToHeaders, async (req, res) => {
+    try {
+        const { id } = req.params;
+        console.log(`[CLIENT GATEWAY] Richiesta risultati elezione ${id}`);
+        
+        // Passa tutti i header inclusi quelli con informazioni utente
+        const response = await callService('vote', `/api/elections/${id}/results`, 'GET', null, req.headers);
+        console.log(`[CLIENT GATEWAY] ✓ Risultati elezione ${id} caricati`);
+        res.json(response);
+    } catch (error) {
+        console.error(`[CLIENT GATEWAY] ✗ Errore caricamento risultati elezione ${req.params.id}:`, error.message);
+        res.status(error.status || 500).json({ 
+            error: 'Errore nel caricamento dei risultati',
+            details: error.originalError || error.message,
+            service: 'vote'
+        });
+    }
+});
+
 // ==========================================
 // WHITELIST
 // ==========================================

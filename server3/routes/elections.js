@@ -176,6 +176,192 @@ router.get('/', extractUserFromHeaders, async (req, res) => {
     }
 });
 
+// GET /api/elections/voted - Lista elezioni a cui l'utente ha partecipato
+router.get('/voted', extractUserFromHeaders, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        
+        console.log(`[VOTE SERVICE] 📊 Richiesta elezioni votate per utente ${userId}`);
+
+        // Trova tutte le elezioni per cui l'utente ha votato (hasVoted = true)
+        const votedElections = await ElectionWhitelist.findAll({
+            where: {
+                userId: userId,
+                hasVoted: true  // Solo elezioni per cui ha effettivamente votato
+            },
+            include: [
+                {
+                    model: Election,
+                    as: 'election',
+                    include: [
+                        {
+                            model: Candidate,
+                            as: 'candidates',
+                            attributes: ['id', 'name', 'firstName', 'lastName', 'party', 'voteEncoding', 'bitcoinAddress', 'totalVotesReceived']
+                        }
+                    ]
+                }
+            ]
+        });
+
+        console.log(`[VOTE SERVICE] 🔍 Trovate ${votedElections.length} elezioni votate`);
+
+        const elections = votedElections.map(entry => ({
+            id: entry.election.id,
+            title: entry.election.title,
+            description: entry.election.description,
+            startDate: entry.election.startDate,
+            endDate: entry.election.endDate,
+            status: entry.election.status,
+            isActive: entry.election.isActive,
+            votingMethod: entry.election.votingMethod,
+            coinjoinEnabled: entry.election.coinjoinEnabled,
+            blockchainNetwork: entry.election.blockchainNetwork,
+            votedAt: entry.votedAt,
+            candidates: entry.election.candidates.map(candidate => ({
+                id: candidate.id,
+                name: candidate.name || `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim(),
+                firstName: candidate.firstName,
+                lastName: candidate.lastName,
+                party: candidate.party,
+                voteEncoding: candidate.voteEncoding,
+                bitcoinAddress: candidate.bitcoinAddress,
+                votes: candidate.totalVotesReceived || 0
+            }))
+        }));
+
+        res.json({
+            success: true,
+            elections: elections,
+            total: elections.length,
+            user: {
+                id: req.user.id,
+                email: req.user.email,
+                firstName: req.user.firstName,
+                lastName: req.user.lastName
+            }
+        });
+
+    } catch (error) {
+        console.error('[VOTE SERVICE] ❌ Errore caricamento elezioni votate:', error);
+        res.status(500).json({ 
+            error: 'Errore nel caricamento delle elezioni votate',
+            details: error.message 
+        });
+    }
+});
+
+// GET /api/elections/:id/results - Risultati di un'elezione specifica
+router.get('/:id/results', extractUserFromHeaders, async (req, res) => {
+    try {
+        const { id: electionId } = req.params;
+        const userId = req.user.id;
+        
+        console.log(`[VOTE SERVICE] 📊 Richiesta risultati elezione ${electionId} per utente ${userId}`);
+
+        // 1. Trova l'elezione con candidati
+        const election = await Election.findByPk(electionId, {
+            include: [
+                {
+                    model: Candidate,
+                    as: 'candidates',
+                    attributes: ['id', 'name', 'firstName', 'lastName', 'party', 'voteEncoding', 'bitcoinAddress', 'totalVotesReceived']
+                }
+            ]
+        });
+
+        if (!election) {
+            return res.status(404).json({ 
+                error: 'Elezione non trovata' 
+            });
+        }
+
+        // 2. Verifica che l'utente abbia votato per questa elezione
+        const whitelistEntry = await ElectionWhitelist.findOne({
+            where: {
+                electionId: electionId,
+                userId: userId,
+                hasVoted: true  // L'utente deve aver votato
+            }
+        });
+
+        if (!whitelistEntry) {
+            return res.status(403).json({ 
+                error: 'Non hai partecipato a questa elezione o non hai ancora votato' 
+            });
+        }
+
+        // 3. CONTROLLO PRINCIPALE: I risultati sono visibili solo se l'elezione è completata
+        if (election.status !== 'completed') {
+            return res.status(400).json({ 
+                error: 'I risultati saranno disponibili al termine dell\'elezione',
+                electionStatus: election.status,
+                message: 'L\'elezione deve essere conclusa per visualizzare i risultati'
+            });
+        }
+
+        console.log(`[VOTE SERVICE] ✅ Elezione completata, mostrando risultati`);
+
+        // 4. Costruisci i risultati con i voti ricevuti da ogni candidato
+        const results = election.candidates.map(candidate => ({
+            id: candidate.id,
+            name: candidate.name || `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim(),
+            firstName: candidate.firstName,
+            lastName: candidate.lastName,
+            party: candidate.party,
+            voteEncoding: candidate.voteEncoding,
+            bitcoinAddress: candidate.bitcoinAddress,
+            votes: candidate.totalVotesReceived || 0
+        }));
+
+        console.log("RISULTATI");
+        console.log(results);
+
+        // 5. Calcola statistiche aggiuntive
+        const totalVotes = results.reduce((sum, candidate) => sum + candidate.totalVotesReceived, 0);
+        const winner = results.reduce((max, candidate) => 
+            candidate.totalVotesReceived > (max?.totalVotesReceived || 0) ? candidate : max, null);
+
+        // 6. Ordina per numero di voti (decrescente)
+        results.sort((a, b) => b.totalVotesReceived - a.totalVotesReceived);
+
+        console.log(`[VOTE SERVICE] 📊 Risultati calcolati: ${totalVotes} voti totali`);
+
+        res.json({
+            success: true,
+            election: {
+                id: election.id,
+                title: election.title,
+                description: election.description,
+                startDate: election.startDate,
+                endDate: election.endDate,
+                status: election.status,
+                isActive: election.isActive,
+                completedAt: election.updatedAt  // Quando è stata aggiornata l'ultima volta
+            },
+            results: results,
+            statistics: {
+                totalVotes: totalVotes,
+                totalCandidates: results.length,
+                winner: winner,
+                participantCount: totalVotes,  // Nel sistema WabiSabi ogni persona vota una volta
+                completedAt: election.updatedAt
+            },
+            userInfo: {
+                hasVoted: true,
+                votedAt: whitelistEntry.votedAt
+            }
+        });
+
+    } catch (error) {
+        console.error('[VOTE SERVICE] ❌ Errore caricamento risultati:', error);
+        res.status(500).json({ 
+            error: 'Errore nel caricamento dei risultati',
+            details: error.message 
+        });
+    }
+});
+
 // GET /api/elections/:id - Dettagli elezione specifica
 router.get('/:id', extractUserFromHeaders, async (req, res) => {
     try {
@@ -309,7 +495,6 @@ router.post('/:id/vote', extractUserFromHeaders, async (req, res) => {
     }
 });
 
-module.exports = router;
 // GET /api/elections/debug - Route di debug per verificare header
 router.get('/debug', async (req, res) => {
     console.log('[VOTE SERVICE DEBUG] Headers ricevuti:');
@@ -330,3 +515,5 @@ router.get('/debug', async (req, res) => {
         message: 'Headers ricevuti dal vote-service'
     });
 });
+
+module.exports = router;
