@@ -1,5 +1,5 @@
 // server3/services/BitcoinService.js
-// Servizio per l'interazione con la blockchain Bitcoin
+// Servizio per l'interazione con la blockchain Bitcoin - VERSIONE CORRETTA
 
 const crypto = require('crypto');
 const axios = require('axios');
@@ -7,39 +7,90 @@ const axios = require('axios');
 class BitcoinService {
     constructor() {
         this.network = process.env.BITCOIN_NETWORK || 'testnet';
+        
+        // CORREZIONE: Configurazione RPC migliorata
         this.rpcConfig = {
             testnet: {
-                host: process.env.BITCOIN_RPC_HOST || 'localhost',
+                host: process.env.BITCOIN_RPC_HOST || '127.0.0.1', // Forza IPv4
                 port: process.env.BITCOIN_RPC_PORT || '18332',
                 username: process.env.BITCOIN_RPC_USER || 'bitcoinrpc',
-                password: process.env.BITCOIN_RPC_PASS || 'rpcpassword',
+                password: process.env.BITCOIN_RPC_PASSWORD || 'rpcpassword', // CORRETTO
                 protocol: 'http'
             },
             mainnet: {
-                host: process.env.BITCOIN_RPC_HOST || 'localhost', 
+                host: process.env.BITCOIN_RPC_HOST || '127.0.0.1', // Forza IPv4
                 port: process.env.BITCOIN_RPC_PORT || '8332',
                 username: process.env.BITCOIN_RPC_USER || 'bitcoinrpc',
-                password: process.env.BITCOIN_RPC_PASS || 'rpcpassword',
+                password: process.env.BITCOIN_RPC_PASSWORD || 'rpcpassword', // CORRETTO
                 protocol: 'http'
             }
         };
 
-        // Fallback API pubbliche per testnet
+        // API pubbliche con fallback multipli
         this.publicApis = {
-            testnet: 'https://blockstream.info/testnet/api',
-            mainnet: 'https://blockstream.info/api'
+            testnet: [
+                'https://blockstream.info/testnet/api',
+                'https://mempool.space/testnet/api'
+            ],
+            mainnet: [
+                'https://blockstream.info/api',
+                'https://mempool.space/api'
+            ]
         };
 
         this.rpc = this.rpcConfig[this.network];
-        this.publicApi = this.publicApis[this.network];
+        this.publicApiList = this.publicApis[this.network];
+        
+        // Test di connessione iniziale
+        this.isRpcAvailable = false;
+        this.testRpcConnection();
         
         console.log(`[BITCOIN] 🚀 Inizializzato per rete: ${this.network}`);
+        console.log(`[BITCOIN] 🔧 RPC: ${this.rpc.host}:${this.rpc.port}`);
+    }
+
+    /**
+     * Test connessione RPC
+     */
+    async testRpcConnection() {
+        try {
+            const rpcUrl = `${this.rpc.protocol}://${this.rpc.host}:${this.rpc.port}`;
+            
+            const response = await axios.post(rpcUrl, {
+                jsonrpc: '2.0',
+                id: 'test',
+                method: 'getblockchaininfo',
+                params: []
+            }, {
+                auth: {
+                    username: this.rpc.username,
+                    password: this.rpc.password
+                },
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                timeout: 5000
+            });
+
+            if (!response.data.error) {
+                this.isRpcAvailable = true;
+                console.log(`[BITCOIN] ✅ RPC connesso: blocco ${response.data.result.blocks}`);
+            }
+        } catch (error) {
+            this.isRpcAvailable = false;
+            console.log(`[BITCOIN] ⚠️ RPC non disponibile: ${error.message}`);
+            console.log(`[BITCOIN] 🔄 Userò API pubbliche come fallback`);
+        }
     }
 
     /**
      * Esegue chiamata RPC al nodo Bitcoin
      */
     async rpcCall(method, params = []) {
+        if (!this.isRpcAvailable) {
+            throw new Error('RPC non disponibile');
+        }
+
         try {
             const rpcUrl = `${this.rpc.protocol}://${this.rpc.host}:${this.rpc.port}`;
             
@@ -68,10 +119,9 @@ class BitcoinService {
         } catch (error) {
             console.error(`[BITCOIN] ❌ Errore RPC ${method}:`, error.message);
             
-            // Fallback a API pubblica se RPC non disponibile
+            // Segna RPC come non disponibile se c'è errore di connessione
             if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
-                console.log(`[BITCOIN] 🔄 Fallback a API pubblica per ${method}`);
-                return await this.fallbackApiCall(method, params);
+                this.isRpcAvailable = false;
             }
             
             throw error;
@@ -79,69 +129,232 @@ class BitcoinService {
     }
 
     /**
-     * Fallback a API pubbliche quando RPC non disponibile
+     * Broadcast transazione alla blockchain - METODO MIGLIORATO
      */
-    async fallbackApiCall(method, params) {
+    async broadcastTransaction(rawTx) {
         try {
-            switch (method) {
-                case 'getblockchaininfo':
-                    return await this.getChainInfoFromApi();
-                case 'getrawtransaction':
-                    return await this.getRawTransactionFromApi(params[0]);
-                case 'sendrawtransaction':
-                    return await this.broadcastTransactionToApi(params[0]);
-                case 'getblockcount':
-                    return await this.getBlockHeightFromApi();
-                default:
-                    throw new Error(`Metodo ${method} non supportato via API pubblica`);
+            console.log(`[BITCOIN] 📡 Broadcasting transazione...`);
+            console.log(`[BITCOIN] 📊 RawTx length: ${rawTx.length} chars`);
+            
+            // Validazione base della raw transaction
+            if (!this.isValidRawTransaction(rawTx)) {
+                throw new Error('Raw transaction non valida');
             }
+
+            let txId = null;
+            let broadcastMethod = 'unknown';
+
+            // Tentativo 1: RPC locale
+            if (this.isRpcAvailable) {
+                try {
+                    txId = await this.rpcCall('sendrawtransaction', [rawTx]);
+                    broadcastMethod = 'rpc';
+                    console.log(`[BITCOIN] ✅ Broadcast RPC riuscito: ${txId}`);
+                } catch (rpcError) {
+                    console.log(`[BITCOIN] 🔄 RPC fallito: ${rpcError.message}`);
+                }
+            }
+
+            // Tentativo 2: API pubbliche (con retry)
+            if (!txId) {
+                txId = await this.broadcastViaPublicApis(rawTx);
+                broadcastMethod = 'api';
+            }
+
+            return {
+                success: true,
+                txId: txId,
+                network: this.network,
+                method: broadcastMethod,
+                broadcastedAt: new Date().toISOString()
+            };
+
         } catch (error) {
-            console.error(`[BITCOIN] ❌ Errore API pubblica:`, error.message);
+            console.error(`[BITCOIN] ❌ Errore broadcast:`, error);
+            
+            // Fallback per ambiente di sviluppo
+            if (process.env.NODE_ENV === 'development') {
+                return this.mockBroadcast(rawTx);
+            }
+            
             throw error;
         }
     }
 
     /**
-     * Ottiene informazioni sulla blockchain
+     * Broadcast tramite API pubbliche con retry
      */
-    async getChainInfo() {
+    async broadcastViaPublicApis(rawTx) {
+        let lastError;
+
+        for (const apiUrl of this.publicApiList) {
+            try {
+                console.log(`[BITCOIN] 📡 Tentativo broadcast via ${apiUrl}`);
+                
+                const response = await axios.post(`${apiUrl}/tx`, rawTx, {
+                    headers: { 
+                        'Content-Type': 'text/plain',
+                        'User-Agent': 'BitcoinService/1.0'
+                    },
+                    timeout: 30000
+                });
+                
+                // Gestisci diverse risposte API
+                let txId;
+                if (typeof response.data === 'string') {
+                    txId = response.data.trim();
+                } else if (response.data.txid) {
+                    txId = response.data.txid;
+                } else {
+                    throw new Error('Formato risposta API non riconosciuto');
+                }
+                
+                console.log(`[BITCOIN] ✅ Broadcast API riuscito: ${txId}`);
+                return txId;
+                
+            } catch (error) {
+                lastError = error;
+                console.log(`[BITCOIN] ❌ Errore ${apiUrl}: ${error.message}`);
+                
+                // Se è errore 400, la transazione è probabilmente invalida
+                if (error.response?.status === 400) {
+                    const errorDetail = error.response.data || 'Bad Request';
+                    throw new Error(`Transaction invalida: ${errorDetail}`);
+                }
+                
+                // Continua con la prossima API
+                continue;
+            }
+        }
+
+        throw new Error(`Broadcast fallito su tutte le API: ${lastError?.message}`);
+    }
+
+    /**
+     * Validazione base raw transaction
+     */
+    isValidRawTransaction(rawTx) {
         try {
-            const info = await this.rpcCall('getblockchaininfo');
-            
-            return {
-                network: this.network,
-                blocks: info.blocks,
-                bestblockhash: info.bestblockhash,
-                difficulty: info.difficulty,
-                verificationprogress: info.verificationprogress,
-                chainwork: info.chainwork
-            };
+            // Controlli base
+            if (!rawTx || typeof rawTx !== 'string') {
+                return false;
+            }
+
+            // Deve essere hex valido
+            if (!/^[0-9a-fA-F]+$/.test(rawTx)) {
+                return false;
+            }
+
+            // Lunghezza minima ragionevole (~ 100 bytes = 200 hex chars)
+            if (rawTx.length < 200) {
+                console.log(`[BITCOIN] ⚠️ RawTx molto corta: ${rawTx.length} chars`);
+                return false;
+            }
+
+            // Lunghezza massima ragionevole (~ 100KB = 200K hex chars)
+            if (rawTx.length > 200000) {
+                console.log(`[BITCOIN] ⚠️ RawTx molto lunga: ${rawTx.length} chars`);
+                return false;
+            }
+
+            return true;
         } catch (error) {
-            console.error('[BITCOIN] ❌ Errore getChainInfo:', error);
-            throw error;
+            console.error('[BITCOIN] ❌ Errore validazione rawTx:', error);
+            return false;
         }
     }
 
     /**
-     * Ottiene info blockchain da API pubblica
+     * Mock broadcast per sviluppo
      */
-    async getChainInfoFromApi() {
+    mockBroadcast(rawTx) {
+        const mockTxId = crypto.createHash('sha256')
+            .update(`mock:${rawTx.substring(0, 32)}:${Date.now()}`)
+            .digest('hex');
+        
+        console.log(`[BITCOIN] 🧪 Broadcast simulato: ${mockTxId}`);
+        
+        return {
+            success: true,
+            txId: mockTxId,
+            network: this.network,
+            method: 'mock',
+            broadcastedAt: new Date().toISOString(),
+            simulated: true
+        };
+    }
+
+    /**
+     * Ottiene numero di conferme per una transazione
+     */
+    async getTransactionConfirmations(txId) {
         try {
-            const response = await axios.get(`${this.publicApi}/blocks/tip/height`, {
-                timeout: 10000
-            });
+            console.log(`[BITCOIN] 🔍 Controllo conferme per ${txId}`);
             
-            return {
-                network: this.network,
-                blocks: response.data,
-                bestblockhash: null,
-                difficulty: null,
-                verificationprogress: 1.0,
-                chainwork: null
-            };
+            // Tentativo RPC
+            if (this.isRpcAvailable) {
+                try {
+                    const txInfo = await this.rpcCall('getrawtransaction', [txId, true]);
+                    const currentBlock = await this.rpcCall('getblockcount');
+                    
+                    if (txInfo.blockhash) {
+                        const blockInfo = await this.rpcCall('getblock', [txInfo.blockhash]);
+                        const confirmations = currentBlock - blockInfo.height + 1;
+                        console.log(`[BITCOIN] ✅ Conferme RPC: ${confirmations}`);
+                        return confirmations;
+                    } else {
+                        return 0; // Mempool
+                    }
+                } catch (rpcError) {
+                    console.log(`[BITCOIN] 🔄 RPC conferme fallito: ${rpcError.message}`);
+                }
+            }
+
+            // Fallback API pubbliche
+            return await this.getConfirmationsViaApi(txId);
+
         } catch (error) {
-            throw new Error(`Errore API pubblica getChainInfo: ${error.message}`);
+            console.error(`[BITCOIN] ❌ Errore controllo conferme:`, error);
+            
+            // Mock per sviluppo
+            if (process.env.NODE_ENV === 'development') {
+                const mockConfirmations = Math.floor(Math.random() * 7);
+                console.log(`[BITCOIN] 🧪 Conferme simulate: ${mockConfirmations}`);
+                return mockConfirmations;
+            }
+            
+            return 0;
         }
+    }
+
+    /**
+     * Ottiene conferme tramite API
+     */
+    async getConfirmationsViaApi(txId) {
+        for (const apiUrl of this.publicApiList) {
+            try {
+                const response = await axios.get(`${apiUrl}/tx/${txId}`, {
+                    timeout: 10000
+                });
+                
+                const txData = response.data;
+                
+                if (txData.status && txData.status.confirmed) {
+                    const tipResponse = await axios.get(`${apiUrl}/blocks/tip/height`);
+                    const currentHeight = tipResponse.data;
+                    const confirmations = currentHeight - txData.status.block_height + 1;
+                    console.log(`[BITCOIN] ✅ Conferme API: ${confirmations}`);
+                    return confirmations;
+                } else {
+                    return 0; // Non confermata
+                }
+            } catch (error) {
+                console.log(`[BITCOIN] ❌ Errore conferme ${apiUrl}: ${error.message}`);
+                continue;
+            }
+        }
+        
+        throw new Error('Impossibile ottenere conferme da tutte le API');
     }
 
     /**
@@ -153,12 +366,9 @@ class BitcoinService {
                 return false;
             }
 
-            // Controlli base per formato indirizzo
             if (network === 'testnet') {
-                // Testnet: tb1... (bech32), m/n... (legacy), 2... (segwit)
                 return /^(tb1[a-zA-HJ-NP-Z0-9]{25,87}|[mn][a-km-zA-HJ-NP-Z1-9]{25,34}|2[a-km-zA-HJ-NP-Z1-9]{25,34})$/.test(address);
             } else {
-                // Mainnet: bc1... (bech32), 1... (legacy), 3... (segwit)
                 return /^(bc1[a-zA-HJ-NP-Z0-9]{25,87}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})$/.test(address);
             }
         } catch (error) {
@@ -168,291 +378,7 @@ class BitcoinService {
     }
 
     /**
-     * Converte indirizzo a scriptPubKey (simulazione)
-     */
-    addressToScriptPubKey(address) {
-        // Simulazione - in un sistema reale userebbe bitcoinjs-lib
-        const hash = crypto.createHash('sha256').update(address).digest('hex');
-        return `OP_DUP OP_HASH160 ${hash.substring(0, 40)} OP_EQUALVERIFY OP_CHECKSIG`;
-    }
-
-    /**
-     * Broadcast transazione alla blockchain
-     */
-    async broadcastTransaction(rawTx) {
-        try {
-            console.log(`[BITCOIN] 📡 Broadcasting transazione...`);
-            
-            // Prima tenta RPC, poi fallback ad API pubblica
-            let txId;
-            try {
-                txId = await this.rpcCall('sendrawtransaction', [rawTx]);
-            } catch (rpcError) {
-                console.log(`[BITCOIN] 🔄 RPC fallito, provo API pubblica...`);
-                txId = await this.broadcastTransactionToApi(rawTx);
-            }
-
-            console.log(`[BITCOIN] ✅ Transazione trasmessa: ${txId}`);
-            
-            return {
-                success: true,
-                txId: txId,
-                network: this.network,
-                broadcastedAt: new Date().toISOString()
-            };
-
-        } catch (error) {
-            console.error(`[BITCOIN] ❌ Errore broadcast:`, error);
-            
-            // Per testing, simula successo con txId mock
-            if (process.env.NODE_ENV === 'development') {
-                const mockTxId = crypto.createHash('sha256')
-                    .update(`mock:${rawTx}:${Date.now()}`)
-                    .digest('hex');
-                
-                console.log(`[BITCOIN] 🧪 Broadcast simulato: ${mockTxId}`);
-                
-                return {
-                    success: true,
-                    txId: mockTxId,
-                    network: this.network,
-                    broadcastedAt: new Date().toISOString(),
-                    simulated: true
-                };
-            }
-            
-            throw error;
-        }
-    }
-
-    /**
-     * Broadcast via API pubblica
-     */
-    async broadcastTransactionToApi(rawTx) {
-        try {
-            const response = await axios.post(`${this.publicApi}/tx`, rawTx, {
-                headers: { 'Content-Type': 'text/plain' },
-                timeout: 30000
-            });
-            
-            return response.data;
-        } catch (error) {
-            throw new Error(`Errore broadcast API: ${error.message}`);
-        }
-    }
-
-    /**
-     * Ottiene numero di conferme per una transazione
-     */
-    async getTransactionConfirmations(txId) {
-        try {
-            console.log(`[BITCOIN] 🔍 Controllo conferme per ${txId}`);
-            
-            // Prima tenta RPC
-            try {
-                const txInfo = await this.rpcCall('getrawtransaction', [txId, true]);
-                const currentBlock = await this.rpcCall('getblockcount');
-                
-                if (txInfo.blockhash) {
-                    const blockInfo = await this.rpcCall('getblock', [txInfo.blockhash]);
-                    return currentBlock - blockInfo.height + 1;
-                } else {
-                    return 0; // Non ancora in un blocco
-                }
-            } catch (rpcError) {
-                // Fallback ad API pubblica
-                return await this.getTransactionConfirmationsFromApi(txId);
-            }
-
-        } catch (error) {
-            console.error(`[BITCOIN] ❌ Errore controllo conferme:`, error);
-            
-            // Per testing, simula conferme progressive
-            if (process.env.NODE_ENV === 'development') {
-                const mockConfirmations = Math.floor(Math.random() * 7); // 0-6 conferme
-                console.log(`[BITCOIN] 🧪 Conferme simulate per ${txId}: ${mockConfirmations}`);
-                return mockConfirmations;
-            }
-            
-            return 0;
-        }
-    }
-
-    /**
-     * Ottiene conferme da API pubblica
-     */
-    async getTransactionConfirmationsFromApi(txId) {
-        try {
-            const response = await axios.get(`${this.publicApi}/tx/${txId}`, {
-                timeout: 10000
-            });
-            
-            const txData = response.data;
-            
-            if (txData.status && txData.status.confirmed) {
-                const tipResponse = await axios.get(`${this.publicApi}/blocks/tip/height`);
-                const currentHeight = tipResponse.data;
-                return currentHeight - txData.status.block_height + 1;
-            }
-            
-            return 0;
-        } catch (error) {
-            throw new Error(`Errore API conferme: ${error.message}`);
-        }
-    }
-
-    /**
-     * Ottiene transazione raw da API
-     */
-    async getRawTransactionFromApi(txId) {
-        try {
-            const response = await axios.get(`${this.publicApi}/tx/${txId}/hex`, {
-                timeout: 10000
-            });
-            return response.data;
-        } catch (error) {
-            throw new Error(`Errore API getRawTransaction: ${error.message}`);
-        }
-    }
-
-    /**
-     * Ottiene altezza blocco da API
-     */
-    async getBlockHeightFromApi() {
-        try {
-            const response = await axios.get(`${this.publicApi}/blocks/tip/height`, {
-                timeout: 10000
-            });
-            return response.data;
-        } catch (error) {
-            throw new Error(`Errore API getBlockHeight: ${error.message}`);
-        }
-    }
-
-    /**
-     * Crea indirizzo Bitcoin (simulazione per testing)
-     */
-    generateAddress(type = 'bech32') {
-        try {
-            const randomBytes = crypto.randomBytes(20);
-            const hash160 = crypto.createHash('ripemd160').update(randomBytes).digest('hex');
-            
-            if (this.network === 'testnet') {
-                switch (type) {
-                    case 'bech32':
-                        return `tb1q${hash160}`;
-                    case 'legacy':
-                        return `m${hash160.substring(0, 30)}`;
-                    case 'segwit':
-                        return `2${hash160.substring(0, 30)}`;
-                    default:
-                        return `tb1q${hash160}`;
-                }
-            } else {
-                switch (type) {
-                    case 'bech32':
-                        return `bc1q${hash160}`;
-                    case 'legacy':
-                        return `1${hash160.substring(0, 30)}`;
-                    case 'segwit':
-                        return `3${hash160.substring(0, 30)}`;
-                    default:
-                        return `bc1q${hash160}`;
-                }
-            }
-        } catch (error) {
-            console.error('[BITCOIN] ❌ Errore generazione indirizzo:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Stima fee per transazione
-     */
-    async estimateFee(targetBlocks = 6) {
-        try {
-            // Prima tenta RPC
-            try {
-                const feeRate = await this.rpcCall('estimatesmartfee', [targetBlocks]);
-                return feeRate.feerate ? Math.ceil(feeRate.feerate * 100000000) : 1000; // Converte a sat/byte
-            } catch (rpcError) {
-                // Fallback a fee fissa per testing
-                console.log(`[BITCOIN] 🔄 Fee estimation fallback`);
-                return 1000; // 1000 sat/byte default
-            }
-        } catch (error) {
-            console.error('[BITCOIN] ❌ Errore stima fee:', error);
-            return 1000; // Fee di sicurezza
-        }
-    }
-
-    /**
-     * Monitora indirizzo per transazioni in entrata
-     */
-    async monitorAddress(address, callback) {
-        console.log(`[BITCOIN] 👀 Avvio monitoring per indirizzo ${address}`);
-        
-        let lastTxCount = 0;
-        
-        const checkAddress = async () => {
-            try {
-                const response = await axios.get(`${this.publicApi}/address/${address}/txs`, {
-                    timeout: 10000
-                });
-                
-                const transactions = response.data;
-                
-                if (transactions.length > lastTxCount) {
-                    const newTxs = transactions.slice(lastTxCount);
-                    lastTxCount = transactions.length;
-                    
-                    for (const tx of newTxs) {
-                        callback({
-                            txId: tx.txid,
-                            address: address,
-                            value: tx.vout.find(out => out.scriptpubkey_address === address)?.value || 0,
-                            confirmations: tx.status.confirmed ? 1 : 0
-                        });
-                    }
-                }
-                
-                // Continua monitoring ogni 30 secondi
-                setTimeout(checkAddress, 30000);
-                
-            } catch (error) {
-                console.error(`[BITCOIN] ❌ Errore monitoring ${address}:`, error.message);
-                // Retry dopo errore
-                setTimeout(checkAddress, 60000);
-            }
-        };
-        
-        // Avvia monitoring
-        setTimeout(checkAddress, 5000);
-    }
-
-    /**
-     * Ottiene bilancio di un indirizzo
-     */
-    async getAddressBalance(address) {
-        try {
-            const response = await axios.get(`${this.publicApi}/address/${address}`, {
-                timeout: 10000
-            });
-            
-            return {
-                confirmed: response.data.chain_stats.funded_txo_sum - response.data.chain_stats.spent_txo_sum,
-                unconfirmed: response.data.mempool_stats.funded_txo_sum - response.data.mempool_stats.spent_txo_sum,
-                total: (response.data.chain_stats.funded_txo_sum - response.data.chain_stats.spent_txo_sum) +
-                       (response.data.mempool_stats.funded_txo_sum - response.data.mempool_stats.spent_txo_sum)
-            };
-        } catch (error) {
-            console.error(`[BITCOIN] ❌ Errore bilancio ${address}:`, error);
-            return { confirmed: 0, unconfirmed: 0, total: 0 };
-        }
-    }
-
-    /**
-     * Test connessione ai servizi Bitcoin
+     * Test connessione completo
      */
     async testConnection() {
         try {
@@ -463,27 +389,37 @@ class BitcoinService {
                 rpcAvailable: false,
                 apiAvailable: false,
                 blockHeight: null,
+                rpcUrl: `${this.rpc.host}:${this.rpc.port}`,
+                apis: this.publicApiList,
                 timestamp: new Date().toISOString()
             };
 
             // Test RPC
             try {
-                const chainInfo = await this.rpcCall('getblockchaininfo');
-                results.rpcAvailable = true;
-                results.blockHeight = chainInfo.blocks;
-                console.log(`[BITCOIN] ✅ RPC connesso: blocco ${chainInfo.blocks}`);
+                await this.testRpcConnection();
+                if (this.isRpcAvailable) {
+                    const chainInfo = await this.rpcCall('getblockchaininfo');
+                    results.rpcAvailable = true;
+                    results.blockHeight = chainInfo.blocks;
+                    console.log(`[BITCOIN] ✅ RPC connesso: blocco ${chainInfo.blocks}`);
+                }
             } catch (rpcError) {
                 console.log(`[BITCOIN] ❌ RPC non disponibile: ${rpcError.message}`);
             }
 
-            // Test API pubblica
-            try {
-                const height = await this.getBlockHeightFromApi();
-                results.apiAvailable = true;
-                results.blockHeight = results.blockHeight || height;
-                console.log(`[BITCOIN] ✅ API pubblica connessa: blocco ${height}`);
-            } catch (apiError) {
-                console.log(`[BITCOIN] ❌ API pubblica non disponibile: ${apiError.message}`);
+            // Test API pubbliche
+            for (const apiUrl of this.publicApiList) {
+                try {
+                    const response = await axios.get(`${apiUrl}/blocks/tip/height`, {
+                        timeout: 10000
+                    });
+                    results.apiAvailable = true;
+                    results.blockHeight = results.blockHeight || response.data;
+                    console.log(`[BITCOIN] ✅ API ${apiUrl} connessa: blocco ${response.data}`);
+                    break; // Una API che funziona è sufficiente
+                } catch (apiError) {
+                    console.log(`[BITCOIN] ❌ API ${apiUrl} non disponibile: ${apiError.message}`);
+                }
             }
 
             return results;
@@ -498,6 +434,48 @@ class BitcoinService {
                 timestamp: new Date().toISOString()
             };
         }
+    }
+
+    /**
+     * Ottiene bilancio di un indirizzo
+     */
+    async getAddressBalance(address) {
+        for (const apiUrl of this.publicApiList) {
+            try {
+                const response = await axios.get(`${apiUrl}/address/${address}`, {
+                    timeout: 10000
+                });
+                
+                return {
+                    confirmed: response.data.chain_stats.funded_txo_sum - response.data.chain_stats.spent_txo_sum,
+                    unconfirmed: response.data.mempool_stats.funded_txo_sum - response.data.mempool_stats.spent_txo_sum,
+                    total: (response.data.chain_stats.funded_txo_sum - response.data.chain_stats.spent_txo_sum) +
+                           (response.data.mempool_stats.funded_txo_sum - response.data.mempool_stats.spent_txo_sum)
+                };
+            } catch (error) {
+                console.error(`[BITCOIN] ❌ Errore bilancio ${address} con ${apiUrl}:`, error.message);
+                continue;
+            }
+        }
+        
+        return { confirmed: 0, unconfirmed: 0, total: 0 };
+    }
+
+    /**
+     * Ottiene informazioni di stato
+     */
+    getStatusInfo() {
+        return {
+            network: this.network,
+            rpcAvailable: this.isRpcAvailable,
+            rpcConfig: {
+                host: this.rpc.host,
+                port: this.rpc.port,
+                url: `${this.rpc.protocol}://${this.rpc.host}:${this.rpc.port}`
+            },
+            publicApis: this.publicApiList,
+            initialized: true
+        };
     }
 }
 

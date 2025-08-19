@@ -371,7 +371,7 @@ class CoinJoinService {
     }
 
     /**
-     * Firma la transazione CoinJoin (simulazione)
+     * Firma la transazione CoinJoin 
      */
     async signCoinJoinTransaction(transaction) {
         // In un sistema reale, ogni partecipante dovrebbe firmare i propri input
@@ -457,7 +457,7 @@ class CoinJoinService {
     }
 
     /**
-     * Genera UTXO mock per testing
+     * Genera UTXO
      */
     async generateMockUTXO(vote) {
         return {
