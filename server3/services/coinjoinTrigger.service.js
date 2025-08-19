@@ -3,14 +3,15 @@ const crypto = require('crypto');
 const axios = require('axios');
 
 // Import corretto dei modelli dal database config centralizzato
-const { Vote, Election, Candidate, VotingSession } = require('../shared/database_config').getModelsForService('vote');
+const { sequelize, Vote, Election, Candidate, VotingSession } = require('../shared/database_config').getModelsForService('vote');
+const coinJoinServiceInstance = require('./CoinJoinService');
 
 class CoinJoinTriggerService {
     constructor() {
         this.isRunning = false;
         this.checkInterval = null;
         this.intervalMs = parseInt(process.env.COINJOIN_CHECK_INTERVAL) || 30000;
-        
+        this.coinJoinService = coinJoinServiceInstance;
         console.log('🚀 [CoinJoin Service] Servizio inizializzato');
     }
 
@@ -76,24 +77,50 @@ class CoinJoinTriggerService {
 
     async processElectionVotes(election) {
         try {
-            const pendingVotes = await Vote.findAll({
+            console.log(`[CoinJoin Service] Processamento voti per elezione "${election.title}"`);
+            
+            // Step 1: Trova sessioni per questa elezione
+            const sessions = await VotingSession.findAll({
+                where: { electionId: election.id }
+            });
+    
+            if (!sessions || sessions.length === 0) {
+                console.log(`[CoinJoin Service] Nessuna sessione per elezione ${election.id}`);
+                return;
+            }
+    
+            console.log(`[CoinJoin Service] Trovate ${sessions.length} sessioni`);
+    
+            // Step 2: Trova voti non processati in queste sessioni
+            const sessionIds = sessions.map(s => s.id);
+            const votes = await Vote.findAll({
                 where: {
-                    electionId: election.id,
-                    status: 'pending'
+                    sessionId: sessionIds,
+                    transactionId: null  // Non ancora processati
                 }
             });
-
-            const requiredVotes = 2; // Soglia per CoinJoin
-            console.log(`📊 [CoinJoin Service] Elezione "${election.title}": ${pendingVotes.length}/${requiredVotes} voti pendenti`);
-
-            if (pendingVotes.length >= requiredVotes) {
-                console.log(`🚀 [CoinJoin Service] Trigger raggiunto per elezione "${election.title}"!`);
-                console.log(`🔄 [CoinJoin Service] Esecuzione CoinJoin per "${election.title}"`);
-                
-                await this.executeCoinJoin(election, pendingVotes.slice(0, requiredVotes));
+    
+            if (!votes || votes.length === 0) {
+                console.log(`[CoinJoin Service] Nessun voto pending per elezione ${election.id}`);
+                return;
             }
+    
+            console.log(`[CoinJoin Service] Trovati ${votes.length} voti pending`);
+    
+            // Step 3: Verifica soglia
+            const threshold = election.coinjoinTrigger || 2;
+            if (votes.length < threshold) {
+                console.log(`[CoinJoin Service] Soglia non raggiunta: ${votes.length}/${threshold}`);
+                return;
+            }
+    
+            // Step 4: Procedi con CoinJoin
+            //await this.processCoinJoin(election, votes);
+            await this.coinJoinService.startCoinJoin(sessionId, election.id, votes);
+            
         } catch (error) {
-            console.error(`❌ [CoinJoin Service] Errore processamento voti:`, error);
+            console.error(`[CoinJoin Service] Errore:`, error);
+            throw error;
         }
     }
 
@@ -307,7 +334,7 @@ class CoinJoinTriggerService {
     }
 
     async broadcastToLocalNode(tx, network) {
-        const rpcUrl = process.env.BITCOIN_RPC_URL || 'http://127.0.0.1:18332';
+        const rpcUrl = process.env.BITCOIN_RPC_TESTNET || 'http://127.0.0.1:18332';
         
         try {
             const response = await axios.post(rpcUrl, {

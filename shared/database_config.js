@@ -334,6 +334,20 @@ const Vote = sequelize.define('Vote', {
         type: DataTypes.STRING,
         allowNull: true,
         field: 'transaction_id'
+    },
+    status: {
+        type: DataTypes.ENUM('pending', 'processed', 'confirmed', 'failed'),
+        defaultValue: 'pending'
+    },
+    submittedAt: {
+        type: DataTypes.DATE,
+        defaultValue: DataTypes.NOW,
+        field: 'submitted_at'
+    },
+    processedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'processed_at'
     }
 }, {
     tableName: 'votes'
@@ -471,42 +485,90 @@ const SystemSettings = sequelize.define('SystemSettings', {
 // ====================
 
 // User Relations
-User.hasMany(ElectionWhitelist, { foreignKey: 'userId', as: 'electionWhitelists' });
-ElectionWhitelist.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+User.hasMany(ElectionWhitelist, { 
+    foreignKey: 'userId', 
+    as: 'electionWhitelists' 
+});
+ElectionWhitelist.belongsTo(User, { 
+    foreignKey: 'userId', 
+    as: 'user' 
+});
 
-// Election Relations
-Election.hasMany(ElectionWhitelist, { foreignKey: 'electionId', as: 'whitelist' });
-ElectionWhitelist.belongsTo(Election, { foreignKey: 'electionId', as: 'election' });
-
-Election.hasMany(Candidate, { foreignKey: 'electionId', as: 'candidates' });
-Candidate.belongsTo(Election, { foreignKey: 'electionId', as: 'election' });
-
-Election.hasMany(VotingSession, { foreignKey: 'electionId', as: 'sessions' });
-VotingSession.belongsTo(Election, { foreignKey: 'electionId', as: 'election' });
-
-Election.hasMany(Transaction, { foreignKey: 'electionId', as: 'transactions' });
-Transaction.belongsTo(Election, { foreignKey: 'electionId', as: 'election' });
-
-// VotingSession Relations
-VotingSession.hasMany(Vote, { foreignKey: 'sessionId', as: 'votes' });
-Vote.belongsTo(VotingSession, { foreignKey: 'sessionId', as: 'session' });
-
-VotingSession.hasMany(Transaction, { foreignKey: 'sessionId', as: 'transactions' });
-Transaction.belongsTo(VotingSession, { foreignKey: 'sessionId', as: 'session' });
-
-// Vote Relations
-Vote.belongsTo(Transaction, { foreignKey: 'transactionId', as: 'transaction' });
-Transaction.hasMany(Vote, { foreignKey: 'transactionId', as: 'votes' });
-
-// Credential Relations
 User.hasMany(Credential, { 
     foreignKey: 'user_id', 
     as: 'credentials' 
-  });
-  
-  Credential.belongsTo(User, { 
+});
+Credential.belongsTo(User, { 
     foreignKey: 'user_id',
-  });
+    as: 'user'  // ✅ AGGIUNTO: alias per completezza
+});
+
+// Election Relations
+Election.hasMany(ElectionWhitelist, { 
+    foreignKey: 'electionId', 
+    as: 'whitelist' 
+});
+ElectionWhitelist.belongsTo(Election, { 
+    foreignKey: 'electionId', 
+    as: 'election' 
+});
+
+Election.hasMany(Candidate, { 
+    foreignKey: 'electionId', 
+    as: 'candidates' 
+});
+Candidate.belongsTo(Election, { 
+    foreignKey: 'electionId', 
+    as: 'election' 
+});
+
+Election.hasMany(VotingSession, { 
+    foreignKey: 'electionId', 
+    as: 'sessions' 
+});
+VotingSession.belongsTo(Election, { 
+    foreignKey: 'electionId', 
+    as: 'election' 
+});
+
+Election.hasMany(Transaction, { 
+    foreignKey: 'electionId', 
+    as: 'transactions' 
+});
+Transaction.belongsTo(Election, { 
+    foreignKey: 'electionId', 
+    as: 'election' 
+});
+
+// VotingSession Relations
+VotingSession.hasMany(Vote, { 
+    foreignKey: 'sessionId', 
+    as: 'votes' 
+});
+Vote.belongsTo(VotingSession, { 
+    foreignKey: 'sessionId', 
+    as: 'votingSession'  // ✅ CORRETTO: alias univoco
+});
+
+VotingSession.hasMany(Transaction, { 
+    foreignKey: 'sessionId', 
+    as: 'sessionTransactions'  // ✅ CORRETTO: alias univoco
+});
+Transaction.belongsTo(VotingSession, { 
+    foreignKey: 'sessionId', 
+    as: 'votingSession'  // ✅ CORRETTO: alias coerente
+});
+
+// Vote-Transaction Relations (opzionale)
+Vote.belongsTo(Transaction, { 
+    foreignKey: 'transactionId', 
+    as: 'transaction' 
+});
+Transaction.hasMany(Vote, { 
+    foreignKey: 'transactionId', 
+    as: 'votes' 
+});
+
 
 // ====================
 // FUNZIONI DI UTILITÀ
