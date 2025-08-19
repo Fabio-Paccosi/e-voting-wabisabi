@@ -222,6 +222,11 @@ const Candidate = sequelize.define('Candidate', {
         type: DataTypes.TEXT,
         allowNull: true,
         field: 'bitcoin_public_key'
+    },
+    totalVotesReceived: {
+        type: DataTypes.INTEGER,
+        defaultValue: 0,
+        field: 'total_votes_received'
     }
 }, {
     tableName: 'candidates'
