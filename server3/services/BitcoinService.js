@@ -462,6 +462,24 @@ class BitcoinService {
     }
 
     /**
+     * Converte indirizzo a scriptPubKey (simulazione per compatibilità)
+     */
+    addressToScriptPubKey(address) {
+        try {
+            if (!address || typeof address !== 'string') {
+                throw new Error('Indirizzo non valido');
+            }
+            
+            // Simulazione scriptPubKey - in produzione usare bitcoinjs-lib
+            const hash = crypto.createHash('sha256').update(address).digest('hex');
+            return `OP_DUP OP_HASH160 ${hash.substring(0, 40)} OP_EQUALVERIFY OP_CHECKSIG`;
+        } catch (error) {
+            console.error('[BITCOIN] Errore addressToScriptPubKey:', error);
+            return `scriptPubKey_fallback_${Date.now()}`;
+        }
+    }
+
+    /**
      * Ottiene informazioni di stato
      */
     getStatusInfo() {
