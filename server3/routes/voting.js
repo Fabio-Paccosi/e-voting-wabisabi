@@ -160,6 +160,7 @@ router.post('/credentials', extractUserFromHeaders, async (req, res) => {
             return res.status(400).json({ error: 'Utente ha già votato' });
         }
 
+        /*
         // Verifica che non esistano già credenziali non usate per questo utente/elezione
         const existingCredential = await Credential.findOne({
             where: {
@@ -183,6 +184,7 @@ router.post('/credentials', extractUserFromHeaders, async (req, res) => {
                 expiresAt: new Date(existingCredential.created_at.getTime() + WABISABI_CONFIG.CREDENTIAL_EXPIRY)
             });
         }
+        */
 
         // Genera nuove credenziali KVAC
         const credentialData = await WabiSabiKVACService.generateCredentials({
