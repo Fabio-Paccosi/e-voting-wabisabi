@@ -357,16 +357,16 @@ router.get('/status/:voteId', async (req, res) => {
 
         console.log(`[VOTING] 📊 Controllo stato voto ${voteId}`);
 
-        // Trova il voto
+        // ✅ CORREZIONE 1: Usa l'alias corretto 'votingSession'
         const vote = await Vote.findByPk(voteId, {
             include: [
                 {
                     model: VotingSession,
-                    as: 'session',
+                    as: 'votingSession',  // ✅ CORRETTO
                     include: [
                         {
                             model: Transaction,
-                            as: 'transactions',
+                            as: 'sessionTransactions',  // ✅ CORRETTO (alias univoco)
                             where: { type: 'coinjoin' },
                             required: false
                         }
@@ -381,14 +381,14 @@ router.get('/status/:voteId', async (req, res) => {
 
         const response = {
             voteId: vote.id,
-            status: vote.status,
+            status: vote.status || 'pending',  // ✅ Aggiungi fallback
             submittedAt: vote.submittedAt,
             processedAt: vote.processedAt,
             sessionId: vote.sessionId
         };
 
         // Se il voto è stato processato, includi dettagli transazione
-        if (vote.status === 'confirmed' && vote.transactionId) {
+        if (vote.transactionId) {
             const transaction = await Transaction.findOne({
                 where: { txId: vote.transactionId }
             });
@@ -419,10 +419,17 @@ router.get('/session/:sessionId/stats', async (req, res) => {
     try {
         const { sessionId } = req.params;
 
+        // ✅ CORREZIONE: Usa gli alias corretti
         const session = await VotingSession.findByPk(sessionId, {
             include: [
-                { model: Vote, as: 'votes' },
-                { model: Transaction, as: 'transactions' }
+                { 
+                    model: Vote, 
+                    as: 'votes'  // ✅ Verifica che questo alias sia corretto
+                },
+                { 
+                    model: Transaction, 
+                    as: 'sessionTransactions'  // ✅ Alias univoco
+                }
             ]
         });
 
@@ -435,19 +442,19 @@ router.get('/session/:sessionId/stats', async (req, res) => {
             status: session.status,
             startTime: session.startTime,
             endTime: session.endTime,
-            totalVotes: session.votes.length,
+            totalVotes: session.votes ? session.votes.length : 0,
             votesByStatus: {
-                pending: session.votes.filter(v => v.status === 'pending').length,
-                processed: session.votes.filter(v => v.status === 'processed').length,
-                confirmed: session.votes.filter(v => v.status === 'confirmed').length,
-                failed: session.votes.filter(v => v.status === 'failed').length
+                pending: session.votes ? session.votes.filter(v => (v.status || 'pending') === 'pending').length : 0,
+                processed: session.votes ? session.votes.filter(v => v.status === 'processed').length : 0,
+                confirmed: session.votes ? session.votes.filter(v => v.status === 'confirmed').length : 0,
+                failed: session.votes ? session.votes.filter(v => v.status === 'failed').length : 0
             },
-            transactions: session.transactions.map(tx => ({
+            transactions: session.sessionTransactions ? session.sessionTransactions.map(tx => ({
                 txId: tx.txId,
                 type: tx.type,
                 confirmations: tx.confirmations,
                 blockHeight: tx.blockHeight
-            }))
+            })) : []
         };
 
         res.json(stats);
