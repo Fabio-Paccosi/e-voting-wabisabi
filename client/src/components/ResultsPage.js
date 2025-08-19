@@ -73,7 +73,7 @@ const ResultsPage = () => {
       setResults(response.data.results || []);
     } catch (err) {
       console.error('Error loading results:', err);
-      setError('Errore nel caricamento dei risultati');
+      //setError("ciao");
     } finally {
       setRefreshing(false);
     }
