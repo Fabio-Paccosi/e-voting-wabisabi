@@ -26,13 +26,13 @@ console.log('🔗 [VOTE ADMIN] Inizializzazione database...');
 initializeDatabase()
     .then(success => {
         if (success) {
-            console.log('✅ [VOTE ADMIN] Database inizializzato correttamente');
+            console.log(' [VOTE ADMIN] Database inizializzato correttamente');
         } else {
-            console.error('❌ [VOTE ADMIN] Errore inizializzazione database');
+            console.error(' [VOTE ADMIN] Errore inizializzazione database');
         }
     })
     .catch(error => {
-        console.error('❌ [VOTE ADMIN] Errore database:', error);
+        console.error(' [VOTE ADMIN] Errore database:', error);
     });
 
 // Middleware di autenticazione admin
@@ -47,7 +47,7 @@ const adminAuth = (req, res, next) => {
 // GET /api/admin/stats - Statistiche vote service dal database
 router.get('/stats', adminAuth, async (req, res) => {
     try {
-        console.log('📊 [VOTE ADMIN] Caricamento statistiche dal database...');
+        console.log(' [VOTE ADMIN] Caricamento statistiche dal database...');
         
         const stats = await getQuickStats();
         
@@ -95,10 +95,10 @@ router.get('/stats', adminAuth, async (req, res) => {
             }
         };
 
-        console.log('✅ [VOTE ADMIN] Statistiche caricate:', voteStats);
+        console.log(' [VOTE ADMIN] Statistiche caricate:', voteStats);
         res.json(voteStats);
     } catch (error) {
-        console.error('❌ [VOTE ADMIN] Errore stats:', error);
+        console.error(' [VOTE ADMIN] Errore stats:', error);
         res.status(500).json({ error: 'Errore statistiche voti' });
     }
 });
@@ -134,7 +134,7 @@ router.get('/elections', adminAuth, async (req, res) => {
             order: [['created_at', 'DESC']]
         });
 
-        console.log(`✅ [VOTE ADMIN] Trovate ${elections.length} elezioni`);
+        console.log(` [VOTE ADMIN] Trovate ${elections.length} elezioni`);
 
         // COSTRUISCI LA RISPOSTA CON DATI SEMPLIFICATI
         const electionsWithStats = elections.map(election => {
@@ -190,11 +190,11 @@ router.get('/elections', adminAuth, async (req, res) => {
             message: 'Elezioni caricate con successo'
         };
 
-        console.log('✅ [VOTE ADMIN] Risposta elezioni preparata');
+        console.log(' [VOTE ADMIN] Risposta elezioni preparata');
         res.json(response);
 
     } catch (error) {
-        console.error('❌ [VOTE ADMIN] Errore lista elezioni:', error);
+        console.error(' [VOTE ADMIN] Errore lista elezioni:', error);
         res.status(500).json({ 
             error: 'Errore nel caricamento delle elezioni',
             details: error.message,
@@ -208,7 +208,7 @@ router.get('/elections/:id', adminAuth, async (req, res) => {
     try {
         const { id } = req.params;
         
-        console.log(`🔍 [VOTE ADMIN] Caricamento elezione ${id}`);
+        console.log(` [VOTE ADMIN] Caricamento elezione ${id}`);
 
         const election = await Election.findByPk(id, {
             include: [
@@ -250,11 +250,11 @@ router.get('/elections/:id', adminAuth, async (req, res) => {
             }
         };
 
-        console.log('✅ [VOTE ADMIN] Elezione caricata');
+        console.log(' [VOTE ADMIN] Elezione caricata');
         res.json(response);
 
     } catch (error) {
-        console.error('❌ [VOTE ADMIN] Errore caricamento elezione:', error);
+        console.error(' [VOTE ADMIN] Errore caricamento elezione:', error);
         res.status(500).json({ 
             error: 'Errore nel caricamento dell\'elezione',
             details: error.message 
@@ -293,7 +293,7 @@ router.post('/elections', adminAuth, async (req, res) => {
             isActive: false
         });
 
-        console.log(`✅ [VOTE ADMIN] Elezione creata: ${election.id}`);
+        console.log(` [VOTE ADMIN] Elezione creata: ${election.id}`);
 
         res.status(201).json({
             success: true,
@@ -307,7 +307,7 @@ router.post('/elections', adminAuth, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ [VOTE ADMIN] Errore creazione elezione:', error);
+        console.error(' [VOTE ADMIN] Errore creazione elezione:', error);
         res.status(500).json({ error: 'Errore creazione elezione' });
     }
 });
@@ -318,7 +318,7 @@ router.put('/elections/:id/status', adminAuth, async (req, res) => {
         const { id } = req.params;
         const { status } = req.body;
         
-        console.log(`🔄 [VOTE ADMIN] Aggiornamento status elezione ${id} a ${status}`);
+        console.log(` [VOTE ADMIN] Aggiornamento status elezione ${id} a ${status}`);
         
         const election = await Election.findByPk(id);
         if (!election) {
@@ -330,7 +330,7 @@ router.put('/elections/:id/status', adminAuth, async (req, res) => {
             isActive: status === 'active'
         });
 
-        console.log(`✅ [VOTE ADMIN] Status elezione "${election.title}" aggiornato a ${status}`);
+        console.log(` [VOTE ADMIN] Status elezione "${election.title}" aggiornato a ${status}`);
 
         res.json({
             success: true,
@@ -342,7 +342,7 @@ router.put('/elections/:id/status', adminAuth, async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('❌ [VOTE ADMIN] Errore aggiornamento status elezione:', error);
+        console.error(' [VOTE ADMIN] Errore aggiornamento status elezione:', error);
         res.status(500).json({ error: 'Errore aggiornamento status elezione' });
     }
 });
@@ -356,7 +356,7 @@ router.get('/elections/:id/candidates', adminAuth, async (req, res) => {
     try {
         const { id } = req.params;
         
-        console.log(`🔍 [VOTE ADMIN] Caricamento candidati elezione ${id}`);
+        console.log(` [VOTE ADMIN] Caricamento candidati elezione ${id}`);
         
         // Verifica che l'elezione esista
         const election = await Election.findByPk(id);
@@ -386,7 +386,7 @@ router.get('/elections/:id/candidates', adminAuth, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ [VOTE ADMIN] Errore caricamento candidati:', error);
+        console.error(' [VOTE ADMIN] Errore caricamento candidati:', error);
         res.status(500).json({ 
             error: 'Errore nel caricamento dei candidati',
             details: error.message 
@@ -420,7 +420,7 @@ async function generateBitcoinAddress(electionId, candidateName, network = 'test
             .update(`pubkey-${seed.toString('hex')}`)
             .digest('hex');
             
-        console.log(`✅ [BITCOIN] Indirizzo generato: ${bitcoinAddress}`);
+        console.log(` [BITCOIN] Indirizzo generato: ${bitcoinAddress}`);
 
         return {
             address: bitcoinAddress,
@@ -428,7 +428,7 @@ async function generateBitcoinAddress(electionId, candidateName, network = 'test
             privateKey: null // Non salviamo la chiave privata per semplicità
         };
     } catch (error) {
-        console.error('❌ [BITCOIN] Errore generazione indirizzo:', error);
+        console.error(' [BITCOIN] Errore generazione indirizzo:', error);
     }
 }
 
@@ -507,7 +507,7 @@ router.post('/elections/:electionId/candidates', adminAuth, async (req, res) => 
             voteEncoding: candidateCount + 1 
         });
 
-        console.log(`✅ [VOTE ADMIN] Candidato ${candidate.id} creato con successo`);
+        console.log(` [VOTE ADMIN] Candidato ${candidate.id} creato con successo`);
 
         res.status(201).json({
             success: true,
@@ -524,7 +524,7 @@ router.post('/elections/:electionId/candidates', adminAuth, async (req, res) => 
         });
 
     } catch (error) {
-        console.error('❌ [VOTE ADMIN] Errore aggiunta candidato:', error);
+        console.error(' [VOTE ADMIN] Errore aggiunta candidato:', error);
         res.status(500).json({ 
             error: 'Errore nell\'aggiunta del candidato',
             details: error.message
@@ -584,7 +584,7 @@ router.put('/elections/:electionId/candidates/:candidateId', adminAuth, async (r
         });
 
     } catch (error) {
-        console.error('❌ [VOTE ADMIN] Errore modifica candidato:', error);
+        console.error(' [VOTE ADMIN] Errore modifica candidato:', error);
         res.status(500).json({ 
             error: 'Errore nella modifica del candidato',
             details: error.message
@@ -628,7 +628,7 @@ router.delete('/elections/:electionId/candidates/:candidateId', adminAuth, async
         });
 
     } catch (error) {
-        console.error('❌ [VOTE ADMIN] Errore eliminazione candidato:', error);
+        console.error(' [VOTE ADMIN] Errore eliminazione candidato:', error);
         res.status(500).json({ 
             error: 'Errore nell\'eliminazione del candidato',
             details: error.message
@@ -640,7 +640,7 @@ router.delete('/elections/:electionId/candidates/:candidateId', adminAuth, async
 router.post('/elections/:id/activate', adminAuth, async (req, res) => {
     try {
         const { id } = req.params;
-        console.log(`🔄 [VOTE ADMIN] Attivazione elezione ${id}`);
+        console.log(` [VOTE ADMIN] Attivazione elezione ${id}`);
 
         const election = await Election.findByPk(id, {
             include: [
@@ -681,7 +681,7 @@ router.post('/elections/:id/activate', adminAuth, async (req, res) => {
             isActive: true 
         });
 
-        console.log(`✅ [VOTE ADMIN] Elezione "${election.title}" attivata con successo`);
+        console.log(` [VOTE ADMIN] Elezione "${election.title}" attivata con successo`);
 
         res.json({ 
             success: true, 
@@ -695,7 +695,7 @@ router.post('/elections/:id/activate', adminAuth, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ [VOTE ADMIN] Errore attivazione elezione:', error);
+        console.error(' [VOTE ADMIN] Errore attivazione elezione:', error);
         res.status(500).json({ 
             error: 'Errore nell\'attivazione dell\'elezione',
             details: error.message 
@@ -707,7 +707,7 @@ router.post('/elections/:id/activate', adminAuth, async (req, res) => {
 router.post('/elections/:id/deactivate', adminAuth, async (req, res) => {
     try {
         const { id } = req.params;
-        console.log(`🔄 [VOTE ADMIN] Disattivazione elezione ${id}`);
+        console.log(` [VOTE ADMIN] Disattivazione elezione ${id}`);
 
         const election = await Election.findByPk(id);
         if (!election) {
@@ -726,7 +726,7 @@ router.post('/elections/:id/deactivate', adminAuth, async (req, res) => {
             isActive: false 
         });
 
-        console.log(`✅ [VOTE ADMIN] Elezione "${election.title}" terminata`);
+        console.log(` [VOTE ADMIN] Elezione "${election.title}" terminata`);
 
         res.json({ 
             success: true, 
@@ -740,7 +740,7 @@ router.post('/elections/:id/deactivate', adminAuth, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ [VOTE ADMIN] Errore terminazione elezione:', error);
+        console.error(' [VOTE ADMIN] Errore terminazione elezione:', error);
         res.status(500).json({ 
             error: 'Errore nella terminazione dell\'elezione',
             details: error.message 
@@ -757,7 +757,7 @@ router.get('/activity', adminAuth, async (req, res) => {
     try {
         const { limit = 25 } = req.query;
         
-        console.log('🔄 [VOTE ADMIN] Caricamento attività recenti');
+        console.log(' [VOTE ADMIN] Caricamento attività recenti');
         
         // Dati mock per attività - in futuro sostituire con query real
         const activities = [];
@@ -788,7 +788,7 @@ router.get('/activity', adminAuth, async (req, res) => {
 
         res.json(activities);
     } catch (error) {
-        console.error('❌ [VOTE ADMIN] Errore activity:', error);
+        console.error(' [VOTE ADMIN] Errore activity:', error);
         res.status(500).json({ error: 'Errore caricamento attività' });
     }
 });

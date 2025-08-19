@@ -26,7 +26,7 @@ const authenticateUser = async (req, res, next) => {
         // Verifica il token JWT
         const decoded = jwt.verify(token, JWT_SECRET);
         
-        console.log(`[AUTH] ✅ Token verificato per utente: ${decoded.userId || decoded.id}`);
+        console.log(`[AUTH]  Token verificato per utente: ${decoded.userId || decoded.id}`);
         
         // Controlla che il token non sia scaduto
         if (decoded.exp && decoded.exp < Math.floor(Date.now() / 1000)) {
@@ -59,7 +59,7 @@ const authenticateUser = async (req, res, next) => {
             });
         }
         
-        console.log(`[AUTH] ✅ Utente autenticato: ${req.user.id} (${req.user.email})`);
+        console.log(`[AUTH]  Utente autenticato: ${req.user.id} (${req.user.email})`);
         next();
         
     } catch (error) {
@@ -107,7 +107,7 @@ const authenticateUserSimple = (req, res, next) => {
         role: 'user'
     };
     
-    console.log(`[AUTH] 🧪 Utente test autenticato: ${req.user.id}`);
+    console.log(`[AUTH]  Utente test autenticato: ${req.user.id}`);
     next();
 };
 
@@ -131,7 +131,7 @@ const verifyTokenWithAuthService = async (req, res, next) => {
         const axios = require('axios');
         const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || 'http://auth-service:3002';
         
-        console.log(`[AUTH] 🔍 Verifica token con Auth Service...`);
+        console.log(`[AUTH]  Verifica token con Auth Service...`);
         
         const response = await axios.post(`${AUTH_SERVICE_URL}/api/auth/verify`, {
             token: token
@@ -144,7 +144,7 @@ const verifyTokenWithAuthService = async (req, res, next) => {
         
         if (response.data.valid) {
             req.user = response.data.user;
-            console.log(`[AUTH] ✅ Token verificato via Auth Service: ${req.user.id}`);
+            console.log(`[AUTH]  Token verificato via Auth Service: ${req.user.id}`);
             next();
         } else {
             console.error('[AUTH] Token non valido secondo Auth Service');
@@ -158,7 +158,7 @@ const verifyTokenWithAuthService = async (req, res, next) => {
         console.error('[AUTH] Errore verifica con Auth Service:', error.message);
         
         // Fallback alla verifica locale in caso di errore di rete
-        console.log('[AUTH] 🔄 Fallback a verifica locale...');
+        console.log('[AUTH]  Fallback a verifica locale...');
         return authenticateUser(req, res, next);
     }
 };

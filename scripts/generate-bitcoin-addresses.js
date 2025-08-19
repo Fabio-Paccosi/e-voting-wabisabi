@@ -89,9 +89,9 @@ class BitcoinAddressGenerator {
     async connect() {
         try {
             await sequelize.authenticate();
-            console.log('✅ Connesso al database');
+            console.log(' Connesso al database');
         } catch (error) {
-            console.error('❌ Errore connessione database:', error.message);
+            console.error(' Errore connessione database:', error.message);
             throw error;
         }
     }
@@ -118,7 +118,7 @@ class BitcoinAddressGenerator {
                 return;
             }
 
-            console.log(`📊 Trovati ${users.length} utenti senza indirizzo Bitcoin\n`);
+            console.log(` Trovati ${users.length} utenti senza indirizzo Bitcoin\n`);
 
             // Genera indirizzi per ogni utente
             for (const user of users) {
@@ -126,13 +126,13 @@ class BitcoinAddressGenerator {
                     await this.generateForUser(user);
                     this.stats.generated++;
                 } catch (error) {
-                    console.error(`❌ Errore per utente ${user.email}:`, error.message);
+                    console.error(` Errore per utente ${user.email}:`, error.message);
                     this.stats.errors++;
                 }
             }
 
             console.log('\n🎉 GENERAZIONE COMPLETATA!');
-            console.log(`📊 Statistiche:`);
+            console.log(` Statistiche:`);
             console.log(`   • Utenti totali: ${this.stats.total}`);
             console.log(`   • Indirizzi generati: ${this.stats.generated}`);
             console.log(`   • Errori: ${this.stats.errors}`);
@@ -146,7 +146,7 @@ class BitcoinAddressGenerator {
     // Genera indirizzo per un singolo utente
     async generateForUser(user) {
         try {
-            console.log(`🔄 Generando indirizzo per: ${user.email}`);
+            console.log(` Generando indirizzo per: ${user.email}`);
 
             // Genera nuovo indirizzo Bitcoin
             const bitcoinData = generateBitcoinAddress();
@@ -160,11 +160,11 @@ class BitcoinAddressGenerator {
                 bitcoinPrivateKey: encryptedPrivateKey
             });
 
-            console.log(`✅ Indirizzo generato: ${bitcoinData.address}`);
+            console.log(` Indirizzo generato: ${bitcoinData.address}`);
 
             return bitcoinData;
         } catch (error) {
-            console.error(`❌ Errore generazione per ${user.email}:`, error.message);
+            console.error(` Errore generazione per ${user.email}:`, error.message);
             throw error;
         }
     }
@@ -190,10 +190,10 @@ class BitcoinAddressGenerator {
             }
 
             const bitcoinData = await this.generateForUser(user);
-            console.log(`✅ Indirizzo generato per ${email}: ${bitcoinData.address}`);
+            console.log(` Indirizzo generato per ${email}: ${bitcoinData.address}`);
 
         } catch (error) {
-            console.error('❌ Errore:', error.message);
+            console.error(' Errore:', error.message);
             throw error;
         }
     }
@@ -230,7 +230,7 @@ class BitcoinAddressGenerator {
             console.log(`Totale utenti con indirizzo Bitcoin: ${users.length}`);
 
         } catch (error) {
-            console.error('❌ Errore visualizzazione indirizzi:', error.message);
+            console.error(' Errore visualizzazione indirizzi:', error.message);
             throw error;
         }
     }
@@ -249,7 +249,7 @@ class BitcoinAddressGenerator {
                 attributes: ['email', 'bitcoinAddress']
             });
 
-            console.log('🔍 Verifica validità indirizzi Bitcoin...\n');
+            console.log(' Verifica validità indirizzi Bitcoin...\n');
 
             let validCount = 0;
             let invalidCount = 0;
@@ -258,20 +258,20 @@ class BitcoinAddressGenerator {
                 const isValid = isValidBitcoinAddress(user.bitcoinAddress);
                 
                 if (isValid) {
-                    console.log(`✅ ${user.email}: ${user.bitcoinAddress}`);
+                    console.log(` ${user.email}: ${user.bitcoinAddress}`);
                     validCount++;
                 } else {
-                    console.log(`❌ ${user.email}: ${user.bitcoinAddress} (INVALIDO)`);
+                    console.log(` ${user.email}: ${user.bitcoinAddress} (INVALIDO)`);
                     invalidCount++;
                 }
             }
 
-            console.log(`\n📊 Risultati verifica:`);
+            console.log(`\n Risultati verifica:`);
             console.log(`   • Indirizzi validi: ${validCount}`);
             console.log(`   • Indirizzi invalidi: ${invalidCount}`);
 
         } catch (error) {
-            console.error('❌ Errore verifica indirizzi:', error.message);
+            console.error(' Errore verifica indirizzi:', error.message);
             throw error;
         }
     }
@@ -299,10 +299,10 @@ class BitcoinAddressGenerator {
             ].join('\n');
 
             fs.writeFileSync(filename, csvContent);
-            console.log(`✅ Indirizzi esportati in: ${filename}`);
+            console.log(` Indirizzi esportati in: ${filename}`);
 
         } catch (error) {
-            console.error('❌ Errore esportazione:', error.message);
+            console.error(' Errore esportazione:', error.message);
             throw error;
         }
     }
@@ -328,7 +328,7 @@ async function main() {
 
             case 'user':
                 if (!arg) {
-                    console.error('❌ Email utente richiesta');
+                    console.error(' Email utente richiesta');
                     console.log('Uso: npm run bitcoin:generate-addresses user <email>');
                     process.exit(1);
                 }
@@ -360,7 +360,7 @@ async function main() {
                 break;
 
             default:
-                console.error(`❌ Comando sconosciuto: ${command}`);
+                console.error(` Comando sconosciuto: ${command}`);
                 console.log('Usa "help" per vedere i comandi disponibili');
                 process.exit(1);
         }

@@ -34,18 +34,18 @@ const SALT_ROUNDS = 10;
 try {
     const adminRoutes = require('./routes/admin');
     app.use('/api/admin', adminRoutes);
-    console.log('✅ [AUTH SERVICE] Route admin caricate');
+    console.log(' [AUTH SERVICE] Route admin caricate');
 } catch (error) {
-    console.error('❌ [AUTH SERVICE] Errore caricamento route admin:', error.message);
+    console.error(' [AUTH SERVICE] Errore caricamento route admin:', error.message);
 }
 
 // Route Client (percorso /api/*)
 try {
     const clientRoutes = require('./routes/client');
     app.use('/api', clientRoutes);
-    console.log('✅ [AUTH SERVICE] Route client caricate');
+    console.log(' [AUTH SERVICE] Route client caricate');
 } catch (error) {
-    console.error('❌ [AUTH SERVICE] Errore caricamento route client:', error.message);
+    console.error(' [AUTH SERVICE] Errore caricamento route client:', error.message);
     
     // Route client di fallback
     app.post('/api/auth/login', (req, res) => {
@@ -145,7 +145,7 @@ class AuthenticationService {
         };
 
         db.users.set(userId, user);
-        console.log(`✅ [AUTH] Utente registrato: ${email}`);
+        console.log(` [AUTH] Utente registrato: ${email}`);
         
         return { 
             id: userId, 
@@ -173,7 +173,7 @@ class AuthenticationService {
         // Genera token di sessione
         const sessionToken = this.generateSessionToken(user);
         
-        console.log(`✅ [AUTH] Login effettuato: ${email}`);
+        console.log(` [AUTH] Login effettuato: ${email}`);
         
         return {
             token: sessionToken,
@@ -277,7 +277,7 @@ class CredentialManager {
 
         db.credentials.set(serialNumber, credential);
         
-        console.log(`✅ [CREDENTIALS] Credenziale generata per utente ${userId}`);
+        console.log(` [CREDENTIALS] Credenziale generata per utente ${userId}`);
         
         return {
             serialNumber,
@@ -358,7 +358,7 @@ const credentialManager = new CredentialManager();
 
 // 404 handler
 app.use('*', (req, res) => {
-    console.log(`❌ [AUTH SERVICE] Route non trovata: ${req.method} ${req.originalUrl}`);
+    console.log(` [AUTH SERVICE] Route non trovata: ${req.method} ${req.originalUrl}`);
     res.status(404).json({ 
         error: 'Route non trovata',
         path: req.originalUrl,

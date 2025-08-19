@@ -22,13 +22,13 @@ console.log('🔗 [AUTH CLIENT] Inizializzazione database...');
 initializeDatabase()
     .then(success => {
         if (success) {
-            console.log('✅ [AUTH CLIENT] Database inizializzato correttamente');
+            console.log(' [AUTH CLIENT] Database inizializzato correttamente');
         } else {
-            console.error('❌ [AUTH CLIENT] Errore inizializzazione database');
+            console.error(' [AUTH CLIENT] Errore inizializzazione database');
         }
     })
     .catch(error => {
-        console.error('❌ [AUTH CLIENT] Errore database:', error);
+        console.error(' [AUTH CLIENT] Errore database:', error);
     });
 
 // ==========================================
@@ -66,7 +66,7 @@ async function getCurrentElection(electionId = null) {
         });
         
     } catch (error) {
-        console.error('❌ Errore ricerca elezione:', error);
+        console.error(' Errore ricerca elezione:', error);
         return null;
     }
 }
@@ -98,7 +98,7 @@ router.post('/auth/login', async (req, res) => {
         });
 
         if (!user) {
-            console.log('❌ [AUTH CLIENT] Utente non trovato:', email);
+            console.log(' [AUTH CLIENT] Utente non trovato:', email);
             return res.status(401).json({ 
                 error: 'Credenziali non valide' 
             });
@@ -121,7 +121,7 @@ router.post('/auth/login', async (req, res) => {
         });
 
         if (!whitelistEntry) {
-            console.log('❌ [AUTH CLIENT] Utente non autorizzato per elezione:', user.email, currentElection.id);
+            console.log(' [AUTH CLIENT] Utente non autorizzato per elezione:', user.email, currentElection.id);
             return res.status(403).json({ 
                 error: 'Utente non autorizzato per questa elezione' 
             });
@@ -147,7 +147,7 @@ router.post('/auth/login', async (req, res) => {
             { expiresIn: '24h' }
         );
 
-        console.log('✅ [AUTH CLIENT] Login riuscito per:', user.email);
+        console.log(' [AUTH CLIENT] Login riuscito per:', user.email);
 
         res.json({
             success: true,
@@ -174,7 +174,7 @@ router.post('/auth/login', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ [AUTH CLIENT] Errore login:', error);
+        console.error(' [AUTH CLIENT] Errore login:', error);
         res.status(500).json({ 
             error: 'Errore nell\'autenticazione utente',
             details: {
@@ -218,7 +218,7 @@ router.post('/auth/login', async (req, res) => {
         });
         
         if (!user) {
-            console.log('❌ [AUTH CLIENT] Utente non trovato:', email || taxCode);
+            console.log(' [AUTH CLIENT] Utente non trovato:', email || taxCode);
             return res.status(401).json({ 
                 error: 'Credenziali non valide' 
             });
@@ -228,7 +228,7 @@ router.post('/auth/login', async (req, res) => {
         const isPasswordValid = await bcrypt.compare(password, user.password);
         
         if (!isPasswordValid) {
-            console.log('❌ [AUTH CLIENT] Password non valida per:', user.email);
+            console.log(' [AUTH CLIENT] Password non valida per:', user.email);
             return res.status(401).json({ 
                 error: 'Credenziali non valide' 
             });
@@ -236,7 +236,7 @@ router.post('/auth/login', async (req, res) => {
         
         // Verifica che l'utente sia attivo
         if (user.status !== 'active') {
-            console.log('❌ [AUTH CLIENT] Utente non attivo:', user.email);
+            console.log(' [AUTH CLIENT] Utente non attivo:', user.email);
             return res.status(403).json({ 
                 error: 'Account non attivo. Contattare l\'amministratore.' 
             });
@@ -244,7 +244,7 @@ router.post('/auth/login', async (req, res) => {
         
         // Verifica che l'utente sia autorizzato
         if (!user.isAuthorized) {
-            console.log('❌ [AUTH CLIENT] Utente non autorizzato:', user.email);
+            console.log(' [AUTH CLIENT] Utente non autorizzato:', user.email);
             return res.status(403).json({ 
                 error: 'Account non autorizzato per il voto. Contattare l\'amministratore.' 
             });
@@ -266,7 +266,7 @@ router.post('/auth/login', async (req, res) => {
             { expiresIn: '24h' }
         );
         
-        console.log('✅ [AUTH CLIENT] Login riuscito per:', user.email);
+        console.log(' [AUTH CLIENT] Login riuscito per:', user.email);
         
         res.json({
             success: true,
@@ -284,7 +284,7 @@ router.post('/auth/login', async (req, res) => {
         });
         
     } catch (error) {
-        console.error('❌ [AUTH CLIENT] Errore login:', error);
+        console.error(' [AUTH CLIENT] Errore login:', error);
         res.status(500).json({ 
             error: 'Errore interno del server' 
         });
@@ -346,7 +346,7 @@ router.get('/auth/profile', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ [AUTH CLIENT] Errore profilo:', error);
+        console.error(' [AUTH CLIENT] Errore profilo:', error);
         res.status(401).json({ 
             error: 'Token non valido' 
         });
@@ -365,12 +365,12 @@ router.post('/auth/verify', async (req, res) => {
             });
         }
         
-        console.log('🔍 [AUTH CLIENT] Verifica token utente normale');
+        console.log(' [AUTH CLIENT] Verifica token utente normale');
         
         // Verifica il token JWT
         const decoded = jwt.verify(token, JWT_SECRET);
         
-        console.log('🔍 [AUTH CLIENT] Token decodificato:', {
+        console.log(' [AUTH CLIENT] Token decodificato:', {
             userId: decoded.userId || decoded.id,
             email: decoded.email,
             role: decoded.role
@@ -387,7 +387,7 @@ router.post('/auth/verify', async (req, res) => {
         }
         
         if (!user) {
-            console.log('❌ [AUTH CLIENT] Utente non trovato nel database');
+            console.log(' [AUTH CLIENT] Utente non trovato nel database');
             return res.status(401).json({ 
                 valid: false,
                 error: 'Utente non trovato' 
@@ -396,7 +396,7 @@ router.post('/auth/verify', async (req, res) => {
         
         // Verifica che l'utente sia attivo
         if (user.status !== 'active') {
-            console.log('❌ [AUTH CLIENT] Utente non attivo');
+            console.log(' [AUTH CLIENT] Utente non attivo');
             return res.status(401).json({ 
                 valid: false,
                 error: 'Utente non attivo' 
@@ -405,14 +405,14 @@ router.post('/auth/verify', async (req, res) => {
         
         // Verifica che l'utente sia autorizzato
         if (!user.isAuthorized) {
-            console.log('❌ [AUTH CLIENT] Utente non autorizzato');
+            console.log(' [AUTH CLIENT] Utente non autorizzato');
             return res.status(403).json({ 
                 valid: false,
                 error: 'Utente non autorizzato' 
             });
         }
         
-        console.log('✅ [AUTH CLIENT] Token valido per utente:', user.email);
+        console.log(' [AUTH CLIENT] Token valido per utente:', user.email);
         
         res.json({
             valid: true,
@@ -428,7 +428,7 @@ router.post('/auth/verify', async (req, res) => {
         });
         
     } catch (error) {
-        console.error('❌ [AUTH CLIENT] Errore verifica token:', error);
+        console.error(' [AUTH CLIENT] Errore verifica token:', error);
         
         if (error.name === 'JsonWebTokenError') {
             return res.status(401).json({ 
@@ -524,11 +524,11 @@ router.get('/whitelist/check', async (req, res) => {
             };
         }
 
-        console.log('✅ [AUTH CLIENT] Status whitelist verificato');
+        console.log(' [AUTH CLIENT] Status whitelist verificato');
         res.json(response);
 
     } catch (error) {
-        console.error('❌ [AUTH CLIENT] Errore verifica whitelist:', error);
+        console.error(' [AUTH CLIENT] Errore verifica whitelist:', error);
         res.status(500).json({ 
             error: 'Errore nella verifica whitelist' 
         });
@@ -596,7 +596,7 @@ router.post('/whitelist/register', async (req, res) => {
 
         // NOTA: La registrazione crea solo la richiesta, 
         // l'admin deve poi approvare aggiungendo alla whitelist
-        console.log('✅ [AUTH CLIENT] Registrazione richiesta per:', email);
+        console.log(' [AUTH CLIENT] Registrazione richiesta per:', email);
 
         res.status(201).json({
             success: true,
@@ -614,7 +614,7 @@ router.post('/whitelist/register', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ [AUTH CLIENT] Errore registrazione:', error);
+        console.error(' [AUTH CLIENT] Errore registrazione:', error);
         res.status(500).json({ 
             error: 'Errore nella registrazione',
             details: error.message
@@ -647,7 +647,7 @@ router.get('/elections/current', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ [AUTH CLIENT] Errore elezione corrente:', error);
+        console.error(' [AUTH CLIENT] Errore elezione corrente:', error);
         res.status(500).json({ 
             error: 'Errore nel recupero dell\'elezione corrente' 
         });

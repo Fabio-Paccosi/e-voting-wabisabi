@@ -55,7 +55,7 @@ class WabiSabiKVACService {
                 electionId
             });
 
-            console.log(`[KVAC] ✅ Credenziali generate: serial=${serialNumber.substring(0, 8)}...`);
+            console.log(`[KVAC]  Credenziali generate: serial=${serialNumber.substring(0, 8)}...`);
 
             return {
                 serialNumber,
@@ -66,7 +66,7 @@ class WabiSabiKVACService {
             };
 
         } catch (error) {
-            console.error('[KVAC] ❌ Errore generazione credenziali:', error);
+            console.error('[KVAC]  Errore generazione credenziali:', error);
             throw new Error(`Errore nella generazione delle credenziali: ${error.message}`);
         }
     }
@@ -109,7 +109,7 @@ class WabiSabiKVACService {
      */
     async verifyCredential({ serialNumber, signature, nonce, electionId, timestamp }) {
         try {
-            console.log(`[KVAC] 🔍 Verifica credenziale: serial=${serialNumber.substring(0, 8)}...`);
+            console.log(`[KVAC]  Verifica credenziale: serial=${serialNumber.substring(0, 8)}...`);
 
             // 1. Ricostruisce il messaggio originale
             const message = this.createSignatureMessage({
@@ -123,7 +123,7 @@ class WabiSabiKVACService {
             const expectedSignature = this.signCredential(message);
             const isValidSignature = signature === expectedSignature;
 
-            console.log(`[KVAC] ${isValidSignature ? '✅' : '❌'} Verifica firma: ${isValidSignature}`);
+            console.log(`[KVAC] ${isValidSignature ? '' : ''} Verifica firma: ${isValidSignature}`);
 
             return {
                 valid: isValidSignature,
@@ -132,7 +132,7 @@ class WabiSabiKVACService {
             };
 
         } catch (error) {
-            console.error('[KVAC] ❌ Errore verifica credenziale:', error);
+            console.error('[KVAC]  Errore verifica credenziale:', error);
             return {
                 valid: false,
                 error: error.message
@@ -179,7 +179,7 @@ class WabiSabiKVACService {
 
             const isValid = serialIncluded && isTimestampValid && commitment && zkProof.proof;
 
-            console.log(`[KVAC] ${isValid ? '✅' : '❌'} ZK proof: valido=${isValid}`);
+            console.log(`[KVAC] ${isValid ? '' : ''} ZK proof: valido=${isValid}`);
 
             return {
                 valid: isValid,
@@ -195,7 +195,7 @@ class WabiSabiKVACService {
             };
 
         } catch (error) {
-            console.error('[KVAC] ❌ Errore verifica ZK proof:', error);
+            console.error('[KVAC]  Errore verifica ZK proof:', error);
             return {
                 valid: false,
                 error: error.message
@@ -221,7 +221,7 @@ class WabiSabiKVACService {
                 .update(JSON.stringify(commitmentData))
                 .digest('hex');
 
-            console.log(`[KVAC] ✅ Commitment generato per candidato ${candidateId}`);
+            console.log(`[KVAC]  Commitment generato per candidato ${candidateId}`);
 
             return {
                 commitment,
@@ -235,7 +235,7 @@ class WabiSabiKVACService {
             };
 
         } catch (error) {
-            console.error('[KVAC] ❌ Errore generazione commitment:', error);
+            console.error('[KVAC]  Errore generazione commitment:', error);
             throw new Error(`Errore nella generazione del commitment: ${error.message}`);
         }
     }
@@ -259,7 +259,7 @@ class WabiSabiKVACService {
             };
 
         } catch (error) {
-            console.error('[KVAC] ❌ Errore verifica commitment:', error);
+            console.error('[KVAC]  Errore verifica commitment:', error);
             return {
                 valid: false,
                 error: error.message
@@ -275,7 +275,7 @@ class WabiSabiKVACService {
         // In un sistema reale, questo richiederebbe complesse prove crittografiche
         // Per ora, usiamo una simulazione del processo
         
-        console.log(`[KVAC] 📊 Estrazione voto da commitment per encoding ${candidateEncoding}`);
+        console.log(`[KVAC]  Estrazione voto da commitment per encoding ${candidateEncoding}`);
         
         return {
             candidateId: candidateEncoding,
@@ -289,7 +289,7 @@ class WabiSabiKVACService {
      */
     aggregateCommitments(commitments) {
         try {
-            console.log(`[KVAC] 📊 Aggregazione di ${commitments.length} commitment`);
+            console.log(`[KVAC]  Aggregazione di ${commitments.length} commitment`);
 
             // Simula aggregazione omomorfica
             const aggregatedData = {
@@ -311,7 +311,7 @@ class WabiSabiKVACService {
             };
 
         } catch (error) {
-            console.error('[KVAC] ❌ Errore aggregazione commitment:', error);
+            console.error('[KVAC]  Errore aggregazione commitment:', error);
             throw new Error(`Errore nell'aggregazione: ${error.message}`);
         }
     }

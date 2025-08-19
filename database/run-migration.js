@@ -38,9 +38,9 @@ class MigrationRunner {
         try {
             await this.client.connect();
             this.isConnected = true;
-            console.log('✅ Connesso al database:', config.database);
+            console.log(' Connesso al database:', config.database);
         } catch (error) {
-            console.error('❌ Errore connessione database:', error.message);
+            console.error(' Errore connessione database:', error.message);
             throw error;
         }
     }
@@ -50,7 +50,7 @@ class MigrationRunner {
         if (this.isConnected) {
             await this.client.end();
             this.isConnected = false;
-            console.log('📡 Disconnesso dal database');
+            console.log(' Disconnesso dal database');
         }
     }
 
@@ -70,9 +70,9 @@ class MigrationRunner {
 
         try {
             await this.client.query(query);
-            console.log('✅ Tabella migrazioni creata/verificata');
+            console.log(' Tabella migrazioni creata/verificata');
         } catch (error) {
-            console.error('❌ Errore creazione tabella migrazioni:', error.message);
+            console.error(' Errore creazione tabella migrazioni:', error.message);
             throw error;
         }
     }
@@ -92,7 +92,7 @@ class MigrationRunner {
             console.log(`📂 Trovati ${files.length} file di migrazione`);
             return files;
         } catch (error) {
-            console.error('❌ Errore lettura cartella migrations:', error.message);
+            console.error(' Errore lettura cartella migrations:', error.message);
             throw error;
         }
     }
@@ -131,7 +131,7 @@ class MigrationRunner {
             if (error.message.includes('Checksum non corrisponde')) {
                 throw error;
             }
-            console.error('❌ Errore verifica migrazione:', error.message);
+            console.error(' Errore verifica migrazione:', error.message);
             throw error;
         }
     }
@@ -141,7 +141,7 @@ class MigrationRunner {
         const filePath = path.join(MIGRATIONS_DIR, filename);
         
         try {
-            console.log(`🔄 Eseguendo migrazione: ${filename}`);
+            console.log(` Eseguendo migrazione: ${filename}`);
             
             // Legge il contenuto del file
             const content = fs.readFileSync(filePath, 'utf8');
@@ -168,7 +168,7 @@ class MigrationRunner {
 
                 // Conferma transazione
                 await this.client.query('COMMIT');
-                console.log(`✅ Migrazione ${filename} eseguita con successo`);
+                console.log(` Migrazione ${filename} eseguita con successo`);
 
             } catch (error) {
                 // Rollback in caso di errore
@@ -177,7 +177,7 @@ class MigrationRunner {
             }
 
         } catch (error) {
-            console.error(`❌ Errore esecuzione migrazione ${filename}:`, error.message);
+            console.error(` Errore esecuzione migrazione ${filename}:`, error.message);
             throw error;
         }
     }
@@ -215,7 +215,7 @@ class MigrationRunner {
                     executedCount++;
 
                 } catch (error) {
-                    console.error(`\n❌ ERRORE CRITICO nella migrazione ${filename}:`);
+                    console.error(`\n ERRORE CRITICO nella migrazione ${filename}:`);
                     console.error(error.message);
                     console.error('\n🛑 Esecuzione interrotta per preservare l\'integrità del database');
                     throw error;
@@ -223,7 +223,7 @@ class MigrationRunner {
             }
 
             console.log('\n🎉 TUTTE LE MIGRAZIONI COMPLETATE!');
-            console.log(`📊 Statistiche:`);
+            console.log(` Statistiche:`);
             console.log(`   • Migrazioni eseguite: ${executedCount}`);
             console.log(`   • Migrazioni saltate: ${skippedCount}`);
             console.log(`   • Totale file: ${migrationFiles.length}`);
@@ -256,7 +256,7 @@ class MigrationRunner {
             console.log(''.padEnd(70, '-'));
 
             for (const filename of migrationFiles) {
-                const status = executed.has(filename) ? '✅ Eseguita' : '⏸️  Pendente';
+                const status = executed.has(filename) ? ' Eseguita' : '⏸️  Pendente';
                 const date = executed.get(filename) || 'N/A';
                 
                 console.log(`${filename.padEnd(30)} | ${status.padEnd(10)} | ${date}`);
@@ -266,7 +266,7 @@ class MigrationRunner {
             console.log(`Totale: ${migrationFiles.length} | Eseguite: ${executed.size} | Pendenti: ${migrationFiles.length - executed.size}`);
 
         } catch (error) {
-            console.error('❌ Errore visualizzazione stato:', error.message);
+            console.error(' Errore visualizzazione stato:', error.message);
             process.exit(1);
         } finally {
             await this.disconnect();
@@ -276,7 +276,7 @@ class MigrationRunner {
     // Crea una nuova migrazione
     async createMigration(name) {
         if (!name) {
-            console.error('❌ Nome della migrazione richiesto');
+            console.error(' Nome della migrazione richiesto');
             console.log('Uso: npm run migration:create <nome>');
             process.exit(1);
         }
@@ -316,10 +316,10 @@ COMMIT;
             }
 
             fs.writeFileSync(filepath, template);
-            console.log(`✅ Migrazione creata: ${filename}`);
+            console.log(` Migrazione creata: ${filename}`);
             console.log(`📁 Percorso: ${filepath}`);
         } catch (error) {
-            console.error('❌ Errore creazione migrazione:', error.message);
+            console.error(' Errore creazione migrazione:', error.message);
             process.exit(1);
         }
     }
@@ -361,7 +361,7 @@ async function main() {
             break;
 
         default:
-            console.error(`❌ Comando sconosciuto: ${command}`);
+            console.error(` Comando sconosciuto: ${command}`);
             console.log('Usa "help" per vedere i comandi disponibili');
             process.exit(1);
     }

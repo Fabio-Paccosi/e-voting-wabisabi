@@ -36,11 +36,11 @@ apiClient.interceptors.request.use(
 // Interceptor per gestire risposte e errori
 apiClient.interceptors.response.use(
   (response) => {
-    console.log(`[API] ✅ ${response.config.method?.toUpperCase()} ${response.config.url} - ${response.status}`);
+    console.log(`[API]  ${response.config.method?.toUpperCase()} ${response.config.url} - ${response.status}`);
     return response;
   },
   (error) => {
-    console.error(`[API] ❌ ${error.config?.method?.toUpperCase()} ${error.config?.url} - ${error.response?.status}`);
+    console.error(`[API]  ${error.config?.method?.toUpperCase()} ${error.config?.url} - ${error.response?.status}`);
     
     // Gestisci errori di autenticazione
     if (error.response?.status === 401) {
@@ -433,7 +433,7 @@ export class AdminWebSocket {
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
-        console.log('[WS] ✅ Connected to admin WebSocket');
+        console.log('[WS]  Connected to admin WebSocket');
         this.reconnectAttempts = 0;
         this.emit('connected');
       };

@@ -25,13 +25,13 @@ console.log('🔗 [AUTH ADMIN] Inizializzazione database...');
 initializeDatabase()
     .then(success => {
         if (success) {
-            console.log('✅ [AUTH ADMIN] Database inizializzato correttamente');
+            console.log(' [AUTH ADMIN] Database inizializzato correttamente');
         } else {
-            console.error('❌ [AUTH ADMIN] Errore inizializzazione database');
+            console.error(' [AUTH ADMIN] Errore inizializzazione database');
         }
     })
     .catch(error => {
-        console.error('❌ [AUTH ADMIN] Errore database:', error);
+        console.error(' [AUTH ADMIN] Errore database:', error);
     });
 
 // Middleware di autenticazione admin
@@ -63,7 +63,7 @@ router.post('/auth/login', async (req, res) => {
                 { expiresIn: '24h' }
             );
 
-            console.log('✅ [AUTH ADMIN] Login riuscito per:', username);
+            console.log(' [AUTH ADMIN] Login riuscito per:', username);
 
             res.json({
                 success: true,
@@ -75,11 +75,11 @@ router.post('/auth/login', async (req, res) => {
                 }
             });
         } else {
-            console.log('❌ [AUTH ADMIN] Login fallito per:', username);
+            console.log(' [AUTH ADMIN] Login fallito per:', username);
             res.status(401).json({ error: 'Credenziali non valide' });
         }
     } catch (error) {
-        console.error('❌ [AUTH ADMIN] Errore login:', error);
+        console.error(' [AUTH ADMIN] Errore login:', error);
         res.status(500).json({ error: 'Errore interno del server' });
     }
 });
@@ -107,7 +107,7 @@ router.post('/auth/verify', async (req, res) => {
             });
         }
     } catch (error) {
-        console.error('❌ [AUTH ADMIN] Errore verifica token:', error);
+        console.error(' [AUTH ADMIN] Errore verifica token:', error);
         res.status(401).json({ 
             valid: false, 
             error: 'Token non valido' 
@@ -122,7 +122,7 @@ router.post('/auth/verify', async (req, res) => {
 // GET /api/admin/stats - Statistiche auth service dal database
 router.get('/stats', adminAuth, async (req, res) => {
     try {
-        console.log('📊 [AUTH ADMIN] Caricamento statistiche dal database...');
+        console.log(' [AUTH ADMIN] Caricamento statistiche dal database...');
         
         const stats = await getQuickStats();
         
@@ -164,10 +164,10 @@ router.get('/stats', adminAuth, async (req, res) => {
             verifiedUsers: stats.users.active
         };
 
-        console.log('✅ [AUTH ADMIN] Statistiche caricate:', authStats);
+        console.log(' [AUTH ADMIN] Statistiche caricate:', authStats);
         res.json(authStats);
     } catch (error) {
-        console.error('❌ [AUTH ADMIN] Errore stats:', error);
+        console.error(' [AUTH ADMIN] Errore stats:', error);
         res.status(500).json({ error: 'Errore statistiche autenticazione' });
     }
 });
@@ -214,7 +214,7 @@ router.get('/users', adminAuth, async (req, res) => {
             attributes: { exclude: ['password'] } // Escludi password
         });
 
-        console.log(`✅ [AUTH ADMIN] Caricati ${users.length} utenti di ${count} totali`);
+        console.log(` [AUTH ADMIN] Caricati ${users.length} utenti di ${count} totali`);
 
         res.json({
             users,
@@ -226,7 +226,7 @@ router.get('/users', adminAuth, async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('❌ [AUTH ADMIN] Errore lista utenti:', error);
+        console.error(' [AUTH ADMIN] Errore lista utenti:', error);
         res.status(500).json({ error: 'Errore caricamento utenti' });
     }
 });
@@ -285,7 +285,7 @@ router.post('/users', adminAuth, async (req, res) => {
             isVerified: false
         });
 
-        console.log('✅ [AUTH ADMIN] Utente creato con successo:', user.id);
+        console.log(' [AUTH ADMIN] Utente creato con successo:', user.id);
 
         res.status(201).json({
             success: true,
@@ -305,7 +305,7 @@ router.post('/users', adminAuth, async (req, res) => {
             tempPassword: password ? undefined : tempPassword // Solo se generata automaticamente
         });
     } catch (error) {
-        console.error('❌ [AUTH ADMIN] Errore creazione utente:', error);
+        console.error(' [AUTH ADMIN] Errore creazione utente:', error);
         res.status(500).json({ 
             error: 'Errore nella creazione dell\'utente',
             details: error.message 
@@ -319,7 +319,7 @@ router.put('/users/:id/status', adminAuth, async (req, res) => {
         const { id } = req.params;
         const { status, reason } = req.body;
         
-        console.log(`🔄 [AUTH ADMIN] Aggiornamento status utente ${id} a ${status}`);
+        console.log(` [AUTH ADMIN] Aggiornamento status utente ${id} a ${status}`);
         
         const user = await User.findByPk(id);
         if (!user) {
@@ -331,7 +331,7 @@ router.put('/users/:id/status', adminAuth, async (req, res) => {
             updatedAt: new Date()
         });
 
-        console.log(`✅ [AUTH ADMIN] Status utente ${user.email} aggiornato a ${status}`);
+        console.log(` [AUTH ADMIN] Status utente ${user.email} aggiornato a ${status}`);
 
         res.json({
             success: true,
@@ -343,7 +343,7 @@ router.put('/users/:id/status', adminAuth, async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('❌ [AUTH ADMIN] Errore aggiornamento status:', error);
+        console.error(' [AUTH ADMIN] Errore aggiornamento status:', error);
         res.status(500).json({ error: 'Errore aggiornamento status utente' });
     }
 });
@@ -378,7 +378,7 @@ router.get('/elections/:electionId/whitelist', async (req, res) => {
             order: [['authorizedAt', 'DESC']]
         });
 
-        console.log(`[AUTH] ✅ Trovati ${whitelist.length} utenti nella whitelist elezione ${electionId}`);
+        console.log(`[AUTH]  Trovati ${whitelist.length} utenti nella whitelist elezione ${electionId}`);
 
         res.json({
             success: true,
@@ -398,7 +398,7 @@ router.get('/elections/:electionId/whitelist', async (req, res) => {
             total: whitelist.length
         });
     } catch (error) {
-        console.error('❌ [AUTH] Errore recupero whitelist reale:', error);
+        console.error(' [AUTH] Errore recupero whitelist reale:', error);
         res.status(500).json({ 
             error: 'Errore nel recupero della whitelist',
             details: error.message 
@@ -485,7 +485,7 @@ router.post('/elections/:electionId/whitelist/add', async (req, res) => {
             }
         }
 
-        console.log(`[AUTH] ✅ Aggiunti ${addedUsers.length} utenti alla whitelist elezione ${electionId}`);
+        console.log(`[AUTH]  Aggiunti ${addedUsers.length} utenti alla whitelist elezione ${electionId}`);
 
         res.json({
             success: true,
@@ -503,7 +503,7 @@ router.post('/elections/:electionId/whitelist/add', async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('❌ [AUTH] Errore aggiunta whitelist reale:', error);
+        console.error(' [AUTH] Errore aggiunta whitelist reale:', error);
         res.status(500).json({ 
             error: 'Errore nell\'aggiunta alla whitelist',
             details: error.message 
@@ -547,7 +547,7 @@ router.delete('/elections/:electionId/whitelist/:userId', async (req, res) => {
         const userData = whitelistEntry.user;
         await whitelistEntry.destroy();
 
-        console.log(`[AUTH] ✅ Utente ${userData.email} rimosso dalla whitelist elezione ${electionId}`);
+        console.log(`[AUTH]  Utente ${userData.email} rimosso dalla whitelist elezione ${electionId}`);
 
         res.json({
             success: true,
@@ -559,7 +559,7 @@ router.delete('/elections/:electionId/whitelist/:userId', async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('❌ [AUTH] Errore rimozione reale da whitelist:', error);
+        console.error(' [AUTH] Errore rimozione reale da whitelist:', error);
         res.status(500).json({ 
             error: 'Errore nella rimozione dalla whitelist',
             details: error.message 
@@ -606,7 +606,7 @@ router.get('/elections/:electionId/whitelist/stats', async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('❌ [AUTH] Errore statistiche whitelist:', error);
+        console.error(' [AUTH] Errore statistiche whitelist:', error);
         res.status(500).json({ 
             error: 'Errore nel recupero delle statistiche',
             details: error.message 
@@ -623,7 +623,7 @@ router.get('/activity', adminAuth, async (req, res) => {
     try {
         const { limit = 25 } = req.query;
         
-        console.log('🔄 [AUTH ADMIN] Caricamento attività recenti...');
+        console.log(' [AUTH ADMIN] Caricamento attività recenti...');
         
         // Query per attività recenti (registrazioni, login, cambi status)
         const recentUsers = await User.findAll({
@@ -657,10 +657,10 @@ router.get('/activity', adminAuth, async (req, res) => {
             };
         });
 
-        console.log(`✅ [AUTH ADMIN] Caricate ${activities.length} attività`);
+        console.log(` [AUTH ADMIN] Caricate ${activities.length} attività`);
         res.json(activities);
     } catch (error) {
-        console.error('❌ [AUTH ADMIN] Errore activity:', error);
+        console.error(' [AUTH ADMIN] Errore activity:', error);
         res.status(500).json({ error: 'Errore caricamento attività' });
     }
 });
@@ -678,7 +678,7 @@ router.get('/settings', adminAuth, async (req, res) => {
             order: [['key', 'ASC']]
         });
 
-        console.log(`✅ [AUTH ADMIN] Caricate ${settings.length} impostazioni`);
+        console.log(` [AUTH ADMIN] Caricate ${settings.length} impostazioni`);
 
         res.json({ 
             settings: settings.map(setting => ({
@@ -690,7 +690,7 @@ router.get('/settings', adminAuth, async (req, res) => {
             }))
         });
     } catch (error) {
-        console.error('❌ [AUTH ADMIN] Errore settings:', error);
+        console.error(' [AUTH ADMIN] Errore settings:', error);
         res.status(500).json({ error: 'Errore caricamento impostazioni' });
     }
 });
@@ -712,7 +712,7 @@ router.put('/settings/:key', adminAuth, async (req, res) => {
             await setting.update({ value, description });
         }
 
-        console.log(`✅ [AUTH ADMIN] Setting ${key} aggiornato`);
+        console.log(` [AUTH ADMIN] Setting ${key} aggiornato`);
 
         res.json({
             success: true,
@@ -724,7 +724,7 @@ router.put('/settings/:key', adminAuth, async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('❌ [AUTH ADMIN] Errore aggiornamento setting:', error);
+        console.error(' [AUTH ADMIN] Errore aggiornamento setting:', error);
         res.status(500).json({ error: 'Errore aggiornamento impostazione' });
     }
 });
@@ -751,7 +751,7 @@ router.get('/backups', adminAuth, async (req, res) => {
 
         res.json({ backups });
     } catch (error) {
-        console.error('❌ [AUTH ADMIN] Errore backups:', error);
+        console.error(' [AUTH ADMIN] Errore backups:', error);
         res.status(500).json({ error: 'Errore caricamento backup' });
     }
 });

@@ -20,13 +20,13 @@ console.log('🔗 [VOTE SERVICE] Inizializzazione database...');
 initializeDatabase()
     .then(success => {
         if (success) {
-            console.log('✅ [VOTE SERVICE] Database inizializzato correttamente');
+            console.log(' [VOTE SERVICE] Database inizializzato correttamente');
         } else {
-            console.error('❌ [VOTE SERVICE] Errore inizializzazione database');
+            console.error(' [VOTE SERVICE] Errore inizializzazione database');
         }
     })
     .catch(error => {
-        console.error('❌ [VOTE SERVICE] Errore database:', error);
+        console.error(' [VOTE SERVICE] Errore database:', error);
     });
 
 // Middleware per estrarre informazioni utente dai header (passati dall'API Gateway)
@@ -91,7 +91,7 @@ router.get('/', extractUserFromHeaders, async (req, res) => {
             order: [['startDate', 'ASC']]
         });
 
-        console.log(`[VOTE SERVICE] 🔍 Trovate ${activeElections.length} elezioni attive`);
+        console.log(`[VOTE SERVICE]  Trovate ${activeElections.length} elezioni attive`);
 
         if (activeElections.length === 0) {
             return res.json({
@@ -153,7 +153,7 @@ router.get('/', extractUserFromHeaders, async (req, res) => {
             }
         }
 
-        console.log(`[VOTE SERVICE] ✅ Restituite ${availableElections.length} elezioni disponibili per utente ${userId}`);
+        console.log(`[VOTE SERVICE]  Restituite ${availableElections.length} elezioni disponibili per utente ${userId}`);
 
         res.json({
             success: true,
@@ -168,7 +168,7 @@ router.get('/', extractUserFromHeaders, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('[VOTE SERVICE] ❌ Errore caricamento elezioni:', error);
+        console.error('[VOTE SERVICE]  Errore caricamento elezioni:', error);
         res.status(500).json({ 
             error: 'Errore nel caricamento delle elezioni',
             details: error.message 
@@ -181,7 +181,7 @@ router.get('/voted', extractUserFromHeaders, async (req, res) => {
     try {
         const userId = req.user.id;
         
-        console.log(`[VOTE SERVICE] 📊 Richiesta elezioni votate per utente ${userId}`);
+        console.log(`[VOTE SERVICE]  Richiesta elezioni votate per utente ${userId}`);
 
         // Trova tutte le elezioni per cui l'utente ha votato (hasVoted = true)
         const votedElections = await ElectionWhitelist.findAll({
@@ -204,7 +204,7 @@ router.get('/voted', extractUserFromHeaders, async (req, res) => {
             ]
         });
 
-        console.log(`[VOTE SERVICE] 🔍 Trovate ${votedElections.length} elezioni votate`);
+        console.log(`[VOTE SERVICE]  Trovate ${votedElections.length} elezioni votate`);
 
         const elections = votedElections.map(entry => ({
             id: entry.election.id,
@@ -243,7 +243,7 @@ router.get('/voted', extractUserFromHeaders, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('[VOTE SERVICE] ❌ Errore caricamento elezioni votate:', error);
+        console.error('[VOTE SERVICE]  Errore caricamento elezioni votate:', error);
         res.status(500).json({ 
             error: 'Errore nel caricamento delle elezioni votate',
             details: error.message 
@@ -257,7 +257,7 @@ router.get('/:id/results', extractUserFromHeaders, async (req, res) => {
         const { id: electionId } = req.params;
         const userId = req.user.id;
         
-        console.log(`[VOTE SERVICE] 📊 Richiesta risultati elezione ${electionId} per utente ${userId}`);
+        console.log(`[VOTE SERVICE]  Richiesta risultati elezione ${electionId} per utente ${userId}`);
 
         // 1. Trova l'elezione con candidati
         const election = await Election.findByPk(electionId, {
@@ -300,7 +300,7 @@ router.get('/:id/results', extractUserFromHeaders, async (req, res) => {
             });
         }
 
-        console.log(`[VOTE SERVICE] ✅ Elezione completata, mostrando risultati`);
+        console.log(`[VOTE SERVICE]  Elezione completata, mostrando risultati`);
 
         // 4. Costruisci i risultati con i voti ricevuti da ogni candidato
         const results = election.candidates.map(candidate => ({
@@ -325,7 +325,7 @@ router.get('/:id/results', extractUserFromHeaders, async (req, res) => {
         // 6. Ordina per numero di voti (decrescente)
         results.sort((a, b) => b.totalVotesReceived - a.totalVotesReceived);
 
-        console.log(`[VOTE SERVICE] 📊 Risultati calcolati: ${totalVotes} voti totali`);
+        console.log(`[VOTE SERVICE]  Risultati calcolati: ${totalVotes} voti totali`);
 
         res.json({
             success: true,
@@ -354,7 +354,7 @@ router.get('/:id/results', extractUserFromHeaders, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('[VOTE SERVICE] ❌ Errore caricamento risultati:', error);
+        console.error('[VOTE SERVICE]  Errore caricamento risultati:', error);
         res.status(500).json({ 
             error: 'Errore nel caricamento dei risultati',
             details: error.message 
@@ -418,7 +418,7 @@ router.get('/:id', extractUserFromHeaders, async (req, res) => {
             });
         }
 
-        console.log(`[VOTE SERVICE] ✅ Dettagli elezione ${electionId} autorizzati per utente ${userId}`);
+        console.log(`[VOTE SERVICE]  Dettagli elezione ${electionId} autorizzati per utente ${userId}`);
 
         res.json({
             success: true,
@@ -452,7 +452,7 @@ router.get('/:id', extractUserFromHeaders, async (req, res) => {
         });
 
     } catch (error) {
-        console.error(`[VOTE SERVICE] ❌ Errore caricamento elezione ${req.params.id}:`, error);
+        console.error(`[VOTE SERVICE]  Errore caricamento elezione ${req.params.id}:`, error);
         res.status(500).json({ 
             error: 'Errore nel caricamento dei dettagli dell\'elezione',
             details: error.message 
@@ -487,7 +487,7 @@ router.post('/:id/vote', extractUserFromHeaders, async (req, res) => {
         });
 
     } catch (error) {
-        console.error(`[VOTE SERVICE] ❌ Errore invio voto elezione ${req.params.id}:`, error);
+        console.error(`[VOTE SERVICE]  Errore invio voto elezione ${req.params.id}:`, error);
         res.status(500).json({ 
             error: 'Errore nell\'invio del voto',
             details: error.message 

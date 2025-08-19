@@ -38,13 +38,13 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => {
     // Log della risposta riuscita
-    console.log(`[API] ✅ ${response.config.method?.toUpperCase()} ${response.config.url} - ${response.status}`);
+    console.log(`[API]  ${response.config.method?.toUpperCase()} ${response.config.url} - ${response.status}`);
     return response;
   },
   async (error) => {
     const originalRequest = error.config;
     
-    console.error(`[API] ❌ ${error.config?.method?.toUpperCase()} ${error.config?.url}`, {
+    console.error(`[API]  ${error.config?.method?.toUpperCase()} ${error.config?.url}`, {
       status: error.response?.status,
       data: error.response?.data
     });
@@ -53,7 +53,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !isRefreshing) {
       isRefreshing = true;
       
-      console.log('[API] 🔄 Token non valido, effettuando logout...');
+      console.log('[API]  Token non valido, effettuando logout...');
       
       // Rimuovi token e reindirizza al login
       localStorage.removeItem('authToken');
@@ -158,13 +158,13 @@ export const authAPI = {
       
       if (response.data.success && response.data.token) {
         authTokenUtils.setToken(response.data.token);
-        console.log('[API] ✅ Login riuscito');
+        console.log('[API]  Login riuscito');
         return response.data;
       } else {
         throw new Error('Risposta di login non valida');
       }
     } catch (error) {
-      console.error('[API] ❌ Errore login:', error.message);
+      console.error('[API]  Errore login:', error.message);
       throw error;
     }
   },
@@ -177,17 +177,17 @@ export const authAPI = {
         throw new Error('Nessun token trovato');
       }
       
-      console.log('[API] 🔍 Verifica token...');
+      console.log('[API]  Verifica token...');
       const response = await api.post('/auth/verify', { token });
       
       if (response.data.valid) {
-        console.log('[API] ✅ Token valido');
+        console.log('[API]  Token valido');
         return response.data.user;
       } else {
         throw new Error('Token non valido');
       }
     } catch (error) {
-      console.error('[API] ❌ Errore verifica token:', error.message);
+      console.error('[API]  Errore verifica token:', error.message);
       authTokenUtils.removeToken();
       throw error;
     }

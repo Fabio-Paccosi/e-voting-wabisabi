@@ -29,11 +29,11 @@ const callService = async (service, endpoint, method = 'GET', data = null, heade
         }
         
         const response = await axios(config);
-        console.log(`[CALL SERVICE] ✅ ${method} ${url} → ${response.status}`);
+        console.log(`[CALL SERVICE]  ${method} ${url} → ${response.status}`);
         return response.data;
         
     } catch (error) {
-        console.error(`[CALL SERVICE] ❌ ${method} ${url} →`, error.message);
+        console.error(`[CALL SERVICE]  ${method} ${url} →`, error.message);
         
         // Log più dettagliato per errori di servizio
         if (error.response) {
@@ -60,7 +60,7 @@ router.post('/address', authenticateUser, async (req, res) => {
         
         // Verifica che l'utente nel body corrisponda all'utente autenticato
         if (req.body.userId && req.body.userId !== req.user.id) {
-            console.error(`[API GATEWAY] ❌ Tentativo di generare indirizzo per altro utente: ${req.body.userId} vs ${req.user.id}`);
+            console.error(`[API GATEWAY]  Tentativo di generare indirizzo per altro utente: ${req.body.userId} vs ${req.user.id}`);
             return res.status(403).json({
                 error: 'Non autorizzato',
                 details: 'Non puoi generare indirizzi per altri utenti'
@@ -81,11 +81,11 @@ router.post('/address', authenticateUser, async (req, res) => {
             'authorization': req.headers.authorization
         });
         
-        console.log(`[API GATEWAY] ✅ Indirizzo Bitcoin generato per utente ${req.user.id}`);
+        console.log(`[API GATEWAY]  Indirizzo Bitcoin generato per utente ${req.user.id}`);
         res.json(response);
         
     } catch (error) {
-        console.error(`[API GATEWAY] ❌ Errore generazione indirizzo:`, error.message);
+        console.error(`[API GATEWAY]  Errore generazione indirizzo:`, error.message);
         res.status(error.status || 500).json({
             error: 'Errore nella generazione dell\'indirizzo Bitcoin',
             details: error.originalError || error.message,
@@ -101,7 +101,7 @@ router.post('/credentials', authenticateUser, async (req, res) => {
         
         // Verifica che l'utente nel body corrisponda all'utente autenticato
         if (req.body.userId && req.body.userId !== req.user.id) {
-            console.error(`[API GATEWAY] ❌ Tentativo di richiedere credenziali per altro utente`);
+            console.error(`[API GATEWAY]  Tentativo di richiedere credenziali per altro utente`);
             return res.status(403).json({
                 error: 'Non autorizzato',
                 details: 'Non puoi richiedere credenziali per altri utenti'
@@ -121,11 +121,11 @@ router.post('/credentials', authenticateUser, async (req, res) => {
             'authorization': req.headers.authorization
         });
         
-        console.log(`[API GATEWAY] ✅ Credenziali KVAC generate per utente ${req.user.id}`);
+        console.log(`[API GATEWAY]  Credenziali KVAC generate per utente ${req.user.id}`);
         res.json(response);
         
     } catch (error) {
-        console.error(`[API GATEWAY] ❌ Errore credenziali KVAC:`, error.message);
+        console.error(`[API GATEWAY]  Errore credenziali KVAC:`, error.message);
         res.status(error.status || 500).json({
             error: 'Errore nella richiesta credenziali KVAC',
             details: error.originalError || error.message,
@@ -147,11 +147,11 @@ router.post('/submit', authenticateUser, async (req, res) => {
             'authorization': req.headers.authorization
         });
         
-        console.log(`[API GATEWAY] ✅ Voto anonimo inviato per utente ${req.user.id}`);
+        console.log(`[API GATEWAY]  Voto anonimo inviato per utente ${req.user.id}`);
         res.json(response);
         
     } catch (error) {
-        console.error(`[API GATEWAY] ❌ Errore invio voto:`, error.message);
+        console.error(`[API GATEWAY]  Errore invio voto:`, error.message);
         res.status(error.status || 500).json({
             error: 'Errore nell\'invio del voto anonimo',
             details: error.originalError || error.message,
@@ -164,7 +164,7 @@ router.post('/submit', authenticateUser, async (req, res) => {
 router.get('/status/:voteId', authenticateUser, async (req, res) => {
     try {
         const { voteId } = req.params;
-        console.log(`[API GATEWAY] 📊 Controllo stato voto ${voteId} per utente ${req.user.id}`);
+        console.log(`[API GATEWAY]  Controllo stato voto ${voteId} per utente ${req.user.id}`);
         
         const response = await callService('vote', `/api/voting/status/${voteId}`, 'GET', null, {
             'x-user-id': req.user.id,
@@ -174,7 +174,7 @@ router.get('/status/:voteId', authenticateUser, async (req, res) => {
         res.json(response);
         
     } catch (error) {
-        console.error(`[API GATEWAY] ❌ Errore controllo stato:`, error.message);
+        console.error(`[API GATEWAY]  Errore controllo stato:`, error.message);
         res.status(error.status || 500).json({
             error: 'Errore nel controllo dello stato del voto',
             details: error.originalError || error.message,
@@ -197,7 +197,7 @@ router.get('/session/:sessionId/stats', authenticateUser, async (req, res) => {
         res.json(response);
         
     } catch (error) {
-        console.error(`[API GATEWAY] ❌ Errore statistiche sessione:`, error.message);
+        console.error(`[API GATEWAY]  Errore statistiche sessione:`, error.message);
         res.status(error.status || 500).json({
             error: 'Errore nel recupero delle statistiche',
             details: error.originalError || error.message,
@@ -226,7 +226,7 @@ router.get('/debug', authenticateUser, async (req, res) => {
         res.json(response);
         
     } catch (error) {
-        console.error(`[API GATEWAY] ❌ Errore debug:`, error.message);
+        console.error(`[API GATEWAY]  Errore debug:`, error.message);
         res.status(error.status || 500).json({
             error: 'Errore nel debug',
             details: error.originalError || error.message,
@@ -235,5 +235,5 @@ router.get('/debug', authenticateUser, async (req, res) => {
     }
 });
 
-console.log('[VOTING ROUTES] ✅ Route WabiSabi con autenticazione JWT reale caricate');
+console.log('[VOTING ROUTES]  Route WabiSabi con autenticazione JWT reale caricate');
 module.exports = router;

@@ -52,17 +52,17 @@ export const AuthProvider = ({ children }) => {
         return;
       }
       
-      console.log('[AUTH] 🔍 Verifica stato autenticazione...');
+      console.log('[AUTH]  Verifica stato autenticazione...');
       
       // Verifica token con il server
       const userData = await authAPI.verifyToken();
       
-      console.log('[AUTH] ✅ Utente autenticato:', userData.email);
+      console.log('[AUTH]  Utente autenticato:', userData.email);
       setUser(userData);
       setIsAuthenticated(true);
       
     } catch (err) {
-      console.error('[AUTH] ❌ Verifica autenticazione fallita:', err.message);
+      console.error('[AUTH]  Verifica autenticazione fallita:', err.message);
       
       // Rimuovi token non valido
       authTokenUtils.removeToken();
@@ -90,7 +90,7 @@ export const AuthProvider = ({ children }) => {
       const response = await authAPI.login(credentials);
       
       if (response.success && response.user) {
-        console.log('[AUTH] ✅ Login riuscito per:', response.user.email);
+        console.log('[AUTH]  Login riuscito per:', response.user.email);
         
         setUser(response.user);
         setIsAuthenticated(true);
@@ -107,7 +107,7 @@ export const AuthProvider = ({ children }) => {
         };
       }
     } catch (err) {
-      console.error('[AUTH] ❌ Errore login:', err.message);
+      console.error('[AUTH]  Errore login:', err.message);
       
       // Gestisci diversi tipi di errore
       let errorMessage = 'Errore di connessione';
@@ -142,7 +142,7 @@ export const AuthProvider = ({ children }) => {
       setUser(null);
       setIsAuthenticated(false);
       
-      console.log('[AUTH] ✅ Logout completato');
+      console.log('[AUTH]  Logout completato');
       
     } catch (err) {
       console.error('[AUTH] ⚠️ Errore durante logout:', err.message);
@@ -155,14 +155,14 @@ export const AuthProvider = ({ children }) => {
 
   const refreshUserData = async () => {
     try {
-      console.log('[AUTH] 🔄 Refresh dati utente...');
+      console.log('[AUTH]  Refresh dati utente...');
       
       const userData = await authAPI.verifyToken();
       setUser(userData);
       
       return userData;
     } catch (err) {
-      console.error('[AUTH] ❌ Errore refresh dati utente:', err.message);
+      console.error('[AUTH]  Errore refresh dati utente:', err.message);
       
       // Se il refresh fallisce, probabilmente il token è scaduto
       await logout();

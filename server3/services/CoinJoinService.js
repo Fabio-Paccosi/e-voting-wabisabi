@@ -15,7 +15,7 @@ class CoinJoinService {
     constructor() {
         this.activeSessions = new Map(); // sessionId -> CoinJoinSession
         this.ROUND_TIMEOUT = 300000; // 5 minuti timeout per round
-        this.MIN_PARTICIPANTS = 3; // Minimo partecipanti per CoinJoin
+        this.MIN_PARTICIPANTS = 1; // Minimo partecipanti per CoinJoin
         this.MAX_PARTICIPANTS = 50; // Massimo partecipanti per round
         this.COINJOIN_FEE = 1000; // Fee in satoshi
     }
@@ -43,7 +43,7 @@ class CoinJoinService {
                 order: [['submitted_at', 'ASC']]
             });
     
-            console.log(`[COINJOIN] 📊 Trovati ${pendingVotes.length} voti pendenti`);
+            console.log(`[COINJOIN]  Trovati ${pendingVotes.length} voti pendenti`);
     
             if (pendingVotes.length < this.MIN_PARTICIPANTS) {
                 console.log(`[COINJOIN] ⚠️ Voti insufficienti: ${pendingVotes.length} < ${this.MIN_PARTICIPANTS}`);
@@ -70,21 +70,21 @@ class CoinJoinService {
             // CORREZIONE: Salva correttamente la sessione nella mappa
             this.activeSessions.set(sessionId, coinJoinSession);
     
-            console.log(`[COINJOIN] ✅ Sessione CoinJoin creata per ${coinJoinSession.participants.length} partecipanti`);
+            console.log(`[COINJOIN]  Sessione CoinJoin creata per ${coinJoinSession.participants.length} partecipanti`);
     
             // Avvia il processo in background
             this.processCoinJoinRounds(coinJoinSession)
                 .catch(error => {
-                    console.error(`[COINJOIN] ❌ Errore processo CoinJoin:`, error);
+                    console.error(`[COINJOIN]  Errore processo CoinJoin:`, error);
                     this.handleCoinJoinError(sessionId, error);
                 });
     
-            console.log(`[COINJOIN] ✅ CoinJoin avviato per ${coinJoinSession.participants.length} partecipanti`);
+            console.log(`[COINJOIN]  CoinJoin avviato per ${coinJoinSession.participants.length} partecipanti`);
     
             return coinJoinSession;
     
         } catch (error) {
-            console.error(`[COINJOIN] ❌ Errore trigger CoinJoin:`, error);
+            console.error(`[COINJOIN]  Errore trigger CoinJoin:`, error);
             throw error;
         }
     }
@@ -96,7 +96,7 @@ class CoinJoinService {
         try {
             const { sessionId, participants } = coinJoinSession;
             
-            console.log(`[COINJOIN] 🔄 Inizio round ${coinJoinSession.round} per sessione ${sessionId}`);
+            console.log(`[COINJOIN]  Inizio round ${coinJoinSession.round} per sessione ${sessionId}`);
 
             // ROUND 1: Input Registration
             await this.inputRegistrationRound(coinJoinSession);
@@ -114,7 +114,7 @@ class CoinJoinService {
             await this.finalizeCoinJoin(coinJoinSession);
 
         } catch (error) {
-            console.error(`[COINJOIN] ❌ Errore nei round CoinJoin:`, error);
+            console.error(`[COINJOIN]  Errore nei round CoinJoin:`, error);
             await this.handleCoinJoinError(coinJoinSession.sessionId, error);
         }
     }
@@ -156,10 +156,10 @@ class CoinJoinService {
                 }
             );
 
-            console.log(`[COINJOIN] ✅ Input Registration completato: ${inputs.length} input`);
+            console.log(`[COINJOIN]  Input Registration completato: ${inputs.length} input`);
 
         } catch (error) {
-            console.error(`[COINJOIN] ❌ Errore Input Registration:`, error);
+            console.error(`[COINJOIN]  Errore Input Registration:`, error);
             throw error;
         }
     }
@@ -171,7 +171,7 @@ class CoinJoinService {
         try {
             await this.debugCommitments(coinJoinSession);
 
-            console.log(`[COINJOIN] 📤 Output Registration Round - Sessione ${coinJoinSession.sessionId}`);
+            console.log(`[COINJOIN] Output Registration Round - Sessione ${coinJoinSession.sessionId}`);
             
             coinJoinSession.status = 'output_registration';
             
@@ -180,45 +180,45 @@ class CoinJoinService {
                 where: { electionId: coinJoinSession.electionId }
             });
             
-            console.log(`[COINJOIN] 📋 Candidati trovati: ${candidates.length}`);
+            console.log(`[COINJOIN] Candidati trovati: ${candidates.length}`);
             candidates.forEach(c => console.log(`  - ${c.name} (ID: ${c.id}, Encoding: ${c.voteEncoding})`));
             
             const candidateMap = new Map(candidates.map(c => [c.voteEncoding, c]));
             const candidateVotes = new Map(); // Per aggregazione
             
-            console.log(`[COINJOIN] 🔍 Processamento di ${coinJoinSession.inputs.length} input...`);
+            console.log(`[COINJOIN] Processamento di ${coinJoinSession.inputs.length} input...`);
             
             // AGGREGAZIONE: Conta i voti per candidato
             for (const [index, input] of coinJoinSession.inputs.entries()) {
                 try {
-                    console.log(`[COINJOIN] 🔍 Processamento input ${index + 1}/${coinJoinSession.inputs.length}`);
-                    console.log(`[COINJOIN] 📝 Commitment: ${input.commitment}`);
+                    console.log(`[COINJOIN] Processamento input ${index + 1}/${coinJoinSession.inputs.length}`);
+                    console.log(`[COINJOIN] Commitment: ${input.commitment}`);
                     
                     // Estrae il voto dal commitment
                     const voteData = this.extractVoteFromCommitment(input.commitment);
-                    console.log(`[COINJOIN] 📊 Voto estratto:`, voteData);
+                    console.log(`[COINJOIN]  Voto estratto:`, voteData);
                     
                     // Trova candidato corrispondente
                     const candidate = candidateMap.get(voteData.candidateEncoding);
                     if (!candidate) {
-                        console.error(`[COINJOIN] ❌ Candidato non trovato per encoding ${voteData.candidateEncoding}`);
-                        console.error(`[COINJOIN] 🗺️ Encodings disponibili:`, Array.from(candidateMap.keys()));
+                        console.error(`[COINJOIN] Candidato non trovato per encoding ${voteData.candidateEncoding}`);
+                        console.error(`[COINJOIN] Encodings disponibili:`, Array.from(candidateMap.keys()));
                         continue;
                     }
                     
-                    console.log(`[COINJOIN] ✅ Voto mappato a candidato: ${candidate.name} (ID: ${candidate.id})`);
+                    console.log(`[COINJOIN]  Voto mappato a candidato: ${candidate.name} (ID: ${candidate.id})`);
                     
                     // Aggrega voti per candidato
                     const currentVotes = candidateVotes.get(candidate.id) || 0;
                     candidateVotes.set(candidate.id, currentVotes + voteData.voteValue);
                     
                 } catch (inputError) {
-                    console.error(`[COINJOIN] ❌ Errore processamento input ${index + 1}:`, inputError);
+                    console.error(`[COINJOIN]  Errore processamento input ${index + 1}:`, inputError);
                     continue;
                 }
             }
             
-            console.log(`[COINJOIN] 📊 Aggregazione completata:`, Array.from(candidateVotes.entries()));
+            console.log(`[COINJOIN]  Aggregazione completata:`, Array.from(candidateVotes.entries()));
             
             // Crea output aggregati
             const outputs = [];
@@ -230,17 +230,17 @@ class CoinJoinService {
                     voteValue: totalVotes, // Voti aggregati
                     registeredAt: new Date()
                 });
-                console.log(`[COINJOIN] ✅ Output creato per ${candidate.name}: ${totalVotes} voti`);
+                console.log(`[COINJOIN]  Output creato per ${candidate.name}: ${totalVotes} voti`);
             }
             
             coinJoinSession.outputs = outputs;
             coinJoinSession.round = 3;
             
-            console.log(`[COINJOIN] ✅ Output Registration completato: ${outputs.length} candidati ricevuti voti`);
-            console.log(`[COINJOIN] 📊 Riepilogo:`, outputs.map(o => `${o.candidateId}: ${o.voteValue} voti`));
+            console.log(`[COINJOIN]  Output Registration completato: ${outputs.length} candidati ricevuti voti`);
+            console.log(`[COINJOIN]  Riepilogo:`, outputs.map(o => `${o.candidateId}: ${o.voteValue} voti`));
             
         } catch (error) {
-            console.error(`[COINJOIN] ❌ Errore Output Registration:`, error);
+            console.error(`[COINJOIN]  Errore Output Registration:`, error);
             throw error;
         }
     }
@@ -250,7 +250,7 @@ class CoinJoinService {
      */
     async transactionSigningRound(coinJoinSession) {
         try {
-            console.log(`[COINJOIN] ✍️ Transaction Signing Round - Sessione ${coinJoinSession.sessionId}`);
+            console.log(`[COINJOIN] Transaction Signing Round - Sessione ${coinJoinSession.sessionId}`);
 
             coinJoinSession.status = 'signing';
 
@@ -263,10 +263,10 @@ class CoinJoinService {
             coinJoinSession.transaction = signedTransaction;
             coinJoinSession.round = 4;
 
-            console.log(`[COINJOIN] ✅ Transazione firmata: ${signedTransaction.txId}`);
+            console.log(`[COINJOIN]  Transazione firmata: ${signedTransaction.txId}`);
 
         } catch (error) {
-            console.error(`[COINJOIN] ❌ Errore Transaction Signing:`, error);
+            console.error(`[COINJOIN]  Errore Transaction Signing:`, error);
             throw error;
         }
     }
@@ -276,7 +276,7 @@ class CoinJoinService {
      */
     async broadcastTransaction(coinJoinSession) {
         try {
-            console.log(`[COINJOIN] 📡 Broadcasting Transaction - Sessione ${coinJoinSession.sessionId}`);
+            console.log(`[COINJOIN]  Broadcasting Transaction - Sessione ${coinJoinSession.sessionId}`);
 
             const { transaction } = coinJoinSession;
             
@@ -316,13 +316,13 @@ class CoinJoinService {
             coinJoinSession.broadcastedAt = new Date();
             coinJoinSession.txId = broadcastResult.txId;
 
-            console.log(`[COINJOIN] ✅ Transazione trasmessa: ${broadcastResult.txId}`);
+            console.log(`[COINJOIN]  Transazione trasmessa: ${broadcastResult.txId}`);
 
             // Avvia monitoring delle conferme
             this.monitorTransactionConfirmations(broadcastResult.txId);
 
         } catch (error) {
-            console.error(`[COINJOIN] ❌ Errore Broadcasting:`, error);
+            console.error(`[COINJOIN]  Errore Broadcasting:`, error);
             throw error;
         }
     }
@@ -350,7 +350,7 @@ class CoinJoinService {
             // Rimuove dalla memoria
             this.activeSessions.delete(coinJoinSession.sessionId);
 
-            console.log(`[COINJOIN] ✅ CoinJoin completato per sessione ${coinJoinSession.sessionId}`);
+            console.log(`[COINJOIN]  CoinJoin completato per sessione ${coinJoinSession.sessionId}`);
 
             return {
                 success: true,
@@ -361,7 +361,7 @@ class CoinJoinService {
             };
 
         } catch (error) {
-            console.error(`[COINJOIN] ❌ Errore finalizzazione:`, error);
+            console.error(`[COINJOIN]  Errore finalizzazione:`, error);
             throw error;
         }
     }
@@ -373,7 +373,7 @@ class CoinJoinService {
         const { inputs, outputs } = coinJoinSession;
     
         try {
-            // ✅ CORREZIONE: Costruisci una vera transazione Bitcoin
+            //  CORREZIONE: Costruisci una vera transazione Bitcoin
             const transaction = {
                 version: 2,
                 inputs: inputs.map(input => ({
@@ -390,7 +390,7 @@ class CoinJoinService {
                 lockTime: 0
             };
     
-            // ✅ CORREZIONE: Serializza correttamente in formato Bitcoin
+            //  CORREZIONE: Serializza correttamente in formato Bitcoin
             const rawTx = this.serializeBitcoinTransaction(transaction);
             const txId = crypto.createHash('sha256')
                 .update(Buffer.from(rawTx, 'hex'))
@@ -401,18 +401,18 @@ class CoinJoinService {
     
             return {
                 txId,
-                rawTx, // ✅ Ora è una vera raw transaction in hex
+                rawTx, //  Ora è una vera raw transaction in hex
                 transaction
             };
     
         } catch (error) {
-            console.error(`[COINJOIN] ❌ Errore costruzione transazione:`, error);
+            console.error(`[COINJOIN]  Errore costruzione transazione:`, error);
             throw error;
         }
     }
 
     /**
-     * ✅ NUOVO: Serializza la transazione nel formato Bitcoin standard
+     *  NUOVO: Serializza la transazione nel formato Bitcoin standard
      */
     serializeBitcoinTransaction(tx) {
         try {
@@ -455,13 +455,13 @@ class CoinJoinService {
             return serialized;
             
         } catch (error) {
-            console.error('[COINJOIN] ❌ Errore serializzazione:', error);
+            console.error('[COINJOIN]  Errore serializzazione:', error);
             throw error;
         }
     }
 
     /**
-     * ✅ NUOVO: Crea un vero script P2PKH per un indirizzo Bitcoin
+     *  NUOVO: Crea un vero script P2PKH per un indirizzo Bitcoin
      */
     createP2PKHScript(address) {
         try {
@@ -477,13 +477,13 @@ class CoinJoinService {
             return '76a914' + pubkeyHash + '88ac';
             
         } catch (error) {
-            console.error('[COINJOIN] ❌ Errore creazione script:', error);
+            console.error('[COINJOIN]  Errore creazione script:', error);
             throw error;
         }
     }
 
     /**
-     * ✅ HELPER: Converte intero in hex little endian
+     *  HELPER: Converte intero in hex little endian
      */
     intToLittleEndianHex(value, bytes) {
         try {
@@ -510,14 +510,14 @@ class CoinJoinService {
     }
 
     /**
-     * ✅ HELPER: Inverte stringa hex (per txid)
+     *  HELPER: Inverte stringa hex (per txid)
      */
     reverseHex(hex) {
         return hex.match(/.{2}/g).reverse().join('');
     }
 
     /**
-     * ✅ HELPER: Codifica VarInt
+     *  HELPER: Codifica VarInt
      */
     encodeVarInt(value) {
         if (value < 0xfd) {
@@ -532,14 +532,14 @@ class CoinJoinService {
     }
 
     /**
-     * ✅ HELPER: Genera mock transaction ID per testing
+     *  HELPER: Genera mock transaction ID per testing
      */
     generateMockTxId() {
         return crypto.randomBytes(32).toString('hex');
     }
 
     /**
-     * ✅ MIGLIORAMENTO: Address to ScriptPubKey più realistico
+     *  MIGLIORAMENTO: Address to ScriptPubKey più realistico
      */
     addressToScriptPubKey(address) {
         // In ambiente di sviluppo, genera un scriptPubKey mock ma valido
@@ -578,7 +578,7 @@ class CoinJoinService {
      */
     extractVoteFromCommitment(commitment) {
         try {
-            console.log(`[COINJOIN] 🔍 Estrazione voto da commitment:`, commitment);
+            console.log(`[COINJOIN]  Estrazione voto da commitment:`, commitment);
             
             // CASO 1: Commitment è già un oggetto con candidateEncoding
             if (typeof commitment === 'object' && commitment.candidateEncoding) {
@@ -640,7 +640,7 @@ class CoinJoinService {
             };
             
         } catch (error) {
-            console.error(`[COINJOIN] ❌ Errore estrazione commitment:`, error);
+            console.error(`[COINJOIN]  Errore estrazione commitment:`, error);
             // Fallback sicuro
             return {
                 candidateEncoding: 1,
@@ -676,7 +676,7 @@ class CoinJoinService {
     async updateCandidateVoteCounts(coinJoinSession) {
         try {
             console.log(`[COINJOIN] 🔢 Aggiornamento contatori voti...`);
-            console.log(`[COINJOIN] 📊 Output da processare: ${coinJoinSession.outputs.length}`);
+            console.log(`[COINJOIN]  Output da processare: ${coinJoinSession.outputs.length}`);
             
             const voteCounts = new Map();
             
@@ -694,7 +694,7 @@ class CoinJoinService {
                 console.log(`[COINJOIN] ➕ Candidato ${output.candidateId}: ${current} + ${output.voteValue} = ${newTotal}`);
             }
             
-            console.log(`[COINJOIN] 📊 Conteggio finale:`, Array.from(voteCounts.entries()));
+            console.log(`[COINJOIN]  Conteggio finale:`, Array.from(voteCounts.entries()));
             
             // Aggiorna database
             for (const [candidateId, voteCount] of voteCounts) {
@@ -705,26 +705,26 @@ class CoinJoinService {
                     where: { id: candidateId }
                 });
                 
-                console.log(`[COINJOIN] ✅ DB aggiornato per candidato ${candidateId}`);
+                console.log(`[COINJOIN]  DB aggiornato per candidato ${candidateId}`);
             }
             
-            console.log(`[COINJOIN] ✅ Aggiornati contatori per ${voteCounts.size} candidati`);
+            console.log(`[COINJOIN]  Aggiornati contatori per ${voteCounts.size} candidati`);
             
             // Log finale dettagliato
             for (const [candidateId, count] of voteCounts) {
                 const candidate = await Candidate.findByPk(candidateId);
-                console.log(`[COINJOIN] 📊 FINALE - ${candidate?.name || candidateId}: ${count} voti`);
+                console.log(`[COINJOIN]  FINALE - ${candidate?.name || candidateId}: ${count} voti`);
             }
             
         } catch (error) {
-            console.error(`[COINJOIN] ❌ Errore aggiornamento contatori:`, error);
+            console.error(`[COINJOIN]  Errore aggiornamento contatori:`, error);
             throw error;
         }
     }
 
     async debugCommitments(coinJoinSession) {
-        console.log(`\n🔍 ========== DEBUG COMMITMENT ANALYSIS ==========`);
-        console.log(`📊 Inputs totali: ${coinJoinSession.inputs.length}`);
+        console.log(`\n ========== DEBUG COMMITMENT ANALYSIS ==========`);
+        console.log(` Inputs totali: ${coinJoinSession.inputs.length}`);
         
         for (const [index, input] of coinJoinSession.inputs.entries()) {
             console.log(`\n--- INPUT ${index + 1} ---`);
@@ -752,7 +752,7 @@ class CoinJoinService {
             }
         }
         
-        console.log(`🔍 =============== END DEBUG ==================\n`);
+        console.log(` =============== END DEBUG ==================\n`);
     }
 
     /**
@@ -772,7 +772,7 @@ class CoinJoinService {
                 );
 
                 if (confirmations >= 6) {
-                    console.log(`[COINJOIN] ✅ Transazione ${txId} completamente confermata (${confirmations} conf)`);
+                    console.log(`[COINJOIN]  Transazione ${txId} completamente confermata (${confirmations} conf)`);
                     return; // Stop monitoring
                 }
 
@@ -780,7 +780,7 @@ class CoinJoinService {
                 setTimeout(checkConfirmations, 30000);
 
             } catch (error) {
-                console.error(`[COINJOIN] ❌ Errore monitoring ${txId}:`, error);
+                console.error(`[COINJOIN]  Errore monitoring ${txId}:`, error);
             }
         };
 
@@ -792,7 +792,7 @@ class CoinJoinService {
      */
     async handleCoinJoinError(sessionId, error) {
         try {
-            console.error(`[COINJOIN] ❌ Gestione errore per sessione ${sessionId}:`, error);
+            console.error(`[COINJOIN]  Gestione errore per sessione ${sessionId}:`, error);
 
             // Aggiorna stato sessione
             await VotingSession.update(
@@ -817,7 +817,7 @@ class CoinJoinService {
             this.activeSessions.delete(sessionId);
 
         } catch (dbError) {
-            console.error(`[COINJOIN] ❌ Errore gestione errore:`, dbError);
+            console.error(`[COINJOIN]  Errore gestione errore:`, dbError);
         }
     }
 
