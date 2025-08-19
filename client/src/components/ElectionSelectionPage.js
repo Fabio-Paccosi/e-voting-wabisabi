@@ -230,7 +230,7 @@ const ElectionSelectionPage = () => {
             </div>
 
             <div class="privacy-info">
-                <h4>🔍 Verificabilità Pubblica</h4>
+                <h4> Verificabilità Pubblica</h4>
                 <p>
                     Ogni voto è registrato pubblicamente sulla blockchain e può essere verificato
                     matematicamente senza rivelare il contenuto o l'identità del votante.

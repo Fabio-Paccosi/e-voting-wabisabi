@@ -38,7 +38,7 @@ services:
       timeout: 3s
       retries: 5
 
-  # Auth Service (SERVER 2) - ✅ MODIFICATO PER ACCESSO A SHARED/
+  # Auth Service (SERVER 2) -  MODIFICATO PER ACCESSO A SHARED/
   auth-service:
     build:
       context: .                    # ← CAMBIATO: build dalla root
@@ -70,7 +70,7 @@ services:
     #   timeout: 10s
     #   retries: 3
 
-  # Vote Service (SERVER 3) - ✅ MODIFICATO PER ACCESSO A SHARED/
+  # Vote Service (SERVER 3) -  MODIFICATO PER ACCESSO A SHARED/
   vote-service:
     build:
       context: .                    # ← CAMBIATO: build dalla root
@@ -87,11 +87,18 @@ services:
       - DB_PASSWORD=${DB_PASSWORD:-SecurePass123!}
       - REDIS_HOST=redis
       - REDIS_PASSWORD=${REDIS_PASSWORD:-RedisPass456!}
+      - BITCOIN_NETWORK=testnet
+      - BITCOIN_RPC_HOST=bitcoin-node
+      - BITCOIN_RPC_PORT=18332
+      - BITCOIN_RPC_USER=bitcoinrpc
+      - BITCOIN_RPC_PASSWORD=BitcoinSecurePass789!
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      bitcoin-node:
+        condition: service_started
     networks:
       - evoting-network
     restart: unless-stopped
@@ -101,7 +108,7 @@ services:
     #   timeout: 10s
     #   retries: 3
 
-  # API Gateway (SERVER 1) - ✅ MODIFICATO PER ACCESSO A SHARED/
+  # API Gateway (SERVER 1) -  MODIFICATO PER ACCESSO A SHARED/
   api-gateway:
     build:
       context: .                    # ← CAMBIATO: build dalla root
@@ -147,6 +154,9 @@ services:
       -rpcallowip=0.0.0.0/0
       -rpcuser=${BITCOIN_RPC_USER:-bitcoinrpc}
       -rpcpassword=${BITCOIN_RPC_PASSWORD:-BitcoinSecurePass789!}
+      -dbcache=512        
+      -maxmempool=50      
+      -prune=1000        
     volumes:
       - bitcoin_data:/home/bitcoin/.bitcoin
     ports:

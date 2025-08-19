@@ -178,7 +178,7 @@ const Election = sequelize.define('Election', {
 });
 
 // ====================
-// MODELLO CANDIDATE - CORRETTO
+// MODELLO CANDIDATE 
 // ====================
 const Candidate = sequelize.define('Candidate', {
     id: {
@@ -249,7 +249,7 @@ const Candidate = sequelize.define('Candidate', {
 });
 
 // ====================
-// MODELLO VOTING SESSION - CORRETTO
+// MODELLO VOTING SESSION 
 // ====================
 const VotingSession = sequelize.define('VotingSession', {
     id: {
@@ -293,7 +293,7 @@ const VotingSession = sequelize.define('VotingSession', {
 });
 
 // ====================
-// MODELLO VOTE - CORRETTO
+// MODELLO VOTE 
 // ====================
 const Vote = sequelize.define('Vote', {
     id: {
@@ -342,7 +342,7 @@ const Vote = sequelize.define('Vote', {
 });
 
 // ====================
-// MODELLO TRANSACTION - CORRETTO  
+// MODELLO TRANSACTION   
 // ====================
 const Transaction = sequelize.define('Transaction', {
     id: {
@@ -400,7 +400,7 @@ const Transaction = sequelize.define('Transaction', {
 });
 
 // ====================
-// MODELLO CREDENTIAL - CORRETTO
+// MODELLO CREDENTIAL 
 // ====================
 const Credential = sequelize.define('Credential', {
     id: {
@@ -530,15 +530,15 @@ const initializeDatabase = async () => {
     try {
         console.log('🔗 Connessione al database PostgreSQL...');
         await sequelize.authenticate();
-        console.log('✅ [VOTE CONFIG] Connessione database stabilita');
+        console.log(' [VOTE CONFIG] Connessione database stabilita');
         
         console.log('📋 [VOTE CONFIG] Sincronizzazione modelli...');
         await sequelize.sync({ alter: false });
-        console.log('✅ [VOTE CONFIG] Modelli sincronizzati');
+        console.log(' [VOTE CONFIG] Modelli sincronizzati');
         
         return true;
     } catch (error) {
-        console.error('❌ [VOTE CONFIG] Errore connessione database:', error);
+        console.error(' [VOTE CONFIG] Errore connessione database:', error);
         return false;
     }
 };

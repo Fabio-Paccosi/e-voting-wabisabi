@@ -53,10 +53,10 @@ router.post("/elections/:id/deactivate", async (req, res) => {\
 });
 }' server1/routes/admin.js
 
-echo "✅ Route activate aggiunte all'API Gateway"
+echo " Route activate aggiunte all'API Gateway"
 
 # 3. VERIFICA che il Vote Service abbia le route necessarie
-echo "🔍 Verifica Vote Service routes..."
+echo " Verifica Vote Service routes..."
 
 # Se il Vote Service non ha la route activate, aggiungila
 if ! grep -q "elections.*activate" server3/routes/admin.js; then
@@ -72,7 +72,7 @@ if ! grep -q "elections.*activate" server3/routes/admin.js; then
 router.post('/elections/:id/activate', adminAuth, async (req, res) => {
     try {
         const { id } = req.params;
-        console.log(`🔄 [VOTE ADMIN] Attivazione elezione ${id}`);
+        console.log(` [VOTE ADMIN] Attivazione elezione ${id}`);
 
         const election = await Election.findByPk(id, {
             include: [
@@ -113,7 +113,7 @@ router.post('/elections/:id/activate', adminAuth, async (req, res) => {
             isActive: true 
         });
 
-        console.log(`✅ [VOTE ADMIN] Elezione "${election.title}" attivata con successo`);
+        console.log(` [VOTE ADMIN] Elezione "${election.title}" attivata con successo`);
 
         res.json({ 
             success: true, 
@@ -127,7 +127,7 @@ router.post('/elections/:id/activate', adminAuth, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ [VOTE ADMIN] Errore attivazione elezione:', error);
+        console.error(' [VOTE ADMIN] Errore attivazione elezione:', error);
         res.status(500).json({ 
             error: 'Errore nell\'attivazione dell\'elezione',
             details: error.message 
@@ -139,7 +139,7 @@ router.post('/elections/:id/activate', adminAuth, async (req, res) => {
 router.post('/elections/:id/deactivate', adminAuth, async (req, res) => {
     try {
         const { id } = req.params;
-        console.log(`🔄 [VOTE ADMIN] Disattivazione elezione ${id}`);
+        console.log(` [VOTE ADMIN] Disattivazione elezione ${id}`);
 
         const election = await Election.findByPk(id);
         if (!election) {
@@ -158,7 +158,7 @@ router.post('/elections/:id/deactivate', adminAuth, async (req, res) => {
             isActive: false 
         });
 
-        console.log(`✅ [VOTE ADMIN] Elezione "${election.title}" disattivata`);
+        console.log(` [VOTE ADMIN] Elezione "${election.title}" disattivata`);
 
         res.json({ 
             success: true, 
@@ -172,7 +172,7 @@ router.post('/elections/:id/deactivate', adminAuth, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ [VOTE ADMIN] Errore disattivazione elezione:', error);
+        console.error(' [VOTE ADMIN] Errore disattivazione elezione:', error);
         res.status(500).json({ 
             error: 'Errore nella disattivazione dell\'elezione',
             details: error.message 
@@ -181,9 +181,9 @@ router.post('/elections/:id/deactivate', adminAuth, async (req, res) => {
 });
 EOF
 
-    echo "✅ Route activate aggiunte al Vote Service"
+    echo " Route activate aggiunte al Vote Service"
 else
-    echo "✅ Vote Service ha già le route activate"
+    echo " Vote Service ha già le route activate"
 fi
 
 # 4. AGGIORNA la lista delle route disponibili nel 404 handler
@@ -200,7 +200,7 @@ sed -i '/availableRoutes: \[/,/\]/{
 
 # 5. RIAVVIA i servizi
 echo ""
-echo "🔄 Riavviando servizi..."
+echo " Riavviando servizi..."
 if command -v docker-compose &> /dev/null; then
     docker-compose restart api-gateway vote-service
 elif command -v docker &> /dev/null && docker compose version &> /dev/null; then
@@ -216,7 +216,7 @@ sleep 10
 
 # 6. TEST della nuova route
 echo ""
-echo "🧪 Test della route activate..."
+echo " Test della route activate..."
 
 echo "1. Test route disponibili:"
 available_routes=$(curl -s "http://localhost:3001/api/nonexistent" 2>/dev/null | grep -o '"availableRoutes":\[.*\]' || echo "Nessuna risposta")
@@ -229,10 +229,10 @@ activate_response=$(curl -s -X POST "http://localhost:3001/api/admin/elections/t
     -H "Authorization: Bearer fake-token" 2>/dev/null || echo "Connessione fallita")
 
 if echo "$activate_response" | grep -q "Route non trovata"; then
-    echo "   ❌ Route ancora non trovata"
+    echo "    Route ancora non trovata"
     echo "   📝 Risposta: $activate_response"
 else
-    echo "   ✅ Route trovata (potrebbe restituire errore di auth o elezione non trovata, è normale)"
+    echo "    Route trovata (potrebbe restituire errore di auth o elezione non trovata, è normale)"
     echo "   📝 Risposta: $activate_response"
 fi
 
@@ -246,4 +246,4 @@ echo "   ✓ Verificate/aggiunte route nel Vote Service"
 echo "   ✓ Aggiornata lista route disponibili"
 echo "   ✓ Servizi riavviati"
 echo ""
-echo "🔄 Ora prova di nuovo dal dashboard admin a cliccare 'Attiva' su un'elezione!"
+echo " Ora prova di nuovo dal dashboard admin a cliccare 'Attiva' su un'elezione!"

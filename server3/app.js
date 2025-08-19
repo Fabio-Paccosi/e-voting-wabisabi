@@ -27,10 +27,10 @@ app.use((req, res, next) => {
 async function testDatabaseConnection() {
     try {
         await sequelize.authenticate();
-        console.log('✅ [VOTE SERVICE] Database collegato correttamente');
+        console.log(' [VOTE SERVICE] Database collegato correttamente');
         return true;
     } catch (error) {
-        console.error('❌ [VOTE SERVICE] Errore connessione database:', error.message);
+        console.error(' [VOTE SERVICE] Errore connessione database:', error.message);
         return false;
     }
 }
@@ -82,7 +82,7 @@ app.post('/api/vote/submit', async (req, res) => {
             status: 'pending'
         });
     } catch (error) {
-        console.error('❌ [VOTE] Errore processamento voto:', error);
+        console.error(' [VOTE] Errore processamento voto:', error);
         res.status(500).json({ error: 'Errore nel processamento del voto' });
     }
 });
@@ -101,7 +101,7 @@ app.get('/api/vote/status/:voteId', async (req, res) => {
             confirmations: 0
         });
     } catch (error) {
-        console.error('❌ [VOTE] Errore recupero stato:', error);
+        console.error(' [VOTE] Errore recupero stato:', error);
         res.status(500).json({ error: 'Errore nel recupero dello stato' });
     }
 });
@@ -127,7 +127,7 @@ app.post('/api/coinjoin/start', (req, res) => {
             isRunning: CoinJoinTriggerService.isRunning
         });
     } catch (error) {
-        console.error('❌ [COINJOIN] Errore avvio servizio:', error);
+        console.error(' [COINJOIN] Errore avvio servizio:', error);
         res.status(500).json({ error: 'Errore nell\'avvio del servizio CoinJoin' });
     }
 });
@@ -142,7 +142,7 @@ app.post('/api/coinjoin/stop', (req, res) => {
             isRunning: CoinJoinTriggerService.isRunning
         });
     } catch (error) {
-        console.error('❌ [COINJOIN] Errore stop servizio:', error);
+        console.error(' [COINJOIN] Errore stop servizio:', error);
         res.status(500).json({ error: 'Errore nel fermare il servizio CoinJoin' });
     }
 });
@@ -172,7 +172,7 @@ app.use('*', (req, res) => {
 
 // Global error handler
 app.use((error, req, res, next) => {
-    console.error('❌ [VOTE SERVICE] Errore globale:', error);
+    console.error(' [VOTE SERVICE] Errore globale:', error);
     
     res.status(500).json({
         error: 'Errore interno del server',
@@ -191,26 +191,26 @@ async function startServer() {
         // Test connessione database
         const dbConnected = await testDatabaseConnection();
         if (!dbConnected) {
-            console.error('❌ [VOTE SERVICE] Impossibile avviare senza database');
+            console.error(' [VOTE SERVICE] Impossibile avviare senza database');
             process.exit(1);
         }
 
         // Avvia il server
         app.listen(PORT, () => {
-            console.log(`✅ [VOTE SERVICE] Server avviato sulla porta ${PORT}`);
-            console.log(`🌐 [VOTE SERVICE] Health check: http://localhost:${PORT}/health`);
+            console.log(` [VOTE SERVICE] Server avviato sulla porta ${PORT}`);
+            console.log(` [VOTE SERVICE] Health check: http://localhost:${PORT}/health`);
             console.log(`🗳️ [VOTE SERVICE] Vote API: http://localhost:${PORT}/api/votes`);
             console.log(`⚙️ [VOTE SERVICE] Admin API: http://localhost:${PORT}/api/admin`);
         });
 
         // Avvia il servizio CoinJoin automaticamente
         setTimeout(() => {
-            console.log('🔄 [VOTE SERVICE] Avvio automatico servizio CoinJoin...');
+            console.log(' [VOTE SERVICE] Avvio automatico servizio CoinJoin...');
             CoinJoinTriggerService.start();
         }, 2000);
 
     } catch (error) {
-        console.error('❌ [VOTE SERVICE] Errore fatale durante l\'avvio:', error);
+        console.error(' [VOTE SERVICE] Errore fatale durante l\'avvio:', error);
         process.exit(1);
     }
 }

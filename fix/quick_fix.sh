@@ -4,11 +4,11 @@
 echo "🔧 Fix route /auth/verify mancante..."
 
 # 1. VERIFICA se la route esiste nell'API Gateway
-echo "🔍 Controllo route esistenti nell'API Gateway..."
+echo " Controllo route esistenti nell'API Gateway..."
 if grep -q "auth/verify" server1/routes/admin.js; then
-    echo "✅ Route verify già presente nell'API Gateway"
+    echo " Route verify già presente nell'API Gateway"
 else
-    echo "❌ Route verify MANCANTE nell'API Gateway - aggiungendo..."
+    echo " Route verify MANCANTE nell'API Gateway - aggiungendo..."
     
     # Backup
     cp server1/routes/admin.js server1/routes/admin.js.backup.verify
@@ -61,12 +61,12 @@ router.get("/auth/verify", async (req, res) => {\
 });
     }' server1/routes/admin.js
     
-    echo "✅ Route verify aggiunta all'API Gateway"
+    echo " Route verify aggiunta all'API Gateway"
 fi
 
 # 2. VERIFICA che l'Auth Service abbia la route verify senza auth
 echo ""
-echo "🔍 Controllo route verify nell'Auth Service..."
+echo " Controllo route verify nell'Auth Service..."
 if grep -A 10 "auth/verify" server2/routes/admin.js | grep -q "const adminAuth"; then
     echo "⚠️ Auth Service usa ancora middleware autenticazione - fixing..."
     
@@ -76,12 +76,12 @@ if grep -A 10 "auth/verify" server2/routes/admin.js | grep -q "const adminAuth";
     # Sostituisci adminAuth con adminAuthSimple per la route verify
     sed -i 's/router\.post.*auth\/verify.*adminAuth/router.post("\/auth\/verify", async/' server2/routes/admin.js
     
-    echo "✅ Auth Service route verify semplificata"
+    echo " Auth Service route verify semplificata"
 fi
 
 # 3. ASSICURATI che Auth Service abbia la route verify
 if ! grep -q "auth/verify" server2/routes/admin.js; then
-    echo "❌ Route verify mancante in Auth Service - aggiungendo..."
+    echo " Route verify mancante in Auth Service - aggiungendo..."
     
     # Aggiungi route verify semplice
     cat >> server2/routes/admin.js << 'EOF'
@@ -116,7 +116,7 @@ router.post('/auth/verify', async (req, res) => {
             });
         }
     } catch (error) {
-        console.error('❌ [AUTH ADMIN] Errore verifica token:', error);
+        console.error(' [AUTH ADMIN] Errore verifica token:', error);
         res.status(401).json({ 
             valid: false, 
             error: 'Token non valido' 
@@ -124,12 +124,12 @@ router.post('/auth/verify', async (req, res) => {
     }
 });
 EOF
-    echo "✅ Route verify aggiunta all'Auth Service"
+    echo " Route verify aggiunta all'Auth Service"
 fi
 
 # 4. RIAVVIA i servizi
 echo ""
-echo "🔄 Riavviando servizi..."
+echo " Riavviando servizi..."
 docker compose restart api-gateway auth-service
 
 echo "⏱️ Attendendo riavvio..."
@@ -137,7 +137,7 @@ sleep 15
 
 # 5. TEST completo
 echo ""
-echo "🧪 Test completo delle route verify..."
+echo " Test completo delle route verify..."
 
 echo "1. Test route verify API Gateway (POST):"
 verify_response=$(curl -s -X POST "http://localhost:3001/api/admin/auth/verify" \
@@ -145,9 +145,9 @@ verify_response=$(curl -s -X POST "http://localhost:3001/api/admin/auth/verify" 
     -d '{"token":"invalid_token"}' 2>/dev/null)
 
 if echo "$verify_response" | grep -q "valid"; then
-    echo "   ✅ Route POST verify risponde"
+    echo "    Route POST verify risponde"
 else
-    echo "   ❌ Route POST verify non risponde"
+    echo "    Route POST verify non risponde"
     echo "   📝 Risposta: $verify_response"
 fi
 
@@ -157,9 +157,9 @@ verify_get_response=$(curl -s -H "Authorization: Bearer invalid_token" \
     "http://localhost:3001/api/admin/auth/verify" 2>/dev/null)
 
 if echo "$verify_get_response" | grep -q "valid"; then
-    echo "   ✅ Route GET verify risponde"
+    echo "    Route GET verify risponde"
 else
-    echo "   ❌ Route GET verify non risponde"  
+    echo "    Route GET verify non risponde"  
     echo "   📝 Risposta: $verify_get_response"
 fi
 
@@ -169,7 +169,7 @@ stats_response=$(curl -s -H "Authorization: Bearer test-token" \
     "http://localhost:3001/api/admin/stats" 2>/dev/null)
 
 if echo "$stats_response" | grep -q "total.*0"; then
-    echo "   ✅ Stats funzionano ora!"
+    echo "    Stats funzionano ora!"
 else
     echo "   ⚠️ Stats potrebbero ancora avere problemi"
     echo "   📝 Risposta: $stats_response"
@@ -177,7 +177,7 @@ fi
 
 echo ""
 echo "🎯 RISULTATO:"
-echo "✅ Route /auth/verify aggiunta"
-echo "🌐 Ricarica il dashboard nel browser"
-echo "📊 Dovresti vedere 0 invece di NaN"
+echo " Route /auth/verify aggiunta"
+echo " Ricarica il dashboard nel browser"
+echo " Dovresti vedere 0 invece di NaN"
 echo "🔐 Navigazione Utenti/Impostazioni dovrebbe funzionare"

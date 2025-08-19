@@ -15,7 +15,7 @@ stop_service() {
             echo "🛑 Arresto $name (PID: $pid)..."
             kill "$pid"
             rm -f "$pidfile"
-            echo "✅ $name arrestato"
+            echo " $name arrestato"
         else
             echo "⚠️ $name non in esecuzione"
             rm -f "$pidfile"
@@ -31,4 +31,4 @@ stop_service "vote-service"
 stop_service "api-gateway"
 
 echo ""
-echo "✅ Sistema WabiSabi arrestato"
+echo " Sistema WabiSabi arrestato"

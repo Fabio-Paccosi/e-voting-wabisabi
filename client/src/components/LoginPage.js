@@ -91,18 +91,18 @@ const LoginPage = () => {
       
       if (result.success) {
         setSuccess('Accesso effettuato con successo!');
-        console.log('[LOGIN] ✅ Login riuscito, reindirizzando...');
+        console.log('[LOGIN]  Login riuscito, reindirizzando...');
         
         // Piccolo delay per mostrare il messaggio di successo
         setTimeout(() => {
           navigate('/elections');
         }, 1000);
       } else {
-        console.log('[LOGIN] ❌ Login fallito:', result.message);
+        console.log('[LOGIN]  Login fallito:', result.message);
         setError(result.message || 'Credenziali non valide');
       }
     } catch (err) {
-      console.error('[LOGIN] ❌ Errore imprevisto:', err);
+      console.error('[LOGIN]  Errore imprevisto:', err);
       setError('Errore di connessione. Riprova più tardi.');
     } finally {
       setLoading(false);

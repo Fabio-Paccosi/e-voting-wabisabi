@@ -27,7 +27,7 @@ const callService = async (service, endpoint, method = 'GET', data = null, heade
         return response.data;
         
     } catch (error) {
-        console.error(`[CALL SERVICE] ❌ ${method} ${url} →`, error.message);
+        console.error(`[CALL SERVICE]  ${method} ${url} →`, error.message);
         const errorToThrow = new Error(`Vote service error: ${error.message}`);
         errorToThrow.status = error.response?.status || 503;
         errorToThrow.originalError = error.response?.data || error.message;

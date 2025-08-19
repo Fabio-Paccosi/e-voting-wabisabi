@@ -441,22 +441,22 @@ REACT_APP_DEBUG_MODE=false
 REACT_APP_MOCK_API=false
 REACT_APP_SKIP_AUTH=false
 EOF
-    echo "✅ Created .env file"
+    echo " Created .env file"
 fi
 
 echo ""
 echo "🎉 Buffer/tiny-secp256k1 errors fixed successfully!"
 echo ""
 echo "📋 Changes made:"
-echo "✅ Removed bitcoinjs-lib, ecpair, tiny-secp256k1"
-echo "✅ Using elliptic.js for crypto operations"
-echo "✅ Enhanced webpack configuration"
-echo "✅ Browser-friendly Bitcoin address generation"
-echo "✅ Simplified but functional WabiSabi implementation"
+echo " Removed bitcoinjs-lib, ecpair, tiny-secp256k1"
+echo " Using elliptic.js for crypto operations"
+echo " Enhanced webpack configuration"
+echo " Browser-friendly Bitcoin address generation"
+echo " Simplified but functional WabiSabi implementation"
 echo ""
 echo "🚀 Next steps:"
 echo "1. Run: npm start"
 echo "2. The app should now compile without Buffer errors"
 echo "3. All cryptographic operations use browser-compatible libraries"
 echo ""
-echo "✅ Setup complete! The client should work without crypto library issues."
+echo " Setup complete! The client should work without crypto library issues."

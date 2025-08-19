@@ -60,9 +60,9 @@ const VotingPage = () => {
       // Inizializza il servizio WabiSabi con i dati utente autenticato
       try {
         wabiSabiVoting.initialize();
-        console.log('[VOTING] ✅ Servizio WabiSabi inizializzato');
+        console.log('[VOTING]  Servizio WabiSabi inizializzato');
       } catch (wabiError) {
-        console.error('[VOTING] ❌ Errore inizializzazione WabiSabi:', wabiError.message);
+        console.error('[VOTING]  Errore inizializzazione WabiSabi:', wabiError.message);
         setError('Errore di autenticazione. Effettua nuovamente il login.');
         setTimeout(() => navigate('/login'), 2000);
         return;
@@ -71,9 +71,9 @@ const VotingPage = () => {
       // Verifica eligibilità per questa elezione
       try {
         await wabiSabiVoting.validateVotingEligibility(electionId);
-        console.log('[VOTING] ✅ Eligibilità confermata');
+        console.log('[VOTING]  Eligibilità confermata');
       } catch (eligibilityError) {
-        console.error('[VOTING] ❌ Verifica eligibilità fallita:', eligibilityError.message);
+        console.error('[VOTING]  Verifica eligibilità fallita:', eligibilityError.message);
         setError(eligibilityError.message);
         return;
       }
@@ -95,11 +95,11 @@ const VotingPage = () => {
         return;
       }
       
-      console.log('[VOTING] ✅ Dati elezione caricati con successo');
+      console.log('[VOTING]  Dati elezione caricati con successo');
       setCurrentStep('selection');
       
     } catch (err) {
-      console.error('[VOTING] ❌ Errore caricamento elezione:', err.message);
+      console.error('[VOTING]  Errore caricamento elezione:', err.message);
       
       if (err.status === 401) {
         setError('Sessione scaduta. Effettua nuovamente il login.');
@@ -140,7 +140,7 @@ const VotingPage = () => {
       
       const addressData = await wabiSabiVoting.generateVotingAddress(electionId);
       setBitcoinAddress(addressData.address);
-      console.log('[VOTING] ✅ Indirizzo Bitcoin generato:', addressData.address);
+      console.log('[VOTING]  Indirizzo Bitcoin generato:', addressData.address);
 
       // Step 2: Request KVAC credentials
       setCryptoStatus('Richiesta credenziali anonime KVAC...');
@@ -148,7 +148,7 @@ const VotingPage = () => {
       
       const credentialData = await wabiSabiVoting.requestCredentials(electionId);
       setCredential(credentialData);
-      console.log('[VOTING] ✅ Credenziali KVAC ricevute');
+      console.log('[VOTING]  Credenziali KVAC ricevute');
 
       // Step 3: Create vote commitment
       setCryptoStatus('Creazione commitment crittografico del voto...');
@@ -159,7 +159,7 @@ const VotingPage = () => {
         credentialData.serialNumber,
         addressData.privateKey
       );
-      console.log('[VOTING] ✅ Commitment voto creato');
+      console.log('[VOTING]  Commitment voto creato');
 
       // Step 4: Generate zero-knowledge proof
       setCryptoStatus('Generazione prova zero-knowledge per privacy...');
@@ -170,7 +170,7 @@ const VotingPage = () => {
         credentialData,
         selectedCandidate.voteEncoding || selectedCandidate.id
       );
-      console.log('[VOTING] ✅ Prova zero-knowledge generata');
+      console.log('[VOTING]  Prova zero-knowledge generata');
 
       // Step 5: Submit anonymous vote
       setCryptoStatus('Invio voto anonimo al sistema...');
@@ -184,14 +184,14 @@ const VotingPage = () => {
         serialNumber: credentialData.serialNumber,
         bitcoinAddress: addressData.address
       });
-      console.log('[VOTING] ✅ Voto anonimo inviato');
+      console.log('[VOTING]  Voto anonimo inviato');
 
       // Step 6: Wait for CoinJoin completion
       setCryptoStatus('Attesa aggregazione CoinJoin e registrazione blockchain...');
       setVotingProgress(95);
 
       await wabiSabiVoting.waitForCoinJoinCompletion(voteSubmissionResult.voteId);
-      console.log('[VOTING] ✅ Processo completato');
+      console.log('[VOTING]  Processo completato');
 
       // Complete
       setCurrentStep('complete');
@@ -199,7 +199,7 @@ const VotingPage = () => {
       setVotingProgress(100);
 
     } catch (err) {
-      console.error('[VOTING] ❌ Errore processo di voto:', err.message);
+      console.error('[VOTING]  Errore processo di voto:', err.message);
       
       let errorMessage = 'Errore durante il processo di voto';
       

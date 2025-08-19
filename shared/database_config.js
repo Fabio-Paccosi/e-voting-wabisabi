@@ -505,7 +505,7 @@ User.hasMany(Credential, {
 });
 Credential.belongsTo(User, { 
     foreignKey: 'user_id',
-    as: 'user'  // ✅ AGGIUNTO: alias per completezza
+    as: 'user'  //  AGGIUNTO: alias per completezza
 });
 
 // Election Relations
@@ -552,16 +552,16 @@ VotingSession.hasMany(Vote, {
 });
 Vote.belongsTo(VotingSession, { 
     foreignKey: 'sessionId', 
-    as: 'votingSession'  // ✅ CORRETTO: alias univoco
+    as: 'votingSession'  //   alias univoco
 });
 
 VotingSession.hasMany(Transaction, { 
     foreignKey: 'sessionId', 
-    as: 'sessionTransactions'  // ✅ CORRETTO: alias univoco
+    as: 'sessionTransactions'  //   alias univoco
 });
 Transaction.belongsTo(VotingSession, { 
     foreignKey: 'sessionId', 
-    as: 'votingSession'  // ✅ CORRETTO: alias coerente
+    as: 'votingSession'  //   alias coerente
 });
 
 // Vote-Transaction Relations (opzionale)
@@ -584,15 +584,15 @@ const initializeDatabase = async () => {
     try {
         console.log('🔗 Connessione al database PostgreSQL...');
         await sequelize.authenticate();
-        console.log('✅ Connessione database stabilita');
+        console.log(' Connessione database stabilita');
         
         console.log('📋 Sincronizzazione modelli...');
         await sequelize.sync({ alter: true });
-        console.log('✅ Modelli sincronizzati');
+        console.log(' Modelli sincronizzati');
         
         return true;
     } catch (error) {
-        console.error('❌ Errore connessione database:', error);
+        console.error(' Errore connessione database:', error);
         return false;
     }
 };
@@ -627,7 +627,7 @@ const getQuickStats = async () => {
             }
         };
     } catch (error) {
-        console.error('❌ Errore calcolo statistiche:', error);
+        console.error(' Errore calcolo statistiche:', error);
         return {
             users: { total: 0, active: 0 },
             elections: { total: 0, active: 0 },

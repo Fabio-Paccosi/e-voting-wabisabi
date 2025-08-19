@@ -12,7 +12,7 @@ const { initializeDatabase } = require('./shared/database_config').getModelsForS
 // In startup:
 initializeDatabase().then(success => {
     if (success) {
-        console.log('✅ [GATEWAY] Database inizializzato');
+        console.log(' [GATEWAY] Database inizializzato');
     }
 });
 
@@ -49,9 +49,9 @@ app.get('/api/health', (req, res) => {
 try {
     const adminRoutes = require('./routes/admin');
     app.use('/api/admin', adminRoutes);
-    console.log('✅ Route admin caricate correttamente');
+    console.log(' Route admin caricate correttamente');
 } catch (error) {
-    console.error('❌ Errore caricamento route admin:', error.message);
+    console.error(' Errore caricamento route admin:', error.message);
     console.error('📁 Verifica che esista: ./routes/admin.js');
     
     // Route admin di fallback
@@ -68,9 +68,9 @@ try {
 try {
     const clientRoutes = require('./routes/client');
     app.use('/api', clientRoutes);
-    console.log('✅ Route client caricate correttamente');
+    console.log(' Route client caricate correttamente');
 } catch (error) {
-    console.error('❌ Errore caricamento route client:', error.message);
+    console.error(' Errore caricamento route client:', error.message);
     console.error('📁 Verifica che esista: ./routes/client.js');
     
     // Route client di fallback per alcune route critiche
@@ -87,9 +87,9 @@ try {
 try {
     const votingRoutes = require('./routes/voting');
     app.use('/api/voting', votingRoutes);
-    console.log('✅ Route voting caricate correttamente');
+    console.log(' Route voting caricate correttamente');
 } catch (error) {
-    console.error('❌ Errore caricamento route voting:', error.message);
+    console.error(' Errore caricamento route voting:', error.message);
     console.error('📁 Verifica che esista: ./routes/voting.js');
     
     // Route voting di fallback per alcune route critiche
@@ -112,7 +112,7 @@ app.get('/api/test', (req, res) => {
 
 // 404 handler
 app.use('*', (req, res) => {
-    console.log(`❌ Route non trovata: ${req.method} ${req.originalUrl}`);
+    console.log(` Route non trovata: ${req.method} ${req.originalUrl}`);
     res.status(404).json({ 
         error: 'Route non trovata',
         path: req.originalUrl,

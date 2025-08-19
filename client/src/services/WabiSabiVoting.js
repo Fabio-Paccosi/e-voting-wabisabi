@@ -27,7 +27,7 @@ class WabiSabiVoting {
       };
       console.log('[WABISABI] 🔧 Inizializzato per utente:', this.user.email);
     } else {
-      console.error('[WABISABI] ❌ Nessun token valido trovato');
+      console.error('[WABISABI]  Nessun token valido trovato');
       throw new Error('Utente non autenticato');
     }
   }
@@ -70,7 +70,7 @@ class WabiSabiVoting {
         publicKey: publicKey
       });
 
-      console.log('[WABISABI] ✅ Indirizzo Bitcoin generato:', address);
+      console.log('[WABISABI]  Indirizzo Bitcoin generato:', address);
 
       return {
         address,
@@ -83,7 +83,7 @@ class WabiSabiVoting {
         sessionData: response.data
       };
     } catch (error) {
-      console.error('[WABISABI] ❌ Errore generazione indirizzo:', error.message);
+      console.error('[WABISABI]  Errore generazione indirizzo:', error.message);
       throw new Error(`Errore generazione indirizzo Bitcoin: ${error.message}`);
     }
   }
@@ -118,11 +118,11 @@ class WabiSabiVoting {
         timestamp: Date.now()
       });
       
-      console.log('[WABISABI] ✅ Credenziali KVAC ricevute');
+      console.log('[WABISABI]  Credenziali KVAC ricevute');
       
       return response.data;
     } catch (error) {
-      console.error('[WABISABI] ❌ Errore richiesta credenziali:', error.message);
+      console.error('[WABISABI]  Errore richiesta credenziali:', error.message);
       throw new Error(`Errore richiesta credenziali KVAC: ${error.message}`);
     }
   }
@@ -146,7 +146,7 @@ class WabiSabiVoting {
       const messageHash = createHash('sha256').update(commitment).digest();
       const signature = keyPair.sign(messageHash);
       
-      console.log('[WABISABI] ✅ Commitment voto creato');
+      console.log('[WABISABI]  Commitment voto creato');
       
       return {
         commitment,
@@ -156,7 +156,7 @@ class WabiSabiVoting {
         serialNumber
       };
     } catch (error) {
-      console.error('[WABISABI] ❌ Errore creazione commitment:', error.message);
+      console.error('[WABISABI]  Errore creazione commitment:', error.message);
       throw new Error(`Errore creazione commitment: ${error.message}`);
     }
   }
@@ -191,7 +191,7 @@ class WabiSabiVoting {
         candidateEncoding || 'default'                 // Encoding candidato
       ];
       
-      console.log('[WABISABI] ✅ Prova zero-knowledge generata con public inputs');
+      console.log('[WABISABI]  Prova zero-knowledge generata con public inputs');
       
       // RETURN COMPLETE ZK PROOF STRUCTURE
       return {
@@ -203,7 +203,7 @@ class WabiSabiVoting {
       };
       
     } catch (error) {
-      console.error('[WABISABI] ❌ Errore generazione ZK proof:', error.message);
+      console.error('[WABISABI]  Errore generazione ZK proof:', error.message);
       throw new Error(`Errore generazione ZK proof: ${error.message}`);
     }
   }
@@ -227,11 +227,11 @@ class WabiSabiVoting {
         timestamp: Date.now()
       });
       
-      console.log('[WABISABI] ✅ Voto anonimo inviato con successo');
+      console.log('[WABISABI]  Voto anonimo inviato con successo');
       
       return response.data;
     } catch (error) {
-      console.error('[WABISABI] ❌ Errore invio voto:', error.message);
+      console.error('[WABISABI]  Errore invio voto:', error.message);
       throw new Error(`Errore invio voto anonimo: ${error.message}`);
     }
   }
@@ -249,10 +249,10 @@ class WabiSabiVoting {
           const response = await api.get(`/voting/status/${voteId}`);
           const status = response.data.status;
           
-          console.log(`[WABISABI] 📊 Stato voto: ${status} (tentativo ${attempts + 1})`);
+          console.log(`[WABISABI]  Stato voto: ${status} (tentativo ${attempts + 1})`);
           
           if (status === 'confirmed') {
-            console.log('[WABISABI] ✅ CoinJoin completato e confermato');
+            console.log('[WABISABI]  CoinJoin completato e confermato');
             return response.data;
           } else if (status === 'failed') {
             throw new Error('CoinJoin fallito');
@@ -273,7 +273,7 @@ class WabiSabiVoting {
       
       throw new Error('Timeout attesa completamento CoinJoin');
     } catch (error) {
-      console.error('[WABISABI] ❌ Errore attesa CoinJoin:', error.message);
+      console.error('[WABISABI]  Errore attesa CoinJoin:', error.message);
       throw new Error(`Errore attesa CoinJoin: ${error.message}`);
     }
   }
@@ -296,7 +296,7 @@ class WabiSabiVoting {
     try {
       this.ensureAuthenticated();
       
-      console.log('[WABISABI] 🔍 Verifica eligibilità voto...');
+      console.log('[WABISABI]  Verifica eligibilità voto...');
       
       // This will be handled by the backend when we make API calls
       // but we can do some basic client-side validation
@@ -310,11 +310,11 @@ class WabiSabiVoting {
         throw new Error('Token scaduto. Effettua nuovamente il login');
       }
       
-      console.log('[WABISABI] ✅ Eligibilità confermata');
+      console.log('[WABISABI]  Eligibilità confermata');
       return true;
       
     } catch (error) {
-      console.error('[WABISABI] ❌ Verifica eligibilità fallita:', error.message);
+      console.error('[WABISABI]  Verifica eligibilità fallita:', error.message);
       throw error;
     }
   }

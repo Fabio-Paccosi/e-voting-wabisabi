@@ -301,7 +301,7 @@ export const ELECTION_STATUS = {
       const icons = {
         pdf: '📄',
         doc: '📝', docx: '📝',
-        xls: '📊', xlsx: '📊',
+        xls: '', xlsx: '',
         ppt: '📽️', pptx: '📽️',
         jpg: '🖼️', jpeg: '🖼️', png: '🖼️', gif: '🖼️',
         mp4: '🎥', avi: '🎥', mov: '🎥',

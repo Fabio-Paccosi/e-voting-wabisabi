@@ -6,25 +6,44 @@ const axios = require('axios');
 
 class BitcoinService {
     constructor() {
+        // 🔍 DEBUG: Verifica variabili d'ambiente
+        console.log('[BITCOIN] 🔍 LETTURA VARIABILI D\'AMBIENTE:');
+        console.log(`[BITCOIN] - NODE_ENV: ${process.env.NODE_ENV}`);
+        console.log(`[BITCOIN] - BITCOIN_NETWORK: ${process.env.BITCOIN_NETWORK}`);
+        console.log(`[BITCOIN] - BITCOIN_RPC_HOST: ${process.env.BITCOIN_RPC_HOST}`);
+        console.log(`[BITCOIN] - BITCOIN_RPC_PORT: ${process.env.BITCOIN_RPC_PORT}`);
+        console.log(`[BITCOIN] - BITCOIN_RPC_USER: ${process.env.BITCOIN_RPC_USER}`);
+        console.log(`[BITCOIN] - BITCOIN_RPC_PASSWORD: ${process.env.BITCOIN_RPC_PASSWORD ? '[PRESENTE]' : '[MANCANTE]'}`);
+
         this.network = process.env.BITCOIN_NETWORK || 'testnet';
-        
-        // CORREZIONE: Configurazione RPC migliorata
+
+        // CORREZIONE: Configurazione RPC migliorata con debug
         this.rpcConfig = {
             testnet: {
-                host: process.env.BITCOIN_RPC_HOST || '127.0.0.1', // Forza IPv4
+                host: process.env.BITCOIN_RPC_HOST || '127.0.0.1',
                 port: process.env.BITCOIN_RPC_PORT || '18332',
                 username: process.env.BITCOIN_RPC_USER || 'bitcoinrpc',
-                password: process.env.BITCOIN_RPC_PASSWORD || 'rpcpassword', // CORRETTO
+                password: process.env.BITCOIN_RPC_PASSWORD || 'BitcoinSecurePass789!',
                 protocol: 'http'
             },
             mainnet: {
-                host: process.env.BITCOIN_RPC_HOST || '127.0.0.1', // Forza IPv4
+                host: process.env.BITCOIN_RPC_HOST || '127.0.0.1',
                 port: process.env.BITCOIN_RPC_PORT || '8332',
                 username: process.env.BITCOIN_RPC_USER || 'bitcoinrpc',
-                password: process.env.BITCOIN_RPC_PASSWORD || 'rpcpassword', // CORRETTO
+                password: process.env.BITCOIN_RPC_PASSWORD || 'BitcoinSecurePass789!',
                 protocol: 'http'
             }
         };
+
+        this.rpc = this.rpcConfig[this.network];
+
+        // 🔍 DEBUG: Verifica configurazione finale
+        console.log('[BITCOIN] 🔧 CONFIGURAZIONE FINALE:');
+        console.log(`[BITCOIN] - Network: ${this.network}`);
+        console.log(`[BITCOIN] - Host: ${this.rpc.host}`);
+        console.log(`[BITCOIN] - Port: ${this.rpc.port}`);
+        console.log(`[BITCOIN] - Username: ${this.rpc.username}`);
+        console.log(`[BITCOIN] - URL: ${this.rpc.protocol}://${this.rpc.host}:${this.rpc.port}`);
 
         // API pubbliche con fallback multipli
         this.publicApis = {
@@ -74,12 +93,12 @@ class BitcoinService {
 
             if (!response.data.error) {
                 this.isRpcAvailable = true;
-                console.log(`[BITCOIN] ✅ RPC connesso: blocco ${response.data.result.blocks}`);
+                console.log(`[BITCOIN]  RPC connesso: blocco ${response.data.result.blocks}`);
             }
         } catch (error) {
             this.isRpcAvailable = false;
             console.log(`[BITCOIN] ⚠️ RPC non disponibile: ${error.message}`);
-            console.log(`[BITCOIN] 🔄 Userò API pubbliche come fallback`);
+            console.log(`[BITCOIN]  Userò API pubbliche come fallback`);
         }
     }
 
@@ -90,7 +109,7 @@ class BitcoinService {
         if (!this.isRpcAvailable) {
             throw new Error('RPC non disponibile');
         }
-
+    
         try {
             const rpcUrl = `${this.rpc.protocol}://${this.rpc.host}:${this.rpc.port}`;
             
@@ -109,14 +128,20 @@ class BitcoinService {
                 },
                 timeout: 30000
             });
-
+    
             if (response.data.error) {
-                throw new Error(`RPC Error: ${response.data.error.message}`);
+                // 🔍 LOG DETTAGLIATO DELL'ERRORE
+                console.error(`[BITCOIN] ❌ RPC Error Details:`, JSON.stringify(response.data.error, null, 2));
+                throw new Error(`RPC Error: ${response.data.error.message} (Code: ${response.data.error.code})`);
             }
-
+    
             return response.data.result;
-
+    
         } catch (error) {
+            // 🔍 LOG DELL'ERRORE HTTP
+            if (error.response) {
+                console.error(`[BITCOIN] ❌ HTTP Error ${error.response.status}:`, error.response.data);
+            }
             console.error(`[BITCOIN] ❌ Errore RPC ${method}:`, error.message);
             
             // Segna RPC come non disponibile se c'è errore di connessione
@@ -129,77 +154,84 @@ class BitcoinService {
     }
 
     /**
-     * Broadcast transazione alla blockchain - METODO MIGLIORATO
+     * Broadcast transazione alla blockchain
      */
     async broadcastTransaction(rawTx) {
         try {
             console.log(`[BITCOIN] 📡 Inizio broadcast transazione...`);
             console.log(`[BITCOIN] 📊 RawTx length: ${rawTx.length} chars`);
             console.log(`[BITCOIN] 🔍 RawTx preview: ${rawTx.substring(0, 64)}...`);
-    
-            // ✅ BYPASS per ambiente development
+
+            // BYPASS per ambiente development
             if (process.env.NODE_ENV === 'development' || process.env.BITCOIN_MOCK_BROADCAST === 'true') {
                 console.log('[BITCOIN] 🧪 Development mode - usando mock broadcast');
                 return this.mockBroadcast(rawTx);
             }
-    
-            // Validazione meno restrittiva per production
+
+            // Validazione
             if (!this.isValidRawTransactionRelaxed(rawTx)) {
                 console.log('[BITCOIN] ⚠️ Validazione fallita, usando fallback mock');
                 return this.mockBroadcast(rawTx);
             }
-    
+
             console.log('[BITCOIN] ✅ Validazione superata, proceeding con broadcast...');
-    
-            // Tentativo broadcast con multiple API (esistente)
-            const apis = this.getBroadcastApis();
-            let lastError;
-    
-            for (const api of apis) {
+
+            // 🎯 NUOVO: Test RPC se non disponibile + debug configurazione
+            if (!this.isRpcAvailable) {
+                console.log('[BITCOIN] 🔄 RPC non disponibile, ritesto connessione...');
+                console.log(`[BITCOIN] 🔧 Config RPC: ${this.rpc.host}:${this.rpc.port} (user: ${this.rpc.username})`);
+                
                 try {
-                    console.log(`[BITCOIN] 🌐 Tentativo broadcast su ${api.name}...`);
-                    
-                    const response = await axios.post(api.url, {
-                        hex: rawTx
-                    }, {
-                        timeout: 30000,
-                        headers: {
-                            'Content-Type': 'application/json'
-                        }
-                    });
-    
-                    if (response.data && (response.data.txid || response.data.result)) {
-                        const txId = response.data.txid || response.data.result;
-                        console.log(`[BITCOIN] ✅ Broadcast riuscito su ${api.name}: ${txId}`);
-                        
-                        return {
-                            success: true,
-                            txId: txId,
-                            network: this.network,
-                            api: api.name,
-                            broadcastedAt: new Date().toISOString()
-                        };
-                    }
-    
-                } catch (error) {
-                    lastError = error;
-                    console.error(`[BITCOIN] ❌ Errore ${api.name}:`, error.response?.data || error.message);
-                    continue;
+                    await this.testRpcConnection();
+                    console.log(`[BITCOIN] 📊 Stato RPC dopo retry: ${this.isRpcAvailable}`);
+                } catch (testError) {
+                    console.error('[BITCOIN] ❌ Test RPC fallito:', testError.message);
                 }
             }
-    
-            // Fallback finale a mock
-            console.log('[BITCOIN] 🔄 Tutte le API hanno fallito, usando mock broadcast');
+
+            // 🎯 PRIMA: Prova con RPC diretto se disponibile
+            if (this.isRpcAvailable) {
+                try {
+                    console.log('[BITCOIN] 🎯 Tentativo broadcast RPC diretto...');
+                    
+                    const txId = await this.rpcCall('sendrawtransaction', [rawTx]);
+                    
+                    console.log(`[BITCOIN] ✅ Broadcast RPC riuscito: ${txId}`);
+                    return {
+                        success: true,
+                        txId: txId,
+                        network: this.network,
+                        api: 'Bitcoin Core RPC',
+                        broadcastedAt: new Date().toISOString()
+                    };
+                    
+                } catch (rpcError) {
+                    console.error('[BITCOIN] ❌ Errore RPC broadcast:', rpcError.message);
+                    
+                    // Se è un errore di transazione (non di connessione), non fare fallback
+                    if (rpcError.message.includes('bad-txns') || 
+                        rpcError.message.includes('insufficient fee') ||
+                        rpcError.message.includes('already in block chain')) {
+                        throw new Error(`Transaction rejected: ${rpcError.message}`);
+                    }
+                    
+                    // Segna RPC come non disponibile per errori di connessione
+                    this.isRpcAvailable = false;
+                }
+            }
+
+            // 🌐 SECONDO: Fallback a mock per semplicità
+            console.log('[BITCOIN] 🌐 RPC non disponibile, usando mock broadcast');
             return this.mockBroadcast(rawTx);
-    
+
         } catch (error) {
-            console.error('[BITCOIN] ❌ Errore broadcast finale, usando mock:', error.message);
+            console.error('[BITCOIN] ❌ Errore broadcast finale:', error.message);
             return this.mockBroadcast(rawTx);
         }
     }
 
     /**
-     * ✅ NUOVO: Lista API per broadcast (configurabile)
+     *  NUOVO: Lista API per broadcast (configurabile)
      */
     getBroadcastApis() {
         const network = this.network || 'testnet';
@@ -227,7 +259,7 @@ class BitcoinService {
 
         for (const apiUrl of this.publicApiList) {
             try {
-                console.log(`[BITCOIN] 📡 Tentativo broadcast via ${apiUrl}`);
+                console.log(`[BITCOIN]  Tentativo broadcast via ${apiUrl}`);
                 
                 const response = await axios.post(`${apiUrl}/tx`, rawTx, {
                     headers: { 
@@ -247,12 +279,12 @@ class BitcoinService {
                     throw new Error('Formato risposta API non riconosciuto');
                 }
                 
-                console.log(`[BITCOIN] ✅ Broadcast API riuscito: ${txId}`);
+                console.log(`[BITCOIN]  Broadcast API riuscito: ${txId}`);
                 return txId;
                 
             } catch (error) {
                 lastError = error;
-                console.log(`[BITCOIN] ❌ Errore ${apiUrl}: ${error.message}`);
+                console.log(`[BITCOIN]  Errore ${apiUrl}: ${error.message}`);
                 
                 // Se è errore 400, la transazione è probabilmente invalida
                 if (error.response?.status === 400) {
@@ -275,25 +307,25 @@ class BitcoinService {
         try {
             // Controlli base
             if (!rawTx || typeof rawTx !== 'string') {
-                console.log('[BITCOIN] ❌ RawTx non è una stringa valida');
+                console.log('[BITCOIN]  RawTx non è una stringa valida');
                 return false;
             }
     
             // Deve essere hex valido
             if (!/^[0-9a-fA-F]+$/.test(rawTx)) {
-                console.log('[BITCOIN] ❌ RawTx contiene caratteri non hex');
+                console.log('[BITCOIN]  RawTx contiene caratteri non hex');
                 return false;
             }
     
             // Lunghezza deve essere pari (ogni byte = 2 hex chars)
             if (rawTx.length % 2 !== 0) {
-                console.log('[BITCOIN] ❌ RawTx lunghezza dispari');
+                console.log('[BITCOIN]  RawTx lunghezza dispari');
                 return false;
             }
     
-            // ✅ NUOVO: Controlli specifici formato Bitcoin
+            //  NUOVO: Controlli specifici formato Bitcoin
             if (!this.hasValidBitcoinStructure(rawTx)) {
-                console.log('[BITCOIN] ❌ RawTx non ha struttura Bitcoin valida');
+                console.log('[BITCOIN]  RawTx non ha struttura Bitcoin valida');
                 return false;
             }
     
@@ -309,17 +341,17 @@ class BitcoinService {
                 return false;
             }
     
-            console.log(`[BITCOIN] ✅ RawTx valida: ${rawTx.length} chars`);
+            console.log(`[BITCOIN]  RawTx valida: ${rawTx.length} chars`);
             return true;
     
         } catch (error) {
-            console.error('[BITCOIN] ❌ Errore validazione rawTx:', error);
+            console.error('[BITCOIN]  Errore validazione rawTx:', error);
             return false;
         }
     }
 
     /**
-     * ✅ NUOVO: Verifica struttura base di una transazione Bitcoin
+     *  NUOVO: Verifica struttura base di una transazione Bitcoin
      */
     hasValidBitcoinStructure(rawTx) {
         try {
@@ -337,7 +369,7 @@ class BitcoinService {
 
             // Controllo che non sia JSON stringificato (problema precedente)
             if (hex.includes('7b') && hex.includes('7d')) { // { e } in hex
-                console.log('[BITCOIN] ❌ Sembra essere JSON stringificato');
+                console.log('[BITCOIN]  Sembra essere JSON stringificato');
                 return false;
             }
 
@@ -347,7 +379,7 @@ class BitcoinService {
             return true;
 
         } catch (error) {
-            console.error('[BITCOIN] ❌ Errore controllo struttura:', error);
+            console.error('[BITCOIN]  Errore controllo struttura:', error);
             return false;
         }
     }
@@ -360,7 +392,7 @@ class BitcoinService {
             .update(rawTx + Date.now().toString())
             .digest('hex');
         
-        console.log(`[BITCOIN] 🧪 Mock Broadcast - TxID: ${txId}`);
+        console.log(`[BITCOIN]  Mock Broadcast - TxID: ${txId}`);
         
         return {
             success: true,
@@ -377,33 +409,33 @@ class BitcoinService {
         try {
             // Controlli base
             if (!rawTx || typeof rawTx !== 'string') {
-                console.log('[BITCOIN] ❌ RawTx non è una stringa valida');
+                console.log('[BITCOIN]  RawTx non è una stringa valida');
                 return false;
             }
     
             // Deve essere hex valido
             if (!/^[0-9a-fA-F]+$/.test(rawTx)) {
-                console.log('[BITCOIN] ❌ RawTx contiene caratteri non hex');
+                console.log('[BITCOIN]  RawTx contiene caratteri non hex');
                 return false;
             }
     
             // Lunghezza deve essere pari
             if (rawTx.length % 2 !== 0) {
-                console.log('[BITCOIN] ❌ RawTx lunghezza dispari');
+                console.log('[BITCOIN]  RawTx lunghezza dispari');
                 return false;
             }
     
             // Lunghezza minima (60 bytes = 120 hex chars)
             if (rawTx.length < 120) {
-                console.log(`[BITCOIN] ❌ RawTx troppo corta: ${rawTx.length} chars`);
+                console.log(`[BITCOIN]  RawTx troppo corta: ${rawTx.length} chars`);
                 return false;
             }
     
-            console.log(`[BITCOIN] ✅ RawTx valida (rilassata): ${rawTx.length} chars`);
+            console.log(`[BITCOIN]  RawTx valida (rilassata): ${rawTx.length} chars`);
             return true;
     
         } catch (error) {
-            console.error('[BITCOIN] ❌ Errore validazione rilassata:', error);
+            console.error('[BITCOIN]  Errore validazione rilassata:', error);
             return false;
         }
     }
@@ -413,7 +445,7 @@ class BitcoinService {
      */
     async getTransactionConfirmations(txId) {
         try {
-            console.log(`[BITCOIN] 🔍 Controllo conferme per ${txId}`);
+            console.log(`[BITCOIN]  Controllo conferme per ${txId}`);
             
             // Tentativo RPC
             if (this.isRpcAvailable) {
@@ -424,13 +456,13 @@ class BitcoinService {
                     if (txInfo.blockhash) {
                         const blockInfo = await this.rpcCall('getblock', [txInfo.blockhash]);
                         const confirmations = currentBlock - blockInfo.height + 1;
-                        console.log(`[BITCOIN] ✅ Conferme RPC: ${confirmations}`);
+                        console.log(`[BITCOIN]  Conferme RPC: ${confirmations}`);
                         return confirmations;
                     } else {
                         return 0; // Mempool
                     }
                 } catch (rpcError) {
-                    console.log(`[BITCOIN] 🔄 RPC conferme fallito: ${rpcError.message}`);
+                    console.log(`[BITCOIN]  RPC conferme fallito: ${rpcError.message}`);
                 }
             }
 
@@ -438,12 +470,12 @@ class BitcoinService {
             return await this.getConfirmationsViaApi(txId);
 
         } catch (error) {
-            console.error(`[BITCOIN] ❌ Errore controllo conferme:`, error);
+            console.error(`[BITCOIN]  Errore controllo conferme:`, error);
             
             // Mock per sviluppo
             if (process.env.NODE_ENV === 'development') {
                 const mockConfirmations = Math.floor(Math.random() * 7);
-                console.log(`[BITCOIN] 🧪 Conferme simulate: ${mockConfirmations}`);
+                console.log(`[BITCOIN]  Conferme simulate: ${mockConfirmations}`);
                 return mockConfirmations;
             }
             
@@ -467,13 +499,13 @@ class BitcoinService {
                     const tipResponse = await axios.get(`${apiUrl}/blocks/tip/height`);
                     const currentHeight = tipResponse.data;
                     const confirmations = currentHeight - txData.status.block_height + 1;
-                    console.log(`[BITCOIN] ✅ Conferme API: ${confirmations}`);
+                    console.log(`[BITCOIN]  Conferme API: ${confirmations}`);
                     return confirmations;
                 } else {
                     return 0; // Non confermata
                 }
             } catch (error) {
-                //console.log(`[BITCOIN] ❌ Errore conferme ${apiUrl}: ${error.message}`);
+                //console.log(`[BITCOIN]  Errore conferme ${apiUrl}: ${error.message}`);
                 continue;
             }
         }
@@ -496,7 +528,7 @@ class BitcoinService {
                 return /^(bc1[a-zA-HJ-NP-Z0-9]{25,87}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})$/.test(address);
             }
         } catch (error) {
-            console.error('[BITCOIN] ❌ Errore validazione indirizzo:', error);
+            console.error('[BITCOIN]  Errore validazione indirizzo:', error);
             return false;
         }
     }
@@ -506,7 +538,7 @@ class BitcoinService {
      */
     async testConnection() {
         try {
-            console.log(`[BITCOIN] 🧪 Test connessione rete ${this.network}...`);
+            console.log(`[BITCOIN]  Test connessione rete ${this.network}...`);
             
             const results = {
                 network: this.network,
@@ -525,10 +557,10 @@ class BitcoinService {
                     const chainInfo = await this.rpcCall('getblockchaininfo');
                     results.rpcAvailable = true;
                     results.blockHeight = chainInfo.blocks;
-                    console.log(`[BITCOIN] ✅ RPC connesso: blocco ${chainInfo.blocks}`);
+                    console.log(`[BITCOIN]  RPC connesso: blocco ${chainInfo.blocks}`);
                 }
             } catch (rpcError) {
-                console.log(`[BITCOIN] ❌ RPC non disponibile: ${rpcError.message}`);
+                console.log(`[BITCOIN]  RPC non disponibile: ${rpcError.message}`);
             }
 
             // Test API pubbliche
@@ -539,17 +571,17 @@ class BitcoinService {
                     });
                     results.apiAvailable = true;
                     results.blockHeight = results.blockHeight || response.data;
-                    console.log(`[BITCOIN] ✅ API ${apiUrl} connessa: blocco ${response.data}`);
+                    console.log(`[BITCOIN]  API ${apiUrl} connessa: blocco ${response.data}`);
                     break; // Una API che funziona è sufficiente
                 } catch (apiError) {
-                    console.log(`[BITCOIN] ❌ API ${apiUrl} non disponibile: ${apiError.message}`);
+                    console.log(`[BITCOIN]  API ${apiUrl} non disponibile: ${apiError.message}`);
                 }
             }
 
             return results;
 
         } catch (error) {
-            console.error(`[BITCOIN] ❌ Errore test connessione:`, error);
+            console.error(`[BITCOIN]  Errore test connessione:`, error);
             return {
                 network: this.network,
                 rpcAvailable: false,
@@ -577,7 +609,7 @@ class BitcoinService {
                            (response.data.mempool_stats.funded_txo_sum - response.data.mempool_stats.spent_txo_sum)
                 };
             } catch (error) {
-                console.error(`[BITCOIN] ❌ Errore bilancio ${address} con ${apiUrl}:`, error.message);
+                console.error(`[BITCOIN]  Errore bilancio ${address} con ${apiUrl}:`, error.message);
                 continue;
             }
         }

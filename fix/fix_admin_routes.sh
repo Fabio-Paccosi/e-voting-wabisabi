@@ -223,11 +223,11 @@ console.log('[VOTE ADMIN ROUTES] ✓ Route admin vote caricate');
 module.exports = router;
 EOF
 
-echo "✅ File route admin creati con successo!"
+echo " File route admin creati con successo!"
 
 # Riavvia i container
 echo "🚀 Riavviando i container..."
 docker compose up --build -d
 
-echo "✅ Operazione completata!"
-echo "🔍 Controlla i log con: docker compose logs -f"
+echo " Operazione completata!"
+echo " Controlla i log con: docker compose logs -f"

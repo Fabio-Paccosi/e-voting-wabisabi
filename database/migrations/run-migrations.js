@@ -67,7 +67,7 @@ class MigrationRunner {
 
     async runMigrations() {
         try {
-            console.log('🔄 Avvio migrations...');
+            console.log(' Avvio migrations...');
             
             // Crea tabella migrations se non exists
             await this.createMigrationsTable();
@@ -88,7 +88,7 @@ class MigrationRunner {
             // Esegui migrations non ancora eseguite
             for (const filename of migrationFiles) {
                 if (!executedMigrations.includes(filename)) {
-                    console.log(`🔄 Eseguendo ${filename}...`);
+                    console.log(` Eseguendo ${filename}...`);
                     
                     const filePath = path.join(migrationsDir, filename);
                     const content = await fs.readFile(filePath, 'utf8');
@@ -99,17 +99,17 @@ class MigrationRunner {
                 }
             }
             
-            console.log('✅ Tutte le migrations completate');
+            console.log(' Tutte le migrations completate');
             
         } catch (error) {
-            console.error('❌ Errore migrations:', error.message);
+            console.error(' Errore migrations:', error.message);
             process.exit(1);
         }
     }
 
     async rollback(steps = 1) {
         try {
-            console.log(`🔄 Rollback ultime ${steps} migrations...`);
+            console.log(` Rollback ultime ${steps} migrations...`);
             
             const client = await this.pool.connect();
             try {
@@ -127,14 +127,14 @@ class MigrationRunner {
                     console.log(`↩️ Rollback ${row.filename}`);
                 }
                 
-                console.log('✅ Rollback completato');
+                console.log(' Rollback completato');
                 
             } finally {
                 client.release();
             }
             
         } catch (error) {
-            console.error('❌ Errore rollback:', error.message);
+            console.error(' Errore rollback:', error.message);
             process.exit(1);
         }
     }
@@ -149,11 +149,11 @@ class MigrationRunner {
                 .filter(file => file.endsWith('.sql'))
                 .sort();
             
-            console.log('\n📊 Status Migrations:');
+            console.log('\n Status Migrations:');
             console.log('='.repeat(50));
             
             for (const filename of migrationFiles) {
-                const status = executedMigrations.includes(filename) ? '✅' : '⏳';
+                const status = executedMigrations.includes(filename) ? '' : '⏳';
                 console.log(`${status} ${filename}`);
             }
             
@@ -164,7 +164,7 @@ class MigrationRunner {
             console.log(`  Totali: ${migrationFiles.length}`);
             
         } catch (error) {
-            console.error('❌ Errore status:', error.message);
+            console.error(' Errore status:', error.message);
             process.exit(1);
         }
     }

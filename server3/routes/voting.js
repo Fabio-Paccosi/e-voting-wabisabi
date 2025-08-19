@@ -114,7 +114,7 @@ router.post('/address', extractUserFromHeaders, async (req, res) => {
         };
 
         // TODO: Salvare nel database (tabella user_addresses o simile)
-        console.log(`[VOTING] ✅ Indirizzo registrato per sessione ${votingSession.id}`);
+        console.log(`[VOTING]  Indirizzo registrato per sessione ${votingSession.id}`);
 
         res.json({
             success: true,
@@ -126,7 +126,7 @@ router.post('/address', extractUserFromHeaders, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('[VOTING] ❌ Errore generazione indirizzo:', error);
+        console.error('[VOTING]  Errore generazione indirizzo:', error);
         res.status(500).json({ 
             error: 'Errore nella generazione dell\'indirizzo Bitcoin',
             details: error.message 
@@ -202,7 +202,7 @@ router.post('/credentials', extractUserFromHeaders, async (req, res) => {
             issued_at: new Date()  
         });
 
-        console.log(`[VOTING] ✅ Credenziali KVAC generate: ${credential.id}`);
+        console.log(`[VOTING]  Credenziali KVAC generate: ${credential.id}`);
 
         res.json({
             success: true,
@@ -215,7 +215,7 @@ router.post('/credentials', extractUserFromHeaders, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('[VOTING] ❌ Errore generazione credenziali:', error);
+        console.error('[VOTING]  Errore generazione credenziali:', error);
         res.status(500).json({ 
             error: 'Errore nella generazione delle credenziali',
             details: error.message 
@@ -228,13 +228,13 @@ router.post('/submit', async (req, res) => {
     try {
         const { electionId, commitment, zkProof, serialNumber, bitcoinAddress } = req.body;
         
-        // 1. ✅ CORRETTO: usa camelCase
+        // 1.   usa camelCase
         const election = await Election.findByPk(electionId);
         if (!election || election.status !== 'active') {
             return res.status(400).json({ error: 'Elezione non attiva' });
         }
 
-        // 2. ✅ CORRETTO: usa camelCase
+        // 2.   usa camelCase
         const credential = await Credential.findOne({
             where: { 
                 serial_number: serialNumber  
@@ -267,7 +267,7 @@ router.post('/submit', async (req, res) => {
             return res.status(400).json({ error: 'Zero-knowledge proof non valido' });
         }
 
-        // 5. ✅ CORRETTO: trova sessione con camelCase
+        // 5.   trova sessione con camelCase
         let votingSession = await VotingSession.findOne({
             where: {
                 election_id: electionId, 
@@ -311,12 +311,12 @@ router.post('/submit', async (req, res) => {
         // 9. conteggio voti pending
         const pendingVotes = await Vote.count({
             where: {
-                sessionId: votingSession.id,  // ✅ camelCase
+                sessionId: votingSession.id,  //  camelCase
                 status: 'pending'
             }
         });
 
-        console.log(`[VOTING] 📊 Voti pending in sessione ${votingSession.id}: ${pendingVotes}`);
+        console.log(`[VOTING]  Voti pending in sessione ${votingSession.id}: ${pendingVotes}`);
 
         if (pendingVotes >= WABISABI_CONFIG.COINJOIN_THRESHOLD) {
             console.log(`[VOTING] 🚀 Soglia CoinJoin raggiunta, avvio aggregazione...`);
@@ -324,11 +324,11 @@ router.post('/submit', async (req, res) => {
             // Trigger CoinJoin in background
             CoinJoinService.triggerCoinJoin(votingSession.id, electionId)
                 .catch(error => {
-                    console.error(`[VOTING] ❌ Errore CoinJoin per sessione ${votingSession.id}:`, error);
+                    console.error(`[VOTING]  Errore CoinJoin per sessione ${votingSession.id}:`, error);
                 });
         }
 
-        console.log(`[VOTING] ✅ Voto anonimo registrato: ${vote.id}`);
+        console.log(`[VOTING]  Voto anonimo registrato: ${vote.id}`);
 
         res.json({
             success: true,
@@ -342,7 +342,7 @@ router.post('/submit', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('[VOTING] ❌ Errore invio voto:', error);
+        console.error('[VOTING]  Errore invio voto:', error);
         res.status(500).json({ 
             error: 'Errore nell\'invio del voto',
             details: error.message 
@@ -355,18 +355,18 @@ router.get('/status/:voteId', async (req, res) => {
     try {
         const { voteId } = req.params;
 
-        console.log(`[VOTING] 📊 Controllo stato voto ${voteId}`);
+        console.log(`[VOTING]  Controllo stato voto ${voteId}`);
 
-        // ✅ CORREZIONE 1: Usa l'alias corretto 'votingSession'
+        //  CORREZIONE 1: Usa l'alias corretto 'votingSession'
         const vote = await Vote.findByPk(voteId, {
             include: [
                 {
                     model: VotingSession,
-                    as: 'votingSession',  // ✅ CORRETTO
+                    as: 'votingSession', 
                     include: [
                         {
                             model: Transaction,
-                            as: 'sessionTransactions',  // ✅ CORRETTO (alias univoco)
+                            as: 'sessionTransactions',
                             where: { type: 'coinjoin' },
                             required: false
                         }
@@ -381,7 +381,7 @@ router.get('/status/:voteId', async (req, res) => {
 
         const response = {
             voteId: vote.id,
-            status: vote.status || 'pending',  // ✅ Aggiungi fallback
+            status: vote.status || 'pending',  //  Aggiungi fallback
             submittedAt: vote.submittedAt,
             processedAt: vote.processedAt,
             sessionId: vote.sessionId
@@ -406,7 +406,7 @@ router.get('/status/:voteId', async (req, res) => {
         res.json(response);
 
     } catch (error) {
-        console.error('[VOTING] ❌ Errore controllo stato:', error);
+        console.error('[VOTING]  Errore controllo stato:', error);
         res.status(500).json({ 
             error: 'Errore nel controllo dello stato del voto',
             details: error.message 
@@ -419,16 +419,16 @@ router.get('/session/:sessionId/stats', async (req, res) => {
     try {
         const { sessionId } = req.params;
 
-        // ✅ CORREZIONE: Usa gli alias corretti
+        //  CORREZIONE: Usa gli alias corretti
         const session = await VotingSession.findByPk(sessionId, {
             include: [
                 { 
                     model: Vote, 
-                    as: 'votes'  // ✅ Verifica che questo alias sia corretto
+                    as: 'votes'  //  Verifica che questo alias sia corretto
                 },
                 { 
                     model: Transaction, 
-                    as: 'sessionTransactions'  // ✅ Alias univoco
+                    as: 'sessionTransactions'  //  Alias univoco
                 }
             ]
         });
@@ -460,7 +460,7 @@ router.get('/session/:sessionId/stats', async (req, res) => {
         res.json(stats);
 
     } catch (error) {
-        console.error('[VOTING] ❌ Errore statistiche sessione:', error);
+        console.error('[VOTING]  Errore statistiche sessione:', error);
         res.status(500).json({ 
             error: 'Errore nel recupero delle statistiche',
             details: error.message 

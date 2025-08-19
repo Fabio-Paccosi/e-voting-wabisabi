@@ -167,7 +167,7 @@ router.get('/stats', async (req, res) => {
             callService('vote', '/api/admin/stats')
         ]);
 
-        // ✅ MAPPA I DATI NEL FORMATO CHE IL FRONTEND SI ASPETTA
+        //  MAPPA I DATI NEL FORMATO CHE IL FRONTEND SI ASPETTA
         const stats = {
             // Frontend si aspetta users.total e users.active
             users: {
@@ -225,7 +225,7 @@ router.get('/stats', async (req, res) => {
             }
         };
 
-        console.log('[API GATEWAY] ✅ Stats aggregate formato frontend:', {
+        console.log('[API GATEWAY]  Stats aggregate formato frontend:', {
             users_total: stats.users.total,
             votes_total: stats.votes.total,
             elections_total: stats.elections.total,
@@ -234,7 +234,7 @@ router.get('/stats', async (req, res) => {
 
         res.json(stats);
     } catch (error) {
-        console.error('[API GATEWAY] ❌ Errore stats:', error);
+        console.error('[API GATEWAY]  Errore stats:', error);
         res.status(500).json({ error: 'Errore nel caricamento delle statistiche' });
     }
 });

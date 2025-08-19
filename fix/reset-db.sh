@@ -34,7 +34,7 @@ backup_database() {
     
     if docker compose ps postgres | grep -q "Up"; then
         if docker compose exec -T postgres pg_dump -U postgres evoting_wabisabi > "$BACKUP_FILE" 2>/dev/null; then
-            print_msg "✅ Backup salvato: $BACKUP_FILE"
+            print_msg " Backup salvato: $BACKUP_FILE"
             return 0
         else
             print_warning "⚠️  Backup fallito (database potrebbe essere vuoto o corrotto)"
@@ -84,7 +84,7 @@ reset_database() {
     # Controllo PostgreSQL
     for i in {1..30}; do
         if docker compose exec -T postgres pg_isready -U postgres >/dev/null 2>&1; then
-            print_msg "✅ PostgreSQL pronto"
+            print_msg " PostgreSQL pronto"
             break
         fi
         echo -n "."
@@ -97,7 +97,7 @@ reset_database() {
     DB_TABLES=$(docker compose exec -T postgres psql -U postgres -d evoting_wabisabi -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public';" 2>/dev/null | tr -d ' \n' || echo "0")
     
     if [ "$DB_TABLES" = "0" ]; then
-        print_msg "✅ Database completamente pulito (0 tabelle)"
+        print_msg " Database completamente pulito (0 tabelle)"
     else
         print_warning "⚠️  Database contiene ancora $DB_TABLES tabelle"
     fi
@@ -121,7 +121,7 @@ verify_setup() {
         
         sleep 2
         if curl -s "http://localhost:$port/api/health" >/dev/null 2>&1; then
-            print_msg "✅ $name: Risponde"
+            print_msg " $name: Risponde"
         else
             print_warning "⚠️  $name: Non risponde ancora (potrebbe servire più tempo)"
         fi
