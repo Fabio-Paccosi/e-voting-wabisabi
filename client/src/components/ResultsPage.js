@@ -159,17 +159,7 @@ const ResultsPage = () => {
           Indietro
         </button>
         <div className="header-content">
-          <h2>Risultati Elezioni</h2>
-          <div className="header-actions">
-            <button onClick={handleRefresh} className="refresh-button" disabled={refreshing}>
-              <RefreshCw size={16} className={refreshing ? 'spinning' : ''} />
-              Aggiorna
-            </button>
-            <button onClick={handleDownloadResults} className="download-button">
-              <Download size={16} />
-              Esporta
-            </button>
-          </div>
+          <h2>  Risultati Elezioni</h2>
         </div>
       </div>
 

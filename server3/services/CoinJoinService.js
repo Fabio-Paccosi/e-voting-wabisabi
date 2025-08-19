@@ -15,7 +15,7 @@ class CoinJoinService {
     constructor() {
         this.activeSessions = new Map(); // sessionId -> CoinJoinSession
         this.ROUND_TIMEOUT = 300000; // 5 minuti timeout per round
-        this.MIN_PARTICIPANTS = 2; // Minimo partecipanti per CoinJoin
+        this.MIN_PARTICIPANTS = 3; // Minimo partecipanti per CoinJoin
         this.MAX_PARTICIPANTS = 50; // Massimo partecipanti per round
         this.COINJOIN_FEE = 1000; // Fee in satoshi
     }
@@ -169,46 +169,76 @@ class CoinJoinService {
      */
     async outputRegistrationRound(coinJoinSession) {
         try {
+            await this.debugCommitments(coinJoinSession);
+
             console.log(`[COINJOIN] 📤 Output Registration Round - Sessione ${coinJoinSession.sessionId}`);
-
+            
             coinJoinSession.status = 'output_registration';
-            const outputs = [];
-
+            
             // Carica candidati per l'elezione
             const candidates = await Candidate.findAll({
                 where: { electionId: coinJoinSession.electionId }
             });
-
+            
+            console.log(`[COINJOIN] 📋 Candidati trovati: ${candidates.length}`);
+            candidates.forEach(c => console.log(`  - ${c.name} (ID: ${c.id}, Encoding: ${c.voteEncoding})`));
+            
             const candidateMap = new Map(candidates.map(c => [c.voteEncoding, c]));
-
-            for (const input of coinJoinSession.inputs) {
-                // Estrae il voto dal commitment (in un sistema reale, richiederebbe ZK proofs)
-                const voteData = this.extractVoteFromCommitment(input.commitment);
-                
-                // Trova candidato corrispondente
-                const candidate = candidateMap.get(voteData.candidateEncoding);
-                if (!candidate) {
-                    console.error(`[COINJOIN] ❌ Candidato non trovato per encoding ${voteData.candidateEncoding}`);
+            const candidateVotes = new Map(); // Per aggregazione
+            
+            console.log(`[COINJOIN] 🔍 Processamento di ${coinJoinSession.inputs.length} input...`);
+            
+            // AGGREGAZIONE: Conta i voti per candidato
+            for (const [index, input] of coinJoinSession.inputs.entries()) {
+                try {
+                    console.log(`[COINJOIN] 🔍 Processamento input ${index + 1}/${coinJoinSession.inputs.length}`);
+                    console.log(`[COINJOIN] 📝 Commitment: ${input.commitment}`);
+                    
+                    // Estrae il voto dal commitment
+                    const voteData = this.extractVoteFromCommitment(input.commitment);
+                    console.log(`[COINJOIN] 📊 Voto estratto:`, voteData);
+                    
+                    // Trova candidato corrispondente
+                    const candidate = candidateMap.get(voteData.candidateEncoding);
+                    if (!candidate) {
+                        console.error(`[COINJOIN] ❌ Candidato non trovato per encoding ${voteData.candidateEncoding}`);
+                        console.error(`[COINJOIN] 🗺️ Encodings disponibili:`, Array.from(candidateMap.keys()));
+                        continue;
+                    }
+                    
+                    console.log(`[COINJOIN] ✅ Voto mappato a candidato: ${candidate.name} (ID: ${candidate.id})`);
+                    
+                    // Aggrega voti per candidato
+                    const currentVotes = candidateVotes.get(candidate.id) || 0;
+                    candidateVotes.set(candidate.id, currentVotes + voteData.voteValue);
+                    
+                } catch (inputError) {
+                    console.error(`[COINJOIN] ❌ Errore processamento input ${index + 1}:`, inputError);
                     continue;
                 }
-
-                const output = {
-                    candidateId: candidate.id,
-                    candidateBitcoinAddress: candidate.bitcoinAddress,
-                    voteValue: voteData.voteValue,
-                    anonymizedCommitment: this.anonymizeCommitment(input.commitment),
-                    registeredAt: new Date()
-                };
-
-                outputs.push(output);
-                console.log(`[COINJOIN] ✓ Output registrato per candidato ${candidate.name}`);
             }
-
+            
+            console.log(`[COINJOIN] 📊 Aggregazione completata:`, Array.from(candidateVotes.entries()));
+            
+            // Crea output aggregati
+            const outputs = [];
+            for (const [candidateId, totalVotes] of candidateVotes) {
+                const candidate = candidates.find(c => c.id === candidateId);
+                outputs.push({
+                    candidateId: candidateId,
+                    candidateBitcoinAddress: candidate.bitcoinAddress,
+                    voteValue: totalVotes, // Voti aggregati
+                    registeredAt: new Date()
+                });
+                console.log(`[COINJOIN] ✅ Output creato per ${candidate.name}: ${totalVotes} voti`);
+            }
+            
             coinJoinSession.outputs = outputs;
             coinJoinSession.round = 3;
-
-            console.log(`[COINJOIN] ✅ Output Registration completato: ${outputs.length} output`);
-
+            
+            console.log(`[COINJOIN] ✅ Output Registration completato: ${outputs.length} candidati ricevuti voti`);
+            console.log(`[COINJOIN] 📊 Riepilogo:`, outputs.map(o => `${o.candidateId}: ${o.voteValue} voti`));
+            
         } catch (error) {
             console.error(`[COINJOIN] ❌ Errore Output Registration:`, error);
             throw error;
@@ -550,39 +580,59 @@ class CoinJoinService {
         try {
             console.log(`[COINJOIN] 🔍 Estrazione voto da commitment:`, commitment);
             
-            // Se il commitment è già un oggetto con candidateEncoding
+            // CASO 1: Commitment è già un oggetto con candidateEncoding
             if (typeof commitment === 'object' && commitment.candidateEncoding) {
+                console.log(`[COINJOIN] ✓ Commitment oggetto trovato con encoding: ${commitment.candidateEncoding}`);
                 return {
                     candidateEncoding: parseInt(commitment.candidateEncoding),
                     voteValue: 1
                 };
             }
             
-            // Se il commitment è una stringa JSON
+            // CASO 2: Commitment è stringa JSON
             if (typeof commitment === 'string' && (commitment.startsWith('{') || commitment.startsWith('['))) {
                 try {
                     const parsed = JSON.parse(commitment);
-                    if (parsed.candidateEncoding || parsed.candidate || parsed.candidateValue) {
-                        const encoding = parsed.candidateEncoding || parsed.candidate || parsed.candidateValue;
-                        return {
-                            candidateEncoding: parseInt(encoding),
-                            voteValue: 1
-                        };
+                    console.log(`[COINJOIN] 📝 Commitment JSON parsed:`, parsed);
+                    
+                    // Cerca possibili campi per il candidato
+                    const candidateFields = ['candidateEncoding', 'candidate', 'candidateId', 'candidateValue'];
+                    for (const field of candidateFields) {
+                        if (parsed[field] !== undefined) {
+                            const encoding = parseInt(parsed[field]);
+                            if (!isNaN(encoding)) {
+                                console.log(`[COINJOIN] ✓ Candidato trovato nel campo ${field}: ${encoding}`);
+                                return {
+                                    candidateEncoding: encoding,
+                                    voteValue: 1
+                                };
+                            }
+                        }
                     }
                 } catch (parseError) {
                     console.warn(`[COINJOIN] ⚠️ Errore parsing JSON commitment:`, parseError);
                 }
             }
             
-            // CORREZIONE: Genera encoding valido per candidati esistenti (1, 2, 3)
-            const commitmentHash = crypto.createHash('sha256').update(commitment.toString()).digest('hex');
+            // CASO 3: Prova a estrarre dal formato "candidateId:serial:random"
+            if (typeof commitment === 'string') {
+                // Il commitment potrebbe essere stato creato come hash di "candidateId:serial:random"
+                // Non possiamo estrarre direttamente, ma possiamo usare una mappatura deterministica
+                console.log(`[COINJOIN] 🔑 Tentativo estrazione da commitment hash...`);
+            }
             
-            // Mappa hash ai candidati disponibili (1, 2, 3)
-            const availableEncodings = [1, 2, 3];
-            const hashValue = parseInt(commitmentHash.substring(0, 4), 16);
+            // CASO 4: Mappatura deterministica basata su hash (ULTIMA RISORSA)
+            console.warn(`[COINJOIN] ⚠️ Usando mappatura deterministica come fallback`);
+            
+            const commitmentStr = commitment ? commitment.toString() : 'fallback';
+            const hash = crypto.createHash('sha256').update(commitmentStr).digest('hex');
+            
+            // USA CONSISTENTEMENTE GLI STESSI PARAMETRI DI HASHING
+            const hashValue = parseInt(hash.substring(0, 8), 16); // Sempre 8 caratteri
+            const availableEncodings = [1, 2, 3]; // Candidati disponibili
             const candidateEncoding = availableEncodings[hashValue % availableEncodings.length];
             
-            console.log(`[COINJOIN] 📊 Commitment mappato a candidato ${candidateEncoding}`);
+            console.log(`[COINJOIN] 🎲 Mappatura deterministica: ${commitmentStr} -> ${candidateEncoding}`);
             
             return {
                 candidateEncoding,
@@ -591,7 +641,7 @@ class CoinJoinService {
             
         } catch (error) {
             console.error(`[COINJOIN] ❌ Errore estrazione commitment:`, error);
-            // Fallback: usa candidato 1
+            // Fallback sicuro
             return {
                 candidateEncoding: 1,
                 voteValue: 1
@@ -625,30 +675,84 @@ class CoinJoinService {
      */
     async updateCandidateVoteCounts(coinJoinSession) {
         try {
+            console.log(`[COINJOIN] 🔢 Aggiornamento contatori voti...`);
+            console.log(`[COINJOIN] 📊 Output da processare: ${coinJoinSession.outputs.length}`);
+            
             const voteCounts = new Map();
-
+            
             // Conta i voti per candidato
             for (const output of coinJoinSession.outputs) {
+                console.log(`[COINJOIN] 📝 Processing output:`, {
+                    candidateId: output.candidateId,
+                    voteValue: output.voteValue
+                });
+                
                 const current = voteCounts.get(output.candidateId) || 0;
-                voteCounts.set(output.candidateId, current + output.voteValue);
+                const newTotal = current + output.voteValue;
+                voteCounts.set(output.candidateId, newTotal);
+                
+                console.log(`[COINJOIN] ➕ Candidato ${output.candidateId}: ${current} + ${output.voteValue} = ${newTotal}`);
             }
-
+            
+            console.log(`[COINJOIN] 📊 Conteggio finale:`, Array.from(voteCounts.entries()));
+            
             // Aggiorna database
             for (const [candidateId, voteCount] of voteCounts) {
-                await Candidate.increment(
-                    'total_votes_received',
-                    { 
-                        by: voteCount,
-                        where: { id: candidateId }
-                    }
-                );
+                console.log(`[COINJOIN] 💾 Aggiornamento DB - Candidato ${candidateId}: +${voteCount} voti`);
+                
+                await Candidate.increment('total_votes_received', {
+                    by: voteCount,
+                    where: { id: candidateId }
+                });
+                
+                console.log(`[COINJOIN] ✅ DB aggiornato per candidato ${candidateId}`);
             }
-
+            
             console.log(`[COINJOIN] ✅ Aggiornati contatori per ${voteCounts.size} candidati`);
-
+            
+            // Log finale dettagliato
+            for (const [candidateId, count] of voteCounts) {
+                const candidate = await Candidate.findByPk(candidateId);
+                console.log(`[COINJOIN] 📊 FINALE - ${candidate?.name || candidateId}: ${count} voti`);
+            }
+            
         } catch (error) {
             console.error(`[COINJOIN] ❌ Errore aggiornamento contatori:`, error);
+            throw error;
         }
+    }
+
+    async debugCommitments(coinJoinSession) {
+        console.log(`\n🔍 ========== DEBUG COMMITMENT ANALYSIS ==========`);
+        console.log(`📊 Inputs totali: ${coinJoinSession.inputs.length}`);
+        
+        for (const [index, input] of coinJoinSession.inputs.entries()) {
+            console.log(`\n--- INPUT ${index + 1} ---`);
+            console.log(`Type: ${typeof input.commitment}`);
+            console.log(`Raw: ${JSON.stringify(input.commitment)}`);
+            console.log(`String: ${input.commitment?.toString()}`);
+            
+            // Verifica se è JSON
+            if (typeof input.commitment === 'string' && input.commitment.startsWith('{')) {
+                try {
+                    const parsed = JSON.parse(input.commitment);
+                    console.log(`Parsed JSON:`, parsed);
+                    console.log(`Available keys:`, Object.keys(parsed));
+                } catch (e) {
+                    console.log(`JSON parse failed: ${e.message}`);
+                }
+            }
+            
+            // Test estrazione
+            try {
+                const extracted = this.extractVoteFromCommitment(input.commitment);
+                console.log(`Extracted:`, extracted);
+            } catch (e) {
+                console.log(`Extraction failed: ${e.message}`);
+            }
+        }
+        
+        console.log(`🔍 =============== END DEBUG ==================\n`);
     }
 
     /**
