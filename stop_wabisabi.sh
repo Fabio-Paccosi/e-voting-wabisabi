@@ -17,11 +17,11 @@ stop_service() {
             rm -f "$pidfile"
             echo " $name arrestato"
         else
-            echo "⚠️ $name non in esecuzione"
+            echo "$name non in esecuzione"
             rm -f "$pidfile"
         fi
     else
-        echo "⚠️ PID file non trovato per $name"
+        echo "PID file non trovato per $name"
     fi
 }
 

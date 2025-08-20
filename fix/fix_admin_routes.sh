@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "🔧 Sistemazione route admin per i servizi..."
+echo "Sistemazione route admin per i servizi..."
 
 # Ferma i container
 echo "🛑 Fermando i container..."
@@ -13,12 +13,12 @@ mkdir -p server3/routes
 
 # Verifica se i file admin.js esistono già
 if [ -f "server2/routes/admin.js" ]; then
-    echo "⚠️  server2/routes/admin.js esiste già, creando backup..."
+    echo " server2/routes/admin.js esiste già, creando backup..."
     mv server2/routes/admin.js server2/routes/admin.js.backup
 fi
 
 if [ -f "server3/routes/admin.js" ]; then
-    echo "⚠️  server3/routes/admin.js esiste già, creando backup..."
+    echo " server3/routes/admin.js esiste già, creando backup..."
     mv server3/routes/admin.js server3/routes/admin.js.backup
 fi
 
@@ -226,7 +226,7 @@ EOF
 echo " File route admin creati con successo!"
 
 # Riavvia i container
-echo "🚀 Riavviando i container..."
+echo "Riavviando i container..."
 docker compose up --build -d
 
 echo " Operazione completata!"

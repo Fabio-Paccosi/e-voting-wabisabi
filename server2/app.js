@@ -109,7 +109,7 @@ const db = {
 
 class AuthenticationService {
     constructor() {
-        console.log('🔧 [AUTH] Servizio di autenticazione inizializzato');
+        console.log('[AUTH] Servizio di autenticazione inizializzato');
     }
 
     // Registra un nuovo utente
@@ -236,7 +236,7 @@ class AuthenticationService {
 class CredentialManager {
     constructor() {
         this.cryptoKey = process.env.CREDENTIAL_SECRET || 'default-credential-secret';
-        console.log('🔧 [CREDENTIALS] Manager credenziali inizializzato');
+        console.log('[CREDENTIALS] Manager credenziali inizializzato');
     }
 
     // Genera credenziale per un utente
@@ -392,11 +392,11 @@ app.use((err, req, res, next) => {
 // ==========================================
 
 app.listen(PORT, () => {
-    console.log(`🌟 [AUTH SERVICE] Server avviato su porta ${PORT}`);
-    console.log(`📋 Route disponibili:`);
-    console.log(`   👨‍💼 Admin: http://localhost:${PORT}/api/admin/*`);
-    console.log(`   👤 Client: http://localhost:${PORT}/api/*`);
-    console.log(`   🏥 Health: http://localhost:${PORT}/api/health`);
+    console.log(`[AUTH SERVICE] Server avviato su porta ${PORT}`);
+    console.log(`Route disponibili:`);
+    console.log(`   Admin: http://localhost:${PORT}/api/admin/*`);
+    console.log(`   Client: http://localhost:${PORT}/api/*`);
+    console.log(`   Health: http://localhost:${PORT}/api/health`);
 });
 
 module.exports = app;

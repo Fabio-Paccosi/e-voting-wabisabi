@@ -50,7 +50,7 @@ const authenticateUser = async (req, res, next) => {
         // Verifica che l'utente sia autorizzato per il voto
         if (decoded.role === 'administrator') {
             // Admin può fare tutto per test
-            console.log(`[AUTH] ⚠️ Accesso amministratore per testing`);
+            console.log(`[AUTH] Accesso amministratore per testing`);
         } else if (decoded.role !== 'user' && !decoded.userId) {
             console.error('[AUTH] Ruolo utente non valido per voting');
             return res.status(403).json({ 
@@ -91,7 +91,7 @@ const authenticateUser = async (req, res, next) => {
  * DA RIMUOVERE IN PRODUZIONE
  */
 const authenticateUserSimple = (req, res, next) => {
-    console.log('[AUTH] ⚠️ MODALITÀ TESTING - autenticazione semplificata');
+    console.log('[AUTH] MODALITÀ TESTING - autenticazione semplificata');
     
     const authHeader = req.headers.authorization;
     if (!authHeader) {

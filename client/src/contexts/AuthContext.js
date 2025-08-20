@@ -145,7 +145,7 @@ export const AuthProvider = ({ children }) => {
       console.log('[AUTH]  Logout completato');
       
     } catch (err) {
-      console.error('[AUTH] ⚠️ Errore durante logout:', err.message);
+      console.error('[AUTH] Errore durante logout:', err.message);
       
       // Resetta comunque lo stato locale
       setUser(null);

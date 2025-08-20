@@ -37,11 +37,11 @@ backup_database() {
             print_msg " Backup salvato: $BACKUP_FILE"
             return 0
         else
-            print_warning "⚠️  Backup fallito (database potrebbe essere vuoto o corrotto)"
+            print_warning " Backup fallito (database potrebbe essere vuoto o corrotto)"
             return 1
         fi
     else
-        print_warning "⚠️  Container postgres non in esecuzione, skip backup"
+        print_warning " Container postgres non in esecuzione, skip backup"
         return 1
     fi
 }
@@ -59,14 +59,14 @@ reset_database() {
     docker volume rm $(docker compose config --services | head -1)_postgres_data 2>/dev/null || \
     docker volume rm evoting-wabisabi_postgres_data 2>/dev/null || \
     docker volume rm postgres_data 2>/dev/null || \
-    print_warning "⚠️  Volume database non trovato o già rimosso"
+    print_warning " Volume database non trovato o già rimosso"
     
     # 3. Rimuovi anche volume Redis se presente
     print_msg "3. Rimuovendo volume Redis..."
     docker volume rm $(docker compose config --services | head -1)_redis_data 2>/dev/null || \
     docker volume rm evoting-wabisabi_redis_data 2>/dev/null || \
     docker volume rm redis_data 2>/dev/null || \
-    print_warning "⚠️  Volume Redis non trovato o già rimosso"
+    print_warning " Volume Redis non trovato o già rimosso"
     
     # 4. Rimuovi immagini vecchie (opzionale, per rebuild completo)
     print_msg "4. Rimuovendo immagini container..."
@@ -99,7 +99,7 @@ reset_database() {
     if [ "$DB_TABLES" = "0" ]; then
         print_msg " Database completamente pulito (0 tabelle)"
     else
-        print_warning "⚠️  Database contiene ancora $DB_TABLES tabelle"
+        print_warning " Database contiene ancora $DB_TABLES tabelle"
     fi
 }
 
@@ -123,7 +123,7 @@ verify_setup() {
         if curl -s "http://localhost:$port/api/health" >/dev/null 2>&1; then
             print_msg " $name: Risponde"
         else
-            print_warning "⚠️  $name: Non risponde ancora (potrebbe servire più tempo)"
+            print_warning " $name: Non risponde ancora (potrebbe servire più tempo)"
         fi
     done
     
@@ -141,7 +141,7 @@ verify_setup() {
 main() {
     # Chiedi conferma
     echo ""
-    print_warning "⚠️  ATTENZIONE: Questo cancellerà TUTTI I DATI del database!"
+    print_warning " ATTENZIONE: Questo cancellerà TUTTI I DATI del database!"
     echo ""
     read -p "Vuoi continuare? (scrivi 'RESET' per confermare): " -r
     

@@ -25,7 +25,7 @@ class WabiSabiVoting {
         firstName: tokenInfo.firstName,
         lastName: tokenInfo.lastName
       };
-      console.log('[WABISABI] 🔧 Inizializzato per utente:', this.user.email);
+      console.log('[WABISABI] Inizializzato per utente:', this.user.email);
     } else {
       console.error('[WABISABI]  Nessun token valido trovato');
       throw new Error('Utente non autenticato');

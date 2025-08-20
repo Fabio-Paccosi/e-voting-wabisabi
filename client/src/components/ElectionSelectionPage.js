@@ -75,7 +75,7 @@ const ElectionSelectionPage = () => {
       <div className="page-header">
         <div className="user-info">
           <div className="user-details">
-            <h2>Benvenuto/a, {user?.nome} {user?.cognome}</h2>
+            <h2>Benvenuto/a, {user?.firstName} {user?.lastName}</h2>
             <p>Seleziona un'elezione per esprimere il tuo voto anonimo</p>
           </div>
           <button onClick={handleLogout} className="logout-button">

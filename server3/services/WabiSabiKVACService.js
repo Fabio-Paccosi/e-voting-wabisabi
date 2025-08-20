@@ -17,7 +17,7 @@ class WabiSabiKVACService {
      */
     generateCoordinatorKey() {
         const key = randomBytes(32).toString('hex');
-        console.log('⚠️ [KVAC] Generata nuova chiave coordinatore. In produzione salvare in ENV!');
+        console.log('[KVAC] Generata nuova chiave coordinatore. In produzione salvare in ENV!');
         return key;
     }
 

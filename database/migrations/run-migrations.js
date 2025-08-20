@@ -74,7 +74,7 @@ class MigrationRunner {
             
             // Ottieni migrations già eseguite
             const executedMigrations = await this.getExecutedMigrations();
-            console.log(`📋 Migrations eseguite: ${executedMigrations.length}`);
+            console.log(`Migrations eseguite: ${executedMigrations.length}`);
             
             // Leggi file migrations dalla directory
             const migrationsDir = __dirname;
@@ -158,7 +158,7 @@ class MigrationRunner {
             }
             
             const pending = migrationFiles.filter(f => !executedMigrations.includes(f));
-            console.log('\n📋 Riepilogo:');
+            console.log('\nRiepilogo:');
             console.log(`  Eseguite: ${executedMigrations.length}`);
             console.log(`  In attesa: ${pending.length}`);
             console.log(`  Totali: ${migrationFiles.length}`);

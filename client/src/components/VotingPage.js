@@ -54,8 +54,8 @@ const VotingPage = () => {
       setLoading(true);
       setError('');
       
-      console.log('[VOTING] 📋 Caricamento dati elezione:', electionId);
-      console.log('[VOTING] 👤 Utente autenticato:', user.email);
+      console.log('[VOTING] Caricamento dati elezione:', electionId);
+      console.log('[VOTING] Utente autenticato:', user.email);
       
       // Inizializza il servizio WabiSabi con i dati utente autenticato
       try {
@@ -128,7 +128,7 @@ const VotingPage = () => {
       return;
     }
 
-    console.log('[VOTING] 🚀 Avvio processo di voto WabiSabi...');
+    console.log('[VOTING] Avvio processo di voto WabiSabi...');
     setCurrentStep('crypto');
     setCryptoStatus('Inizializzazione processo crittografico...');
     setVotingProgress(0);

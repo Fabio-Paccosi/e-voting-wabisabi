@@ -21,7 +21,7 @@ const { Op } = require('sequelize');
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
 // Inizializza database all'avvio
-console.log('🔗 [AUTH ADMIN] Inizializzazione database...');
+console.log('[AUTH ADMIN] Inizializzazione database...');
 initializeDatabase()
     .then(success => {
         if (success) {
@@ -186,7 +186,7 @@ router.get('/users', adminAuth, async (req, res) => {
             search = '' 
         } = req.query;
 
-        console.log('👥 [AUTH ADMIN] Caricamento utenti:', { page, limit, status, search });
+        console.log('[AUTH ADMIN] Caricamento utenti:', { page, limit, status, search });
 
         const offset = (parseInt(page) - 1) * parseInt(limit);
         
@@ -672,7 +672,7 @@ router.get('/activity', adminAuth, async (req, res) => {
 // GET /api/admin/settings - Impostazioni sistema dal database
 router.get('/settings', adminAuth, async (req, res) => {
     try {
-        console.log('⚙️ [AUTH ADMIN] Caricamento impostazioni sistema...');
+        console.log('[AUTH ADMIN] Caricamento impostazioni sistema...');
         
         const settings = await SystemSettings.findAll({
             order: [['key', 'ASC']]
@@ -701,7 +701,7 @@ router.put('/settings/:key', adminAuth, async (req, res) => {
         const { key } = req.params;
         const { value, description } = req.body;
 
-        console.log('⚙️ [AUTH ADMIN] Aggiornamento setting:', key);
+        console.log('[AUTH ADMIN] Aggiornamento setting:', key);
 
         const [setting, created] = await SystemSettings.findOrCreate({
             where: { key },

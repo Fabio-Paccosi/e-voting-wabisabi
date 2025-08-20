@@ -1,6 +1,6 @@
 const { Sequelize, DataTypes } = require('sequelize');
 
-console.log('🔗 Inizializzazione database config centralizzata...');
+console.log('Inizializzazione database config centralizzata...');
 console.log('Environment vars:', {
     DB_NAME: process.env.DB_NAME,
     DB_USER: process.env.DB_USER,
@@ -582,11 +582,11 @@ Transaction.hasMany(Vote, {
 // Inizializzazione database
 const initializeDatabase = async () => {
     try {
-        console.log('🔗 Connessione al database PostgreSQL...');
+        console.log('Connessione al database PostgreSQL...');
         await sequelize.authenticate();
         console.log(' Connessione database stabilita');
         
-        console.log('📋 Sincronizzazione modelli...');
+        console.log('Sincronizzazione modelli...');
         await sequelize.sync({ alter: true });
         console.log(' Modelli sincronizzati');
         
@@ -708,4 +708,4 @@ module.exports = allModels;
 // Export per servizi specifici
 module.exports.getModelsForService = getModelsForService;
 
-console.log('📦 Database config centralizzata caricata');
+console.log(' Database config centralizzata caricata');

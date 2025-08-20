@@ -186,7 +186,7 @@ app.use((error, req, res, next) => {
 
 async function startServer() {
     try {
-        console.log('🚀 [VOTE SERVICE] Avvio server...');
+        console.log('[VOTE SERVICE] Avvio server...');
         
         // Test connessione database
         const dbConnected = await testDatabaseConnection();
@@ -197,10 +197,10 @@ async function startServer() {
 
         // Avvia il server
         app.listen(PORT, () => {
-            console.log(` [VOTE SERVICE] Server avviato sulla porta ${PORT}`);
-            console.log(` [VOTE SERVICE] Health check: http://localhost:${PORT}/health`);
-            console.log(`🗳️ [VOTE SERVICE] Vote API: http://localhost:${PORT}/api/votes`);
-            console.log(`⚙️ [VOTE SERVICE] Admin API: http://localhost:${PORT}/api/admin`);
+            console.log(`[VOTE SERVICE] Server avviato sulla porta ${PORT}`);
+            console.log(`[VOTE SERVICE] Health check: http://localhost:${PORT}/health`);
+            console.log(`[VOTE SERVICE] Vote API: http://localhost:${PORT}/api/votes`);
+            console.log(`[VOTE SERVICE] Admin API: http://localhost:${PORT}/api/admin`);
         });
 
         // Avvia il servizio CoinJoin automaticamente
@@ -217,13 +217,13 @@ async function startServer() {
 
 // Gestione graceful shutdown
 process.on('SIGTERM', () => {
-    console.log('📤 [VOTE SERVICE] Ricevuto SIGTERM, chiusura graceful...');
+    console.log('[VOTE SERVICE] Ricevuto SIGTERM, chiusura graceful...');
     CoinJoinTriggerService.stop();
     process.exit(0);
 });
 
 process.on('SIGINT', () => {
-    console.log('📤 [VOTE SERVICE] Ricevuto SIGINT, chiusura graceful...');
+    console.log('[VOTE SERVICE] Ricevuto SIGINT, chiusura graceful...');
     CoinJoinTriggerService.stop();
     process.exit(0);
 });

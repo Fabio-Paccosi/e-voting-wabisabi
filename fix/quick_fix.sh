@@ -1,7 +1,7 @@
 #!/bin/bash
 # Fix completo per route /auth/verify mancante
 
-echo "🔧 Fix route /auth/verify mancante..."
+echo "Fix route /auth/verify mancante..."
 
 # 1. VERIFICA se la route esiste nell'API Gateway
 echo " Controllo route esistenti nell'API Gateway..."
@@ -68,7 +68,7 @@ fi
 echo ""
 echo " Controllo route verify nell'Auth Service..."
 if grep -A 10 "auth/verify" server2/routes/admin.js | grep -q "const adminAuth"; then
-    echo "⚠️ Auth Service usa ancora middleware autenticazione - fixing..."
+    echo "Auth Service usa ancora middleware autenticazione - fixing..."
     
     # Backup
     cp server2/routes/admin.js server2/routes/admin.js.backup.verify
@@ -171,7 +171,7 @@ stats_response=$(curl -s -H "Authorization: Bearer test-token" \
 if echo "$stats_response" | grep -q "total.*0"; then
     echo "    Stats funzionano ora!"
 else
-    echo "   ⚠️ Stats potrebbero ancora avere problemi"
+    echo "   Stats potrebbero ancora avere problemi"
     echo "   📝 Risposta: $stats_response"
 fi
 

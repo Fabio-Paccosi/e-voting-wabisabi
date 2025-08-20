@@ -25,11 +25,11 @@ class CoinJoinService {
      */
     async triggerCoinJoin(sessionId, electionId) {
         try {
-            console.log(`[COINJOIN] 🚀 Avvio CoinJoin per sessione ${sessionId}`);
+            console.log(`[COINJOIN] Avvio CoinJoin per sessione ${sessionId}`);
     
             // Verifica che la sessione non sia già in elaborazione
             if (this.activeSessions.has(sessionId)) {
-                console.log(`[COINJOIN] ⚠️ Sessione ${sessionId} già in elaborazione`);
+                console.log(`[COINJOIN] Sessione ${sessionId} già in elaborazione`);
                 return;
             }
     
@@ -46,7 +46,7 @@ class CoinJoinService {
             console.log(`[COINJOIN]  Trovati ${pendingVotes.length} voti pendenti`);
     
             if (pendingVotes.length < this.MIN_PARTICIPANTS) {
-                console.log(`[COINJOIN] ⚠️ Voti insufficienti: ${pendingVotes.length} < ${this.MIN_PARTICIPANTS}`);
+                console.log(`[COINJOIN] Voti insufficienti: ${pendingVotes.length} < ${this.MIN_PARTICIPANTS}`);
                 return;
             }
     
@@ -610,7 +610,7 @@ class CoinJoinService {
                         }
                     }
                 } catch (parseError) {
-                    console.warn(`[COINJOIN] ⚠️ Errore parsing JSON commitment:`, parseError);
+                    console.warn(`[COINJOIN] Errore parsing JSON commitment:`, parseError);
                 }
             }
             
@@ -622,7 +622,7 @@ class CoinJoinService {
             }
             
             // CASO 4: Mappatura deterministica basata su hash (ULTIMA RISORSA)
-            console.warn(`[COINJOIN] ⚠️ Usando mappatura deterministica come fallback`);
+            console.warn(`[COINJOIN] Usando mappatura deterministica come fallback`);
             
             const commitmentStr = commitment ? commitment.toString() : 'fallback';
             const hash = crypto.createHash('sha256').update(commitmentStr).digest('hex');

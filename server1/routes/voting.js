@@ -209,7 +209,7 @@ router.get('/session/:sessionId/stats', authenticateUser, async (req, res) => {
 // GET /api/voting/debug - Endpoint di debug (solo sviluppo)
 router.get('/debug', authenticateUser, async (req, res) => {
     try {
-        console.log(`[API GATEWAY] 🔧 Debug WabiSabi per utente ${req.user.id}`);
+        console.log(`[API GATEWAY] Debug WabiSabi per utente ${req.user.id}`);
         
         // Solo per utenti admin o in modalità development
         if (req.user.role !== 'administrator' && process.env.NODE_ENV === 'production') {

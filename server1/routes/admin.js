@@ -8,8 +8,8 @@ const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || 'http://localhost:3002'
 const VOTE_SERVICE_URL = process.env.VOTE_SERVICE_URL || 'http://localhost:3003';
 
 console.log('[ADMIN ROUTES] Configurazione servizi:');
-console.log(`  Auth Service: ${AUTH_SERVICE_URL}`);
-console.log(`  Vote Service: ${VOTE_SERVICE_URL}`);
+console.log(`Auth Service: ${AUTH_SERVICE_URL}`);
+console.log(`Vote Service: ${VOTE_SERVICE_URL}`);
 
 // Helper per chiamate ai servizi con retry
 const callService = async (service, endpoint, method = 'GET', data = null, headers = {}) => {
@@ -344,55 +344,6 @@ router.put('/users/:id/status', async (req, res) => {
 });
 
 // ==========================================
-// GESTIONE WHITELIST (Proxy a Auth Service)
-// ==========================================
-
-/*
-// GET /api/admin/whitelist
-router.get('/whitelist', async (req, res) => {
-    try {
-        const response = await callService('auth', '/api/admin/whitelist');
-        res.json(response);
-    } catch (error) {
-        res.status(error.status || 500).json({ 
-            error: 'Errore caricamento whitelist',
-            details: error.originalError || error.message,
-            service: 'auth'
-        });
-    }
-});
-
-// POST /api/admin/whitelist
-router.post('/whitelist', async (req, res) => {
-    try {
-        const response = await callService('auth', '/api/admin/whitelist', 'POST', req.body);
-        res.json(response);
-    } catch (error) {
-        res.status(error.status || 500).json({ 
-            error: 'Errore aggiunta whitelist',
-            details: error.originalError || error.message,
-            service: 'auth'
-        });
-    }
-});
-
-// DELETE /api/admin/whitelist/:email
-router.delete('/whitelist/:email', async (req, res) => {
-    try {
-        const { email } = req.params;
-        const response = await callService('auth', `/api/admin/whitelist/${encodeURIComponent(email)}`, 'DELETE');
-        res.json(response);
-    } catch (error) {
-        res.status(error.status || 500).json({ 
-            error: 'Errore rimozione whitelist',
-            details: error.originalError || error.message,
-            service: 'auth'
-        });
-    }
-});
-*/
-
-// ==========================================
 // GESTIONE WHITELIST ELEZIONI (Proxy a Auth Service)
 // ==========================================
 
@@ -554,6 +505,27 @@ router.post("/elections/:id/deactivate", async (req, res) => {
     }
 });
 
+// GET /api/admin/elections/:id/results - Risultati elezione per admin
+router.get('/elections/:id/results', async (req, res) => {
+    try {
+        const { id } = req.params;
+        console.log(`[API GATEWAY] GET risultati elezione ${id} per admin`);
+        
+        // Chiama direttamente il servizio vote per ottenere i risultati
+        // L'admin può vedere i risultati indipendentemente dallo stato dell'elezione
+        const response = await callService('vote', `/api/admin/elections/${id}/results`);
+        
+        console.log(`[API GATEWAY] ✓ Risultati elezione ${id} caricati per admin`);
+        res.json(response);
+    } catch (error) {
+        console.error(`[API GATEWAY] ✗ Errore caricamento risultati elezione ${id}:`, error.message);
+        res.status(error.status || 500).json({ 
+            error: 'Errore nel caricamento dei risultati',
+            details: error.originalError || error.message,
+            service: 'vote'
+        });
+    }
+});
 
 // ==========================================
 // GESTIONE CANDIDATI (Proxy a Vote Service)
@@ -831,6 +803,6 @@ router.get('/logs', async (req, res) => {
     }
 });
 
-console.log('[ADMIN ROUTES] ✓ Route admin gateway complete caricate');
+console.log('[ADMIN ROUTES] Route admin gateway complete caricate');
 
 module.exports = router;
