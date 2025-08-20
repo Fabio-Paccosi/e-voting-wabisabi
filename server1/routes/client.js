@@ -67,7 +67,7 @@ const addUserToHeaders = (req, res, next) => {
         const authHeader = req.headers.authorization;
         
         if (!authHeader) {
-            console.log('[CLIENT GATEWAY] ⚠️ Header Authorization mancante');
+            console.log('[CLIENT GATEWAY] Header Authorization mancante');
             return res.status(401).json({ 
                 error: 'Token di autenticazione richiesto',
                 message: 'Effettua il login per accedere a questa risorsa'
@@ -77,7 +77,7 @@ const addUserToHeaders = (req, res, next) => {
         const token = authHeader.replace('Bearer ', '');
         
         if (!token) {
-            console.log('[CLIENT GATEWAY] ⚠️ Token mancante nell\'header');
+            console.log('[CLIENT GATEWAY] Token mancante nell\'header');
             return res.status(401).json({ 
                 error: 'Token non valido',
                 message: 'Formato del token non corretto'

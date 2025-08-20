@@ -81,7 +81,7 @@ class MigrationRunner {
     getMigrationFiles() {
         try {
             if (!fs.existsSync(MIGRATIONS_DIR)) {
-                console.log('⚠️  Cartella migrations non trovata:', MIGRATIONS_DIR);
+                console.log(' Cartella migrations non trovata:', MIGRATIONS_DIR);
                 return [];
             }
 
@@ -185,7 +185,7 @@ class MigrationRunner {
     // Esegue tutte le migrazioni
     async runAllMigrations() {
         try {
-            console.log('🚀 Avvio esecuzione migrazioni...\n');
+            console.log('Avvio esecuzione migrazioni...\n');
 
             await this.connect();
             await this.createMigrationsTable();
@@ -251,7 +251,7 @@ class MigrationRunner {
                 executedResult.rows.map(row => [row.filename, row.executed_at])
             );
 
-            console.log('\n📋 STATO MIGRAZIONI:\n');
+            console.log('\nSTATO MIGRAZIONI:\n');
             console.log('File di migrazione | Stato | Data esecuzione');
             console.log(''.padEnd(70, '-'));
 

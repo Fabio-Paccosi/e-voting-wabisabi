@@ -12,12 +12,12 @@ class CoinJoinTriggerService {
         this.checkInterval = null;
         this.intervalMs = parseInt(process.env.COINJOIN_CHECK_INTERVAL) || 30000;
         this.coinJoinService = coinJoinServiceInstance;
-        console.log('🚀 [CoinJoin Service] Servizio inizializzato');
+        console.log('[CoinJoin Service] Servizio inizializzato');
     }
 
     start() {
         if (this.isRunning) {
-            console.log('⚠️ [CoinJoin Service] Servizio già in esecuzione');
+            console.log('[CoinJoin Service] Servizio già in esecuzione');
             return;
         }
 
@@ -46,7 +46,7 @@ class CoinJoinTriggerService {
             clearInterval(this.checkInterval);
             this.checkInterval = null;
         }
-        console.log('⏹️ [CoinJoin Service] Servizio fermato');
+        console.log('[CoinJoin Service] Servizio fermato');
     }
 
     async checkLoop() {
@@ -159,7 +159,7 @@ class CoinJoinTriggerService {
                     let candidateValue = await this.extractCandidateFromVote(vote);
                     
                     if (!candidateValue) {
-                        console.warn(`[CoinJoin] ⚠️ Impossibile estrarre candidato per voto ${vote.id}, salto`);
+                        console.warn(`[CoinJoin] Impossibile estrarre candidato per voto ${vote.id}, salto`);
                         continue;
                     }
 
@@ -171,7 +171,7 @@ class CoinJoinTriggerService {
                         aggregatedCommitments[candidateHash] = (aggregatedCommitments[candidateHash] || 0) + 1;
                         console.log(`[CoinJoin] Voto ${vote.id} processato per candidato ${candidate.name || candidateHash}`);
                     } else {
-                        console.warn(`[CoinJoin] ⚠️ Candidato non trovato per encoding ${candidateValue}, usando valore diretto`);
+                        console.warn(`[CoinJoin] Candidato non trovato per encoding ${candidateValue}, usando valore diretto`);
                         aggregatedCommitments[candidateValue] = (aggregatedCommitments[candidateValue] || 0) + 1;
                     }
                     

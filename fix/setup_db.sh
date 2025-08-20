@@ -20,16 +20,16 @@ fi
 echo ""
 
 # 3. Verifica variabili ambiente nei container
-echo "3. 🔧 VARIABILI AMBIENTE AUTH SERVICE:"
+echo "3. VARIABILI AMBIENTE AUTH SERVICE:"
 docker compose exec -T auth-service printenv | grep -E "^DB_|^NODE_ENV" || echo " Variabili DB mancanti"
 echo ""
 
-echo "4. 🔧 VARIABILI AMBIENTE VOTE SERVICE:"
+echo "4. VARIABILI AMBIENTE VOTE SERVICE:"
 docker compose exec -T vote-service printenv | grep -E "^DB_|^NODE_ENV" || echo " Variabili DB mancanti"
 echo ""
 
 # 5. Test API Health  
-echo "5. 🏥 TEST API HEALTH:"
+echo "5. TEST API HEALTH:"
 for service in 3001:api-gateway 3002:auth-service 3003:vote-service; do
     port=$(echo $service | cut -d: -f1)
     name=$(echo $service | cut -d: -f2)

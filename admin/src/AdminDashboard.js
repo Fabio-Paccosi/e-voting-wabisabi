@@ -53,6 +53,14 @@ const AdminDashboard = () => {
     }
   });
 
+  const [resultsData, setResultsData] = useState({
+    results: [],
+    election: null,
+    statistics: null,
+    loading: false,
+    error: null
+  });
+
   // API Calls
   const fetchElections = async () => {
     try {
@@ -344,9 +352,302 @@ const AdminDashboard = () => {
     }
   };
 
-  const showResults = async (electionId) =>{
-    alert("In sviluppo")
-  };  
+  const showResults = async (electionId) => {
+    try {
+      // Apri il modal e imposta lo stato di loading
+      setModalType('showResults');
+      setShowModal(true);
+      setResultsData(prev => ({
+        ...prev,
+        loading: true,
+        error: null,
+        results: [],
+        election: null,
+        statistics: null
+      }));
+  
+      // Carica i risultati dell'elezione
+      const response = await fetch(`${API_BASE_URL}/elections/${electionId}/results`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+  
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Errore nel caricamento dei risultati');
+      }
+  
+      const data = await response.json();
+      
+      setResultsData({
+        results: data.results || [],
+        election: data.election || null,
+        statistics: data.statistics || null,
+        loading: false,
+        error: null
+      });
+  
+    } catch (err) {
+      console.error('Errore caricamento risultati:', err);
+      setResultsData(prev => ({
+        ...prev,
+        loading: false,
+        error: err.message
+      }));
+    }
+  };
+  
+  // Funzioni helper per i calcoli dei risultati
+  const getTotalVotes = (results) => {
+    return results.reduce((total, candidate) => {
+      const votes = candidate.totalVotesReceived || candidate.votes || 0;
+      return total + votes;
+    }, 0);
+  };
+  
+  const getWinner = (results) => {
+    if (results.length === 0) return null;
+    return results.reduce((winner, candidate) => {
+      const candidateVotes = candidate.totalVotesReceived || candidate.votes || 0;
+      const winnerVotes = winner.totalVotesReceived || winner.votes || 0;
+      return candidateVotes > winnerVotes ? candidate : winner;
+    });
+  };
+  
+  const formatPercentage = (votes, total) => {
+    if (total === 0) return '0%';
+    return `${((votes / total) * 100).toFixed(1)}%`;
+  };
+  
+  // Aggiungi questo componente per il modal dei risultati all'interno del render
+  const renderResultsModal = () => {
+    if (modalType !== 'showResults') return null;
+  
+    const { results, election, statistics, loading, error } = resultsData;
+    const totalVotes = getTotalVotes(results);
+    const winner = getWinner(results);
+  
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="p-6">
+            {/* Header */}
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-2xl font-bold text-gray-800">
+                {election ? `Risultati: ${election.title}` : 'Risultati Elezione'}
+              </h3>
+              <button
+                onClick={closeModal}
+                className="text-gray-400 hover:text-gray-600 text-2xl font-bold"
+              >
+                ×
+              </button>
+            </div>
+  
+            {loading && (
+              <div className="flex justify-center items-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <span className="ml-3">Caricamento risultati...</span>
+              </div>
+            )}
+  
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
+                <div className="flex items-center">
+                  <AlertCircle className="mr-2" size={20} />
+                  {error}
+                </div>
+              </div>
+            )}
+  
+            {!loading && !error && election && (
+              <>
+                {/* Info Elezione e Statistiche */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                  {/* Info Elezione */}
+                  <div className="bg-gray-50 rounded-lg p-6">
+                    <h4 className="text-lg font-semibold text-gray-800 mb-4">Informazioni Elezione</h4>
+                    <div className="space-y-3">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">ID Elezione:</span>
+                        <span className="font-medium">{election.id}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Stato:</span>
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                          election.status === 'completed' ? 'bg-blue-100 text-blue-800' :
+                          election.status === 'active' ? 'bg-green-100 text-green-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {election.status === 'completed' ? 'Completata' :
+                           election.status === 'active' ? 'Attiva' : election.status}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Inizio:</span>
+                        <span className="font-medium">
+                          {new Date(election.startDate).toLocaleDateString('it-IT')}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Fine:</span>
+                        <span className="font-medium">
+                          {new Date(election.endDate).toLocaleDateString('it-IT')}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+  
+                  {/* Statistiche */}
+                  <div className="bg-blue-50 rounded-lg p-6">
+                    <h4 className="text-lg font-semibold text-gray-800 mb-4">Statistiche Generali</h4>
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-600 flex items-center">
+                          <Vote className="mr-2" size={16} />
+                          Voti Totali:
+                        </span>
+                        <span className="text-2xl font-bold text-blue-600">{totalVotes}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 flex items-center">
+                          <Users className="mr-2" size={16} />
+                          Candidati:
+                        </span>
+                        <span className="font-medium">{results.length}</span>
+                      </div>
+                      {winner && (
+                        <div className="pt-3 border-t border-blue-200">
+                          <div className="text-gray-600 mb-2">🏆 Vincitore:</div>
+                          <div className="font-bold text-green-600">
+                            {winner.firstName} {winner.lastName}
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            {(winner.totalVotesReceived || winner.votes || 0)} voti 
+                            ({formatPercentage(winner.totalVotesReceived || winner.votes || 0, totalVotes)})
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+  
+                {/* Risultati Dettagliati */}
+                {results.length > 0 && (
+                  <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                    <div className="bg-gray-50 px-6 py-3 border-b border-gray-200">
+                      <h4 className="text-lg font-semibold text-gray-800">Risultati Dettagliati</h4>
+                    </div>
+                    
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Posizione
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Candidato
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Partito
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Voti
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Percentuale
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Indirizzo Bitcoin
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {results
+                            .sort((a, b) => {
+                              const aVotes = a.totalVotesReceived || a.votes || 0;
+                              const bVotes = b.totalVotesReceived || b.votes || 0;
+                              return bVotes - aVotes;
+                            })
+                            .map((candidate, index) => {
+                              const votes = candidate.totalVotesReceived || candidate.votes || 0;
+                              const isWinner = index === 0 && votes > 0;
+                              
+                              return (
+                                <tr key={candidate.id || index} className={isWinner ? 'bg-green-50' : ''}>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <div className="flex items-center">
+                                      {isWinner && <span className="text-yellow-500 mr-2">🏆</span>}
+                                      <span className={`text-sm font-medium ${isWinner ? 'text-green-600' : 'text-gray-900'}`}>
+                                        #{index + 1}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <div className="text-sm font-medium text-gray-900">
+                                      {candidate.firstName} {candidate.lastName}
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <span className="inline-flex px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
+                                      {candidate.party || 'Indipendente'}
+                                    </span>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <div className="text-sm font-bold text-gray-900">{votes}</div>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <div className="flex items-center">
+                                      <div className="text-sm font-medium text-gray-900 mr-2">
+                                        {formatPercentage(votes, totalVotes)}
+                                      </div>
+                                      <div className="flex-1 bg-gray-200 rounded-full h-2 max-w-20">
+                                        <div 
+                                          className={`h-2 rounded-full ${isWinner ? 'bg-green-500' : 'bg-blue-500'}`}
+                                          style={{ width: `${totalVotes > 0 ? (votes / totalVotes) * 100 : 0}%` }}
+                                        ></div>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <div className="text-xs font-mono text-gray-500 max-w-32 truncate" title={candidate.bitcoinAddress}>
+                                      {candidate.bitcoinAddress || 'N/A'}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+  
+                {/* Azioni */}
+                <div className="flex justify-end space-x-3 mt-6 pt-6 border-t border-gray-200">
+                  <button
+                    onClick={closeModal}
+                    className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
+                  >
+                    Chiudi
+                  </button>
+                </div>
+              </>
+            )}
+  
+            {!loading && !error && !election && (
+              <div className="text-center py-12">
+                <div className="text-gray-500 mb-2">Nessun dato disponibile</div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const openModal = (type, data = null) => {
     setModalType(type);
@@ -489,16 +790,6 @@ const AdminDashboard = () => {
                   </div>
                 </div>
                 <div className="flex space-x-2">
-                  <button
-                    onClick={() => openModal('editElection', election)}
-                    className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
-                    disabled={election.status === 'active' || election.status === 'completed'}
-                  >
-                    <Edit2 size={18} />
-                  </button>
-                  <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg">
-                    <Eye size={18} />
-                  </button>
                   {election.status === 'draft' && (
                     <button
                       onClick={() => activateElection(election.id)}
@@ -552,12 +843,14 @@ const AdminDashboard = () => {
                 <div className="bg-gray-50 p-3 rounded-lg">
                   <div className="flex items-center justify-between">
                     <span className="text-gray-600 text-sm">Whitelist</span>
-                    <button
-                      onClick={() => openModal('manageWhitelist', election)}
-                      className="text-blue-600 hover:text-blue-700"
-                    >
-                      <UserPlus size={16} />
-                    </button>
+                    {election.status === 'draft' && (
+                      <button
+                        onClick={() => openModal('manageWhitelist', election)}
+                        className="text-blue-600 hover:text-blue-700"
+                      >
+                        <UserPlus size={16} />
+                      </button>
+                    )}
                   </div>
                   <p className="text-2xl font-bold text-gray-800 mt-1">
                     {whitelist[election.id]?.length || 0}
@@ -724,6 +1017,22 @@ const AdminDashboard = () => {
       )}
     </div>
   );
+
+  const footerStyle = {
+    backgroundColor: "#1e293b",
+    color: "#94a3b8",
+    textAlign: "center",
+    padding: "1.5rem 0"
+  };
+  
+  const footer = () => (
+      <footer style={footerStyle}>
+        <div className="container">
+          <h1>🗳️ E-Voting WabiSabi</h1>
+          <p>Progetto di Tesi Magistrale di Fabio Paccosi</p>
+        </div>
+      </footer>
+  )
 
   const renderModal = () => {
     if (!showModal) return null;
@@ -1206,12 +1515,6 @@ const AdminDashboard = () => {
                 E-Voting WabiSabi Admin
               </h1>
             </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-500">Admin: admin@evoting.local</span>
-              <button className="text-gray-500 hover:text-gray-700">
-                <Settings size={20} />
-              </button>
-            </div>
           </div>
         </div>
       </div>
@@ -1248,6 +1551,7 @@ const AdminDashboard = () => {
               </button>
               <button
                 onClick={() => setActiveTab('monitoring')}
+                hidden={true}
                 className={`py-3 px-1 border-b-2 font-medium text-sm ${
                   activeTab === 'monitoring'
                     ? 'border-blue-500 text-blue-600'
@@ -1275,7 +1579,11 @@ const AdminDashboard = () => {
         </div>
       </div>
 
+      {footer()}
+
       {renderModal()}
+      {showModal && modalType === 'showResults' && renderResultsModal()}
+
     </div>
   );
 };

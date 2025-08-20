@@ -1,4 +1,4 @@
-console.log('🔗 Inizializzazione database config...');
+console.log('Inizializzazione database config...');
 
 const { Sequelize, DataTypes } = require('sequelize');
 
@@ -528,11 +528,11 @@ const getQuickStats = async () => {
 // Inizializzazione database
 const initializeDatabase = async () => {
     try {
-        console.log('🔗 Connessione al database PostgreSQL...');
+        console.log('Connessione al database PostgreSQL...');
         await sequelize.authenticate();
         console.log(' [VOTE CONFIG] Connessione database stabilita');
         
-        console.log('📋 [VOTE CONFIG] Sincronizzazione modelli...');
+        console.log('[VOTE CONFIG] Sincronizzazione modelli...');
         await sequelize.sync({ alter: false });
         console.log(' [VOTE CONFIG] Modelli sincronizzati');
         
@@ -543,7 +543,7 @@ const initializeDatabase = async () => {
     }
 };
 
-console.log('📦 Database config loaded');
+console.log(' Database config loaded');
 
 // ====================
 // EXPORT

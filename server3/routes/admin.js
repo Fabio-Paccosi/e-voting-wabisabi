@@ -22,7 +22,7 @@ const {
 bitcoinjs.initEccLib(ecc);
 
 // Inizializza database all'avvio
-console.log('🔗 [VOTE ADMIN] Inizializzazione database...');
+console.log('[VOTE ADMIN] Inizializzazione database...');
 initializeDatabase()
     .then(success => {
         if (success) {
@@ -112,7 +112,7 @@ router.get('/elections', adminAuth, async (req, res) => {
     try {
         const { status = 'all' } = req.query;
         
-        console.log('🗳️ [VOTE ADMIN] Caricamento elezioni dal database:', { status });
+        console.log('[VOTE ADMIN] Caricamento elezioni dal database:', { status });
         
         const where = {};
         if (status !== 'all') {
@@ -793,6 +793,127 @@ router.get('/activity', adminAuth, async (req, res) => {
     }
 });
 
-console.log('[VOTE ADMIN ROUTES] ✓ Route admin vote FIXED caricate');
+// GET /api/admin/elections/:id/results - Risultati elezione per admin (accesso completo)
+router.get('/elections/:id/results', adminAuth, async (req, res) => {
+    try {
+        const { id: electionId } = req.params;
+        
+        console.log(`[VOTE SERVICE] [ADMIN] Richiesta risultati elezione ${electionId}`);
+
+        // 1. Trova l'elezione con candidati (includi ElectionWhitelist se disponibile)
+        const election = await Election.findByPk(electionId, {
+            include: [
+                {
+                    model: Candidate,
+                    as: 'candidates',
+                    attributes: ['id', 'name', 'firstName', 'lastName', 'party', 'voteEncoding', 'bitcoinAddress', 'totalVotesReceived']
+                }
+            ]
+        });
+
+        if (!election) {
+            return res.status(404).json({ 
+                error: 'Elezione non trovata' 
+            });
+        }
+
+        console.log(`[VOTE SERVICE] [ADMIN] Elezione trovata: ${election.title} (Status: ${election.status})`);
+
+        // 2. L'admin può vedere i risultati in qualsiasi stato (a differenza degli utenti normali)
+        // Costruisci i risultati con i voti ricevuti da ogni candidato
+        const results = election.candidates.map(candidate => ({
+            id: candidate.id,
+            name: candidate.name || `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim(),
+            firstName: candidate.firstName,
+            lastName: candidate.lastName,
+            party: candidate.party,
+            voteEncoding: candidate.voteEncoding,
+            bitcoinAddress: candidate.bitcoinAddress,
+            votes: candidate.totalVotesReceived || 0,
+            totalVotesReceived: candidate.totalVotesReceived || 0
+        }));
+
+        // 3. Calcola statistiche avanzate per admin
+        const totalVotes = results.reduce((sum, candidate) => sum + (candidate.totalVotesReceived || 0), 0);
+        const winner = results.reduce((max, candidate) => 
+            (candidate.totalVotesReceived || 0) > (max?.totalVotesReceived || 0) ? candidate : max, null);
+
+        // 4. Ordina per numero di voti (decrescente)
+        results.sort((a, b) => (b.totalVotesReceived || 0) - (a.totalVotesReceived || 0));
+
+        // 5. Ottieni statistiche aggiuntive per admin (se ElectionWhitelist è disponibile)
+        let whitelistCount = 0;
+        let votedCount = 0;
+        let participationRate = 0;
+
+        try {
+            // Verifica se ElectionWhitelist esiste nel progetto
+            const { ElectionWhitelist } = require('../models');
+            
+            whitelistCount = await ElectionWhitelist.count({
+                where: { electionId: electionId }
+            });
+
+            votedCount = await ElectionWhitelist.count({
+                where: { 
+                    electionId: electionId,
+                    hasVoted: true 
+                }
+            });
+
+            participationRate = whitelistCount > 0 ? ((votedCount / whitelistCount) * 100).toFixed(1) : 0;
+        } catch (error) {
+            console.log(`[VOTE SERVICE] [ADMIN] ElectionWhitelist non disponibile: ${error.message}`);
+            // Usa totalVotes come fallback
+            votedCount = totalVotes;
+            participationRate = 'N/A';
+        }
+
+        console.log(`[VOTE SERVICE] [ADMIN] Risultati calcolati: ${totalVotes} voti totali, ${votedCount}/${whitelistCount} partecipazione (${participationRate}%)`);
+
+        res.json({
+            success: true,
+            election: {
+                id: election.id,
+                title: election.title,
+                description: election.description,
+                startDate: election.startDate,
+                endDate: election.endDate,
+                status: election.status,
+                isActive: election.isActive,
+                coinjoinEnabled: election.coinjoinEnabled,
+                coinjoinTrigger: election.coinjoinTrigger,
+                votingMethod: election.votingMethod,
+                blockchainNetwork: election.blockchainNetwork,
+                createdAt: election.createdAt,
+                updatedAt: election.updatedAt
+            },
+            results: results,
+            statistics: {
+                totalVotes: totalVotes,
+                totalCandidates: results.length,
+                winner: winner,
+                participantCount: votedCount,
+                whitelistCount: whitelistCount,
+                participationRate: participationRate !== 'N/A' ? parseFloat(participationRate) : null,
+                completedAt: election.status === 'completed' ? election.updatedAt : null
+            },
+            adminInfo: {
+                canViewResults: true,
+                accessLevel: 'admin',
+                note: 'Gli amministratori possono visualizzare i risultati in qualsiasi momento'
+            }
+        });
+
+    } catch (error) {
+        console.error('[VOTE SERVICE] [ADMIN] Errore caricamento risultati:', error);
+        res.status(500).json({ 
+            error: 'Errore nel caricamento dei risultati',
+            details: error.message 
+        });
+    }
+});
+
+console.log('[VOTE ADMIN ROUTES] Route admin vote FIXED caricate');
 
 module.exports = router;

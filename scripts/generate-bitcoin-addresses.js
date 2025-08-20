@@ -99,7 +99,7 @@ class BitcoinAddressGenerator {
     // Genera indirizzi per tutti gli utenti che non ne hanno uno
     async generateForAllUsers() {
         try {
-            console.log('🚀 Avvio generazione indirizzi Bitcoin...\n');
+            console.log('Avvio generazione indirizzi Bitcoin...\n');
 
             await this.connect();
 
@@ -184,7 +184,7 @@ class BitcoinAddressGenerator {
             }
 
             if (user.bitcoinAddress) {
-                console.log(`⚠️  L'utente ${email} ha già un indirizzo Bitcoin: ${user.bitcoinAddress}`);
+                console.log(` L'utente ${email} ha già un indirizzo Bitcoin: ${user.bitcoinAddress}`);
                 console.log('Vuoi sovrascriverlo? (questo script non sovrascrive automaticamente)');
                 return;
             }
@@ -213,7 +213,7 @@ class BitcoinAddressGenerator {
                 order: [['createdAt', 'ASC']]
             });
 
-            console.log('\n📋 INDIRIZZI BITCOIN UTENTI:\n');
+            console.log('\nINDIRIZZI BITCOIN UTENTI:\n');
             console.log('Email'.padEnd(30) + ' | Nome'.padEnd(20) + ' | Indirizzo Bitcoin');
             console.log(''.padEnd(80, '-'));
 

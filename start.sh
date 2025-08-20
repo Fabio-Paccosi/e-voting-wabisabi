@@ -266,7 +266,7 @@ start_system() {
         fi
     fi
     
-    print_msg "Sistema avviato! 🚀"
+    print_msg "Sistema avviato! "
     echo ""
     echo "Accessi:"
     echo "- API Gateway: http://localhost:3001"

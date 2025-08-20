@@ -321,7 +321,7 @@ router.post('/submit', async (req, res) => {
         console.log(`[VOTING]  Voti pending in sessione ${votingSession.id}: ${pendingVotes}`);
 
         if (pendingVotes >= WABISABI_CONFIG.COINJOIN_THRESHOLD) {
-            console.log(`[VOTING] 🚀 Soglia CoinJoin raggiunta, avvio aggregazione...`);
+            console.log(`[VOTING] Soglia CoinJoin raggiunta, avvio aggregazione...`);
             
             // Trigger CoinJoin in background
             CoinJoinService.triggerCoinJoin(votingSession.id, electionId)

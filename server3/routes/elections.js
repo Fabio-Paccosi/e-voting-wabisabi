@@ -16,7 +16,7 @@ const {
 const { Op } = require('sequelize');
 
 // Inizializza database all'avvio
-console.log('🔗 [VOTE SERVICE] Inizializzazione database...');
+console.log('[VOTE SERVICE] Inizializzazione database...');
 initializeDatabase()
     .then(success => {
         if (success) {
@@ -70,7 +70,7 @@ const extractUserFromHeaders = async (req, res, next) => {
 router.get('/', extractUserFromHeaders, async (req, res) => {
     try {
         const userId = req.user.id;
-        console.log(`[VOTE SERVICE] 📋 Richiesta elezioni disponibili per utente ${userId}`);
+        console.log(`[VOTE SERVICE] Richiesta elezioni disponibili per utente ${userId}`);
         
         // 1. Trova tutte le elezioni attive nel periodo corrente
         const now = new Date();
@@ -368,7 +368,7 @@ router.get('/:id', extractUserFromHeaders, async (req, res) => {
         const { id: electionId } = req.params;
         const userId = req.user.id;
         
-        console.log(`[VOTE SERVICE] 📋 Richiesta dettagli elezione ${electionId} per utente ${userId}`);
+        console.log(`[VOTE SERVICE] Richiesta dettagli elezione ${electionId} per utente ${userId}`);
 
         // 1. Trova l'elezione con candidati
         const election = await Election.findByPk(electionId, {
@@ -467,17 +467,8 @@ router.post('/:id/vote', extractUserFromHeaders, async (req, res) => {
         const userId = req.user.id;
         const { credential, commitment, zkProof, candidateId } = req.body;
         
-        console.log(`[VOTE SERVICE] 🗳️ Ricevuto voto per elezione ${electionId} da utente ${userId}`);
+        console.log(`[VOTE SERVICE] Ricevuto voto per elezione ${electionId} da utente ${userId}`);
 
-        // TODO: Implementare logica di processamento voto
-        // 1. Validare credenziale KVAC
-        // 2. Verificare zero-knowledge proof
-        // 3. Validare commitment
-        // 4. Marcare utente come votato
-        // 5. Salvare voto anonimo
-        // 6. Trigger CoinJoin se necessario
-
-        // Per ora risposta mock
         res.json({
             success: true,
             message: 'Voto ricevuto e in elaborazione',

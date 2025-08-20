@@ -203,7 +203,7 @@ export const authAPI = {
       authTokenUtils.removeToken();
       
     } catch (error) {
-      console.error('[API] ⚠️ Errore durante logout:', error.message);
+      console.error('[API] Errore durante logout:', error.message);
       // Rimuovi comunque il token locale
       authTokenUtils.removeToken();
     }

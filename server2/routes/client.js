@@ -18,7 +18,7 @@ const { Op } = require('sequelize');
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
 // Inizializza database all'avvio
-console.log('🔗 [AUTH CLIENT] Inizializzazione database...');
+console.log('[AUTH CLIENT] Inizializzazione database...');
 initializeDatabase()
     .then(success => {
         if (success) {
@@ -129,7 +129,7 @@ router.post('/auth/login', async (req, res) => {
 
         // Verifica se può votare
         if (whitelistEntry.hasVoted) {
-            console.log('⚠️ [AUTH CLIENT] Utente ha già votato:', user.email);
+            console.log('[AUTH CLIENT] Utente ha già votato:', user.email);
             return res.status(403).json({ 
                 error: 'Hai già espresso il tuo voto' 
             });
@@ -324,7 +324,7 @@ router.get('/auth/profile', async (req, res) => {
             }]
         });
 
-        console.log('👤 [AUTH CLIENT] Profilo caricato per:', user.email);
+        console.log('[AUTH CLIENT] Profilo caricato per:', user.email);
 
         res.json({
             user: {
@@ -459,7 +459,7 @@ router.post('/auth/verify', async (req, res) => {
 router.get('/whitelist/check', async (req, res) => {
     try {
         const { codice_fiscale, email, electionId } = req.query;
-        console.log('📋 [AUTH CLIENT] Verifica whitelist per:', codice_fiscale || email);
+        console.log('[AUTH CLIENT] Verifica whitelist per:', codice_fiscale || email);
 
         if (!codice_fiscale && !email) {
             return res.status(400).json({ 

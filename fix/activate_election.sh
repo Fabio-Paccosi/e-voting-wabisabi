@@ -1,10 +1,10 @@
 #!/bin/bash
 # Fix per route mancante /api/admin/elections/:id/activate
 
-echo "🔧 Fix route activate election mancante..."
+echo "Fix route activate election mancante..."
 
 # 1. BACKUP del file API Gateway
-echo "📋 Backup del file admin.js..."
+echo "Backup del file admin.js..."
 cp server1/routes/admin.js server1/routes/admin.js.backup.activate
 
 # 2. AGGIUNGI la route activate nell'API Gateway
@@ -206,7 +206,7 @@ if command -v docker-compose &> /dev/null; then
 elif command -v docker &> /dev/null && docker compose version &> /dev/null; then
     docker compose restart api-gateway vote-service
 else
-    echo "⚠️ Docker Compose non trovato - riavvia manualmente i servizi"
+    echo "Docker Compose non trovato - riavvia manualmente i servizi"
     echo "   API Gateway: server1"
     echo "   Vote Service: server3"
 fi
@@ -239,7 +239,7 @@ fi
 echo ""
 echo "🎉 Fix completato!"
 echo ""
-echo "📋 Riassunto modifiche:"
+echo "Riassunto modifiche:"
 echo "   ✓ Aggiunta route POST /api/admin/elections/:id/activate all'API Gateway"
 echo "   ✓ Aggiunta route POST /api/admin/elections/:id/deactivate all'API Gateway"
 echo "   ✓ Verificate/aggiunte route nel Vote Service"

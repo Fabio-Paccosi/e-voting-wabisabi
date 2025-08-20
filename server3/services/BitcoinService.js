@@ -6,8 +6,8 @@ const axios = require('axios');
 
 class BitcoinService {
     constructor() {
-        // 🔍 DEBUG: Verifica variabili d'ambiente
-        console.log('[BITCOIN] 🔍 LETTURA VARIABILI D\'AMBIENTE:');
+        // DEBUG: Verifica variabili d'ambiente
+        console.log('[BITCOIN] LETTURA VARIABILI D\'AMBIENTE:');
         console.log(`[BITCOIN] - NODE_ENV: ${process.env.NODE_ENV}`);
         console.log(`[BITCOIN] - BITCOIN_NETWORK: ${process.env.BITCOIN_NETWORK}`);
         console.log(`[BITCOIN] - BITCOIN_RPC_HOST: ${process.env.BITCOIN_RPC_HOST}`);
@@ -37,8 +37,8 @@ class BitcoinService {
 
         this.rpc = this.rpcConfig[this.network];
 
-        // 🔍 DEBUG: Verifica configurazione finale
-        console.log('[BITCOIN] 🔧 CONFIGURAZIONE FINALE:');
+        // DEBUG: Verifica configurazione finale
+        console.log('[BITCOIN] CONFIGURAZIONE FINALE:');
         console.log(`[BITCOIN] - Network: ${this.network}`);
         console.log(`[BITCOIN] - Host: ${this.rpc.host}`);
         console.log(`[BITCOIN] - Port: ${this.rpc.port}`);
@@ -64,8 +64,8 @@ class BitcoinService {
         this.isRpcAvailable = false;
         this.testRpcConnection();
         
-        console.log(`[BITCOIN] 🚀 Inizializzato per rete: ${this.network}`);
-        console.log(`[BITCOIN] 🔧 RPC: ${this.rpc.host}:${this.rpc.port}`);
+        console.log(`[BITCOIN] Inizializzato per rete: ${this.network}`);
+        console.log(`[BITCOIN] RPC: ${this.rpc.host}:${this.rpc.port}`);
     }
 
     /**
@@ -97,7 +97,7 @@ class BitcoinService {
             }
         } catch (error) {
             this.isRpcAvailable = false;
-            console.log(`[BITCOIN] ⚠️ RPC non disponibile: ${error.message}`);
+            console.log(`[BITCOIN] RPC non disponibile: ${error.message}`);
             console.log(`[BITCOIN]  Userò API pubbliche come fallback`);
         }
     }
@@ -130,7 +130,7 @@ class BitcoinService {
             });
     
             if (response.data.error) {
-                // 🔍 LOG DETTAGLIATO DELL'ERRORE
+                // LOG DETTAGLIATO DELL'ERRORE
                 console.error(`[BITCOIN] ❌ RPC Error Details:`, JSON.stringify(response.data.error, null, 2));
                 throw new Error(`RPC Error: ${response.data.error.message} (Code: ${response.data.error.code})`);
             }
@@ -163,7 +163,7 @@ class BitcoinService {
         try {
             console.log(`[BITCOIN] 📡 Inizio broadcast transazione...`);
             console.log(`[BITCOIN] 📊 RawTx length: ${rawTx.length} chars`);
-            console.log(`[BITCOIN] 🔍 RawTx preview: ${rawTx.substring(0, 64)}...`);
+            console.log(`[BITCOIN] RawTx preview: ${rawTx.substring(0, 64)}...`);
 
             // BYPASS per ambiente development
             if (process.env.NODE_ENV === 'development' || process.env.BITCOIN_MOCK_BROADCAST === 'true') {
@@ -173,7 +173,7 @@ class BitcoinService {
 
             // Validazione
             if (!this.isValidRawTransactionRelaxed(rawTx)) {
-                console.log('[BITCOIN] ⚠️ Validazione fallita, usando fallback mock');
+                console.log('[BITCOIN] Validazione fallita, usando fallback mock');
                 return this.mockBroadcast(rawTx);
             }
 
@@ -182,7 +182,7 @@ class BitcoinService {
             // 🎯 NUOVO: Test RPC se non disponibile + debug configurazione
             if (!this.isRpcAvailable) {
                 console.log('[BITCOIN] 🔄 RPC non disponibile, ritesto connessione...');
-                console.log(`[BITCOIN] 🔧 Config RPC: ${this.rpc.host}:${this.rpc.port} (user: ${this.rpc.username})`);
+                console.log(`[BITCOIN] Config RPC: ${this.rpc.host}:${this.rpc.port} (user: ${this.rpc.username})`);
                 
                 try {
                     await this.testRpcConnection();
@@ -334,13 +334,13 @@ class BitcoinService {
     
             // Lunghezza minima ragionevole per una transazione Bitcoin (~ 60 bytes = 120 hex chars)
             if (rawTx.length < 120) {
-                console.log(`[BITCOIN] ⚠️ RawTx molto corta: ${rawTx.length} chars`);
+                console.log(`[BITCOIN] RawTx molto corta: ${rawTx.length} chars`);
                 return false;
             }
     
             // Lunghezza massima ragionevole (~ 100KB = 200K hex chars)  
             if (rawTx.length > 200000) {
-                console.log(`[BITCOIN] ⚠️ RawTx molto lunga: ${rawTx.length} chars`);
+                console.log(`[BITCOIN] RawTx molto lunga: ${rawTx.length} chars`);
                 return false;
             }
     
@@ -366,7 +366,7 @@ class BitcoinService {
             
             // Version dovrebbe essere 01000000 (v1) o 02000000 (v2) in little endian
             if (version !== '01000000' && version !== '02000000') {
-                console.log(`[BITCOIN] ⚠️ Version non standard: ${version}`);
+                console.log(`[BITCOIN] Version non standard: ${version}`);
                 // Non blocchiamo per version non standard, solo avvisiamo
             }
 

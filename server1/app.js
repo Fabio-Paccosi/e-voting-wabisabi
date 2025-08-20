@@ -4,8 +4,8 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-console.log('🚀 [API GATEWAY] Avvio in corso...');
-console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+console.log('[API GATEWAY] Avvio in corso...');
+console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 
 const { initializeDatabase } = require('./shared/database_config').getModelsForService('gateway');
 
@@ -154,11 +154,11 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`🌟 [API GATEWAY] Server avviato su porta ${PORT}`);
-    console.log(`📋 Route disponibili:`);
-    console.log(`   👨‍💼 Admin: http://localhost:${PORT}/api/admin/*`);
-    console.log(`   👤 Client: http://localhost:${PORT}/api/*`);
-    console.log(`   🏥 Health: http://localhost:${PORT}/api/health`);
+    console.log(`[API GATEWAY] Server avviato su porta ${PORT}`);
+    console.log(`Route disponibili:`);
+    console.log(`   Admin: http://localhost:${PORT}/api/admin/*`);
+    console.log(`   Client: http://localhost:${PORT}/api/*`);
+    console.log(`   Health: http://localhost:${PORT}/api/health`);
 });
 
 module.exports = app;
