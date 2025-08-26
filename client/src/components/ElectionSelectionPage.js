@@ -70,6 +70,10 @@ const ElectionSelectionPage = () => {
     );
   }
 
+  const viewResults = () => {
+    navigate('/results');
+  };
+
   return (
     <div className="election-selection-page">
       <div className="page-header">
@@ -78,6 +82,10 @@ const ElectionSelectionPage = () => {
             <h2>Benvenuto/a, {user?.firstName} {user?.lastName}</h2>
             <p>Seleziona un'elezione per esprimere il tuo voto anonimo</p>
           </div>
+          <button onClick={viewResults} className="results-button">
+            <List size={20} />
+            Risultati
+          </button>
           <button onClick={handleLogout} className="logout-button">
             <LogOut size={20} />
             Esci

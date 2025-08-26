@@ -326,6 +326,23 @@ body {
   background: #dc2626;
 }
 
+.results-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #10b981;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.results-button:hover {
+  background: #0d875e;
+}
+
 .elections-container {
   margin-bottom: 3rem;
 }

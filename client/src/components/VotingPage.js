@@ -188,11 +188,11 @@ const VotingPage = () => {
         bitcoinAddress: addressData.address
       });
       
-      // *** CRUCIALE: SALVA VOTE ID PER RICEVUTA ***
+      // Salva il VOTE ID per la ricevuta
       const submittedVoteId = voteSubmissionResult.voteId;
       setVoteId(submittedVoteId);
       
-      console.log('[VOTING] ✓ Voto anonimo inviato, Vote ID:', submittedVoteId);
+      console.log('[VOTING] Voto anonimo inviato, Vote ID:', submittedVoteId);
       
       // Aggiorna il contesto voting
       setVoting(prev => ({
@@ -214,7 +214,6 @@ const VotingPage = () => {
       const completionResult = await wabiSabiVoting.waitForCoinJoinCompletion(submittedVoteId);
       console.log('[VOTING] ✓ Processo completato:', completionResult);
 
-      // *** CRUCIALE: SALVA TRANSACTION ID PER RICEVUTA ***
       if (completionResult.transactionId) {
         setTransactionId(completionResult.transactionId);
         
@@ -268,14 +267,12 @@ const VotingPage = () => {
   const showReceiptData = () => {
     if (voteId && transactionId) {
       // Mostra dati debug - sarà sostituito dal componente VoteReceipt
-      alert(`Dati Ricevuta Debug:
-Vote ID: ${voteId}
-Transaction ID: ${transactionId}
-Submitted: ${voteSubmittedAt?.toLocaleString('it-IT')}
-Election: ${election?.title}
-
-✅ Backend corretto: gli endpoint /voting/receipt/${voteId} e /voting/verify/${transactionId} sono ora disponibili.
-🔧 Prossimo passo: sostituire questo alert con il componente VoteReceipt completo.`);
+      alert(`Dati Ricevuta:
+        Vote ID: ${voteId}
+        Transaction ID: ${transactionId}
+        Submitted: ${voteSubmittedAt?.toLocaleString('it-IT')}
+        Election: ${election?.title}
+      `);
     } else {
       alert('Dati ricevuta non ancora disponibili. Voto ID: ' + (voteId || 'N/A') + ', Transaction ID: ' + (transactionId || 'N/A'));
     }
@@ -354,7 +351,7 @@ Election: ${election?.title}
       </div>
 
       {/* ERROR ALERT - MANTIENI ESISTENTE */}
-      {error && (
+      {error && !transactionId && (
         <div className="alert alert-error">
           <AlertCircle size={20} />
           {error}
@@ -451,14 +448,20 @@ Election: ${election?.title}
 
           {/* MOSTRA TRANSACTION ID SE DISPONIBILE */}
           {transactionId && (
-            <div className="transaction-info">
-              <div className="info-card">
+            <div className="completion-details">
+              <div className="info-card detail-card">
                 <Bitcoin size={24} />
                 <div>
                   <h4>Transaction ID Blockchain</h4>
-                  <p className="transaction-id">{transactionId.substring(0, 30)}...</p>
+                  <p className="transaction-id">{transactionId}</p>
                   <p className="text-sm text-gray-600">
-                    Questo ID identifica la sessione di voto aggregata sulla blockchain
+                    <b>Questo ID identifica la sessione di voto aggregata sulla Blockchain</b>
+                  </p>
+                  <br></br>
+                  <p>
+                    Vote ID: ${voteId}
+                    Inviato in data: ${voteSubmittedAt?.toLocaleString('it-IT')}
+                    Elezione: ${election?.title}
                   </p>
                 </div>
               </div>
