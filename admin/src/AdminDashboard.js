@@ -408,12 +408,10 @@ const AdminDashboard = () => {
   };
   
   const getWinner = (results) => {
-    if (results.length === 0) return null;
-    return results.reduce((winner, candidate) => {
-      const candidateVotes = candidate.totalVotesReceived || candidate.votes || 0;
-      const winnerVotes = winner.totalVotesReceived || winner.votes || 0;
-      return candidateVotes > winnerVotes ? candidate : winner;
-    });
+    if (results.length === 0) return [];
+  
+    const maxVotes = Math.max(...results.map(c => c.totalVotesReceived || c.votes || 0));
+    return results.filter(c => (c.totalVotesReceived || c.votes || 0) === maxVotes);
   };
   
   const formatPercentage = (votes, total) => {
@@ -518,16 +516,22 @@ const AdminDashboard = () => {
                         </span>
                         <span className="font-medium">{results.length}</span>
                       </div>
-                      {winner && (
+                      {winner && winner.length > 0 && (
                         <div className="pt-3 border-t border-blue-200">
-                          <div className="text-gray-600 mb-2">🏆 Vincitore:</div>
-                          <div className="font-bold text-green-600">
-                            {winner.firstName} {winner.lastName}
+                          <div className="text-gray-600 mb-2">
+                            {winner.length > 1 ? "Pareggio:" : "Vincitore:"}
                           </div>
-                          <div className="text-sm text-gray-600">
-                            {(winner.totalVotesReceived || winner.votes || 0)} voti 
-                            ({formatPercentage(winner.totalVotesReceived || winner.votes || 0, totalVotes)})
-                          </div>
+                          {winner.map((w, index) => (
+                            <div key={index} className="mb-2">
+                              <div className="font-bold text-green-600">
+                                {w.firstName} {w.lastName}
+                              </div>
+                              <div className="text-sm text-gray-600">
+                                {(w.totalVotesReceived || w.votes || 0)} voti 
+                                ({formatPercentage(w.totalVotesReceived || w.votes || 0, totalVotes)})
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>

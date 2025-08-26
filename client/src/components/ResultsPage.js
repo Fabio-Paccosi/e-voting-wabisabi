@@ -107,10 +107,11 @@ const ResultsPage = () => {
   };
 
   const getWinner = () => {
-    if (results.length === 0) return null;
-    return results.reduce((winner, candidate) => 
-      candidate.votes > winner.votes ? candidate : winner
-    );
+    if (results.length === 0) return [];
+  
+    const maxVotes = Math.max(...results.map(c => c.votes));
+  
+    return results.filter(c => c.votes === maxVotes);
   };
 
   const formatPercentage = (votes, total) => {
@@ -199,16 +200,20 @@ const ResultsPage = () => {
               </div>
             </div>
             
-            {winner && (
-              <div className="winner-card">
-                <TrendingUp size={24} />
-                <div className="winner-info">
-                  <h4>Vincitore</h4>
-                  <p>{winner.firstName} {winner.lastName}</p>
-                  <span>{winner.votes} voti ({formatPercentage(winner.votes, totalVotes)})</span>
-                </div>
-              </div>
-            )}
+            <div>
+                {winner.length > 0 && winner.map((w, i) => (
+                    <div key={i} className="winner-card">
+                        <TrendingUp size={24} />
+                        <div className="winner-info">
+                        <h4>Vincitore{winner.length > 1 ? ' (pareggio)' : ''}</h4>
+                        <p>{w.firstName} {w.lastName}</p>
+                        <span>
+                            {w.votes} voti ({formatPercentage(w.votes, totalVotes)})
+                        </span>
+                        </div>
+                    </div>
+                    ))}
+             </div>
           </div>
 
           {error && (
