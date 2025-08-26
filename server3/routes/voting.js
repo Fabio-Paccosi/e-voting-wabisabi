@@ -357,20 +357,26 @@ router.get('/status/:voteId', async (req, res) => {
     try {
         const { voteId } = req.params;
 
-        console.log(`[VOTING]  Controllo stato voto ${voteId}`);
+        console.log(`[VOTING] 📋 Controllo stato voto ${voteId}`);
 
-        //  CORREZIONE 1: Usa l'alias corretto 'votingSession'
+        // CORREZIONE: Usa l'alias corretto e evita accesso diretto a createdAt
         const vote = await Vote.findByPk(voteId, {
             include: [
                 {
                     model: VotingSession,
-                    as: 'votingSession', 
+                    as: 'session', // Usa alias corretto dal database config
                     include: [
                         {
                             model: Transaction,
-                            as: 'sessionTransactions',
+                            as: 'sessionTransactions', 
                             where: { type: 'coinjoin' },
-                            required: false
+                            required: false,
+                            // *** CORREZIONE: Specifica attributi espliciti ***
+                            attributes: [
+                                'id', 'txId', 'type', 'confirmations', 
+                                'blockHeight', 'blockHash', 'metadata',
+                                'createdAt', 'updatedAt' // Usa attributi Sequelize, non colonne DB
+                            ]
                         }
                     ]
                 }
@@ -383,7 +389,7 @@ router.get('/status/:voteId', async (req, res) => {
 
         const response = {
             voteId: vote.id,
-            status: vote.status || 'pending',  //  Aggiungi fallback
+            status: vote.status || 'pending',
             submittedAt: vote.submittedAt,
             processedAt: vote.processedAt,
             sessionId: vote.sessionId
@@ -391,8 +397,10 @@ router.get('/status/:voteId', async (req, res) => {
 
         // Se il voto è stato processato, includi dettagli transazione
         if (vote.transactionId) {
+            // *** CORREZIONE: Cerca transazione direttamente senza join complessi ***
             const transaction = await Transaction.findOne({
-                where: { txId: vote.transactionId }
+                where: { txId: vote.transactionId },
+                attributes: ['id', 'txId', 'confirmations', 'blockHeight', 'blockHash', 'createdAt']
             });
 
             if (transaction) {
@@ -400,7 +408,8 @@ router.get('/status/:voteId', async (req, res) => {
                     txId: transaction.txId,
                     confirmations: transaction.confirmations,
                     blockHeight: transaction.blockHeight,
-                    blockHash: transaction.blockHash
+                    blockHash: transaction.blockHash,
+                    broadcastedAt: transaction.createdAt // Usa attributo Sequelize
                 };
             }
         }
@@ -408,9 +417,207 @@ router.get('/status/:voteId', async (req, res) => {
         res.json(response);
 
     } catch (error) {
-        console.error('[VOTING]  Errore controllo stato:', error);
+        console.error('[VOTING] ❌ Errore controllo stato:', error);
         res.status(500).json({ 
             error: 'Errore nel controllo dello stato del voto',
+            details: error.message 
+        });
+    }
+});
+
+router.get('/receipt/:voteId', async (req, res) => {
+    try {
+        const { voteId } = req.params;
+
+        console.log(`[VOTING] 🧾 Generazione ricevuta per voto ${voteId}`);
+
+        // Carica voto con dati necessari per ricevuta
+        const vote = await Vote.findByPk(voteId, {
+            attributes: [
+                'id', 'sessionId', 'serialNumber', 'commitment', 
+                'transactionId', 'status', 'submittedAt', 'processedAt'
+            ]
+        });
+
+        if (!vote) {
+            return res.status(404).json({ 
+                error: 'Voto non trovato',
+                message: 'Il voto richiesto non esiste o è stato eliminato'
+            });
+        }
+
+        // Carica sessione di voto
+        const votingSession = await VotingSession.findByPk(vote.sessionId, {
+            attributes: ['id', 'electionId', 'startTime', 'endTime', 'status'],
+            include: [
+                {
+                    model: Election,
+                    as: 'election',
+                    attributes: ['id', 'title', 'description']
+                }
+            ]
+        });
+
+        // *** CORREZIONE: Cerca transazione CoinJoin senza accesso diretto a createdAt ***
+        let coinJoinTransaction = null;
+        
+        if (vote.transactionId) {
+            coinJoinTransaction = await Transaction.findOne({
+                where: { 
+                    txId: vote.transactionId,
+                    type: 'coinjoin'
+                },
+                attributes: [
+                    'id', 'txId', 'type', 'confirmations', 
+                    'blockHeight', 'blockHash', 'metadata', 'createdAt'
+                ]
+            });
+        }
+
+        // Se non trovata tramite transactionId, cerca per sessione
+        if (!coinJoinTransaction && votingSession) {
+            coinJoinTransaction = await Transaction.findOne({
+                where: {
+                    sessionId: votingSession.id,
+                    type: 'coinjoin'
+                },
+                attributes: [
+                    'id', 'txId', 'type', 'confirmations', 
+                    'blockHeight', 'blockHash', 'metadata', 'createdAt'
+                ],
+                order: [['createdAt', 'DESC']] // *** CORREZIONE: Usa attributo Sequelize ***
+            });
+        }
+
+        // Costruisci risposta ricevuta
+        const receiptData = {
+            // Informazioni voto
+            voteId: vote.id,
+            submittedAt: vote.submittedAt,
+            processedAt: vote.processedAt,
+            status: vote.status,
+            
+            // Informazioni sessione
+            sessionId: vote.sessionId,
+            session: votingSession ? {
+                id: votingSession.id,
+                startTime: votingSession.startTime,
+                endTime: votingSession.endTime,
+                status: votingSession.status
+            } : null,
+            
+            // Informazioni elezione
+            election: votingSession?.election ? {
+                id: votingSession.election.id,
+                title: votingSession.election.title,
+                description: votingSession.election.description
+            } : null,
+            
+            // Informazioni blockchain
+            blockchain: coinJoinTransaction ? {
+                transactionId: coinJoinTransaction.txId,
+                confirmations: coinJoinTransaction.confirmations || 0,
+                blockHeight: coinJoinTransaction.blockHeight,
+                blockHash: coinJoinTransaction.blockHash,
+                broadcastedAt: coinJoinTransaction.createdAt, // *** Attributo Sequelize ***
+                
+                coinjoinDetails: coinJoinTransaction.metadata ? {
+                    participantsCount: coinJoinTransaction.metadata.participants || 'N/A',
+                    totalVotes: coinJoinTransaction.metadata.totalVotes || 'N/A',
+                    inputCount: coinJoinTransaction.metadata.inputCount || 'N/A',
+                    outputCount: coinJoinTransaction.metadata.outputCount || 'N/A'
+                } : null
+            } : {
+                transactionId: null,
+                confirmations: 0,
+                status: 'pending',
+                message: 'Transazione non ancora confermata'
+            },
+            
+            // Timestamp generazione
+            generatedAt: new Date(),
+            
+            // Info sistema
+            system: {
+                version: '1.0.0',
+                protocol: 'WabiSabi',
+                blockchain: 'Bitcoin',
+                network: process.env.BITCOIN_NETWORK || 'testnet'
+            }
+        };
+
+        console.log(`[VOTING] ✅ Ricevuta generata per voto ${voteId}`);
+        res.json(receiptData);
+
+    } catch (error) {
+        console.error('[VOTING] ❌ Errore generazione ricevuta:', error);
+        res.status(500).json({ 
+            error: 'Errore nella generazione della ricevuta',
+            details: error.message 
+        });
+    }
+});
+
+router.get('/verify/:txId', async (req, res) => {
+    try {
+        const { txId } = req.params;
+        
+        console.log(`[VOTING] 🔍 Verifica transazione ${txId}`);
+
+        const transaction = await Transaction.findOne({
+            where: { txId },
+            attributes: [
+                'id', 'txId', 'type', 'electionId', 'sessionId',
+                'confirmations', 'blockHeight', 'blockHash', 
+                'metadata', 'createdAt' // *** Usa attributo Sequelize ***
+            ],
+            include: [
+                {
+                    model: VotingSession,
+                    as: 'session',
+                    attributes: ['id', 'electionId'],
+                    include: [
+                        {
+                            model: Election,
+                            as: 'election',
+                            attributes: ['id', 'title']
+                        }
+                    ],
+                    required: false
+                }
+            ]
+        });
+
+        if (!transaction) {
+            return res.status(404).json({ 
+                error: 'Transazione non trovata',
+                message: 'La transazione richiesta non è stata trovata nel sistema'
+            });
+        }
+
+        const verificationResult = {
+            transactionId: transaction.txId,
+            type: transaction.type,
+            status: transaction.confirmations > 0 ? 'confirmed' : 'pending',
+            confirmations: transaction.confirmations || 0,
+            blockHeight: transaction.blockHeight,
+            blockHash: transaction.blockHash,
+            broadcastedAt: transaction.createdAt, // *** Usa attributo Sequelize ***
+            
+            session: transaction.session ? {
+                id: transaction.session.id,
+                electionTitle: transaction.session.election?.title,
+            } : null,
+            
+            metadata: transaction.metadata
+        };
+
+        res.json(verificationResult);
+
+    } catch (error) {
+        console.error('[VOTING] ❌ Errore verifica transazione:', error);
+        res.status(500).json({ 
+            error: 'Errore nella verifica della transazione',
             details: error.message 
         });
     }
