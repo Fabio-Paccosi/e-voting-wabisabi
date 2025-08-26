@@ -25,34 +25,37 @@ class CoinJoinService {
      */
     async triggerCoinJoin(sessionId, electionId) {
         try {
-            console.log(`[COINJOIN] Avvio CoinJoin per sessione ${sessionId}`);
+            console.log(`[COINJOIN] 🚀 Avvio CoinJoin per sessione ${sessionId}`);
     
             // Verifica che la sessione non sia già in elaborazione
             if (this.activeSessions.has(sessionId)) {
-                console.log(`[COINJOIN] Sessione ${sessionId} già in elaborazione`);
+                console.log(`[COINJOIN] ⚠️ Sessione ${sessionId} già in elaborazione`);
                 return;
             }
     
-            // Carica i voti pending per questa sessione
+            // *** CORREZIONE: Carica voti usando attributi Sequelize corretti ***
             const pendingVotes = await Vote.findAll({
                 where: {
                     sessionId: sessionId,
                     status: 'pending'
                 },
-                // CORREZIONE: Usa submitted_at invece di submittedAt
-                order: [['submitted_at', 'ASC']]
+                attributes: [
+                    'id', 'sessionId', 'serialNumber', 'commitment', 
+                    'status', 'submittedAt', 'processedAt'
+                ],
+                order: [['submittedAt', 'ASC']] // *** Usa attributo Sequelize ***
             });
     
-            console.log(`[COINJOIN]  Trovati ${pendingVotes.length} voti pendenti`);
+            console.log(`[COINJOIN] 📊 Trovati ${pendingVotes.length} voti pendenti`);
     
             if (pendingVotes.length < this.MIN_PARTICIPANTS) {
-                console.log(`[COINJOIN] Voti insufficienti: ${pendingVotes.length} < ${this.MIN_PARTICIPANTS}`);
+                console.log(`[COINJOIN] ⚠️ Voti insufficienti: ${pendingVotes.length} < ${this.MIN_PARTICIPANTS}`);
                 return;
             }
     
             // Aggiorna stato sessione
             await VotingSession.update(
-                { status: 'output_registration' },
+                { status: 'input_registration' },
                 { where: { id: sessionId } }
             );
     
@@ -62,29 +65,64 @@ class CoinJoinService {
                 electionId,
                 participants: pendingVotes.slice(0, this.MAX_PARTICIPANTS),
                 startedAt: new Date(),
+                startTime: new Date(), // Aggiungi anche startTime per compatibilità
                 status: 'input_registration',
                 round: 1,
+                threshold: this.MIN_PARTICIPANTS,
+                inputs: [],
+                outputs: [],
                 transactions: []
             };
     
-            // CORREZIONE: Salva correttamente la sessione nella mappa
+            // Salva nella memoria attiva
             this.activeSessions.set(sessionId, coinJoinSession);
     
-            console.log(`[COINJOIN]  Sessione CoinJoin creata per ${coinJoinSession.participants.length} partecipanti`);
+            console.log(`[COINJOIN] ✅ Sessione CoinJoin creata per ${coinJoinSession.participants.length} partecipanti`);
     
             // Avvia il processo in background
             this.processCoinJoinRounds(coinJoinSession)
                 .catch(error => {
-                    console.error(`[COINJOIN]  Errore processo CoinJoin:`, error);
+                    console.error(`[COINJOIN] ❌ Errore processo CoinJoin:`, error);
                     this.handleCoinJoinError(sessionId, error);
                 });
     
-            console.log(`[COINJOIN]  CoinJoin avviato per ${coinJoinSession.participants.length} partecipanti`);
+            console.log(`[COINJOIN] 🚀 CoinJoin avviato per ${coinJoinSession.participants.length} partecipanti`);
     
             return coinJoinSession;
     
         } catch (error) {
-            console.error(`[COINJOIN]  Errore trigger CoinJoin:`, error);
+            console.error(`[COINJOIN] ❌ Errore trigger CoinJoin:`, error);
+            throw error;
+        }
+    }
+
+    async debugDatabaseSchema() {
+        try {
+            console.log('[COINJOIN] 🔍 Debug schema database...');
+            
+            // Test creazione Transaction per verificare schema
+            const testTransaction = await Transaction.create({
+                electionId: 'test-election',
+                txId: 'test-tx-' + Date.now(),
+                type: 'coinjoin',
+                rawData: 'test-data',
+                metadata: { test: true },
+                confirmations: 0
+            });
+    
+            console.log('[COINJOIN] ✅ Test Transaction creata:', {
+                id: testTransaction.id,
+                createdAt: testTransaction.createdAt, // Dovrebbe funzionare
+                txId: testTransaction.txId
+            });
+    
+            // Cleanup test
+            await testTransaction.destroy();
+            
+            console.log('[COINJOIN] ✅ Schema database verificato');
+            
+        } catch (error) {
+            console.error('[COINJOIN] ❌ Errore schema database:', error);
             throw error;
         }
     }
@@ -276,14 +314,16 @@ class CoinJoinService {
      */
     async broadcastTransaction(coinJoinSession) {
         try {
-            console.log(`[COINJOIN]  Broadcasting Transaction - Sessione ${coinJoinSession.sessionId}`);
-
+            console.log(`[COINJOIN] 📡 Broadcasting Transaction - Sessione ${coinJoinSession.sessionId}`);
+    
             const { transaction } = coinJoinSession;
             
             // Broadcast alla blockchain
             const broadcastResult = await BitcoinService.broadcastTransaction(transaction.rawTx);
             
-            // Salva nel database
+            console.log(`[COINJOIN] ✅ Transazione trasmessa con successo: ${broadcastResult.txId}`);
+    
+            // *** CORREZIONE: Salva transazione con attributi Sequelize corretti ***
             const dbTransaction = await Transaction.create({
                 electionId: coinJoinSession.electionId,
                 sessionId: coinJoinSession.sessionId,
@@ -291,40 +331,156 @@ class CoinJoinService {
                 type: 'coinjoin',
                 rawData: transaction.rawTx,
                 metadata: {
+                    // Metadati per ricevuta
                     inputCount: coinJoinSession.inputs.length,
                     outputCount: coinJoinSession.outputs.length,
                     participants: coinJoinSession.participants.length,
-                    totalVotes: coinJoinSession.outputs.reduce((sum, o) => sum + o.voteValue, 0)
+                    totalVotes: coinJoinSession.outputs.reduce((sum, o) => sum + o.voteValue, 0),
+                    
+                    candidateVotes: coinJoinSession.outputs.map(output => ({
+                        candidateId: output.candidateId,
+                        voteValue: output.voteValue
+                    })),
+                    
+                    // *** CORREZIONE: Usa new Date() invece di createdAt diretto ***
+                    broadcastedAt: new Date(),
+                    sessionStartTime: coinJoinSession.startTime,
+                    
+                    coinjoinThreshold: coinJoinSession.threshold || 10,
+                    bitcoinNetwork: process.env.BITCOIN_NETWORK || 'testnet'
                 },
                 confirmations: 0
+                // *** NOTA: createdAt e updatedAt sono gestiti automaticamente da Sequelize ***
             });
-
-            // Aggiorna voti con transaction ID
-            await Vote.update(
+    
+            console.log(`[COINJOIN] 💾 Transazione salvata nel database:`, {
+                id: dbTransaction.id,
+                txId: dbTransaction.txId,
+                type: dbTransaction.type
+            });
+    
+            // Aggiorna TUTTI i voti della sessione con il transaction ID
+            const participantIds = coinJoinSession.participants.map(p => p.id);
+            
+            const updateResult = await Vote.update(
                 { 
                     status: 'confirmed',
                     transactionId: broadcastResult.txId,
-                    processedAt: new Date()
+                    processedAt: new Date() // *** Usa new Date() invece di timestamp diretto ***
                 },
                 { 
                     where: { 
-                        id: coinJoinSession.participants.map(p => p.id) 
+                        id: participantIds 
                     } 
                 }
             );
-
+    
+            console.log(`[COINJOIN] 🔄 Aggiornati ${updateResult[0]} voti con transaction ID: ${broadcastResult.txId}`);
+    
+            // Verifica aggiornamento
+            const updatedVotes = await Vote.findAll({
+                where: { 
+                    id: participantIds,
+                    transactionId: broadcastResult.txId
+                },
+                attributes: ['id', 'transactionId', 'status', 'processedAt']
+            });
+    
+            console.log(`[COINJOIN] ✅ Verificati ${updatedVotes.length} voti aggiornati correttamente`);
+    
+            if (updatedVotes.length !== participantIds.length) {
+                console.warn(`[COINJOIN] ⚠️ Warning: ${participantIds.length - updatedVotes.length} voti non sono stati aggiornati correttamente`);
+            }
+    
+            // Aggiorna la sessione CoinJoin
             coinJoinSession.broadcastedAt = new Date();
             coinJoinSession.txId = broadcastResult.txId;
-
-            console.log(`[COINJOIN]  Transazione trasmessa: ${broadcastResult.txId}`);
-
+            coinJoinSession.dbTransactionId = dbTransaction.id;
+    
             // Avvia monitoring delle conferme
             this.monitorTransactionConfirmations(broadcastResult.txId);
-
+    
+            console.log(`[COINJOIN] 🎯 Broadcasting completato per sessione ${coinJoinSession.sessionId}`);
+    
+            return {
+                success: true,
+                txId: broadcastResult.txId,
+                dbTransactionId: dbTransaction.id,
+                participantsUpdated: updatedVotes.length,
+                broadcastedAt: new Date()
+            };
+    
         } catch (error) {
-            console.error(`[COINJOIN]  Errore Broadcasting:`, error);
+            console.error(`[COINJOIN] ❌ Errore Broadcasting:`, error);
+            
+            // Se c'è stato un errore, marca i voti come falliti
+            if (coinJoinSession.participants?.length > 0) {
+                try {
+                    await Vote.update(
+                        { 
+                            status: 'failed',
+                            processedAt: new Date()
+                        },
+                        { 
+                            where: { 
+                                id: coinJoinSession.participants.map(p => p.id)
+                            } 
+                        }
+                    );
+                    console.log(`[COINJOIN] 🔄 Voti marcati come falliti a causa dell'errore di broadcast`);
+                } catch (updateError) {
+                    console.error(`[COINJOIN] ❌ Errore aggiornamento stato voti falliti:`, updateError);
+                }
+            }
+            
             throw error;
         }
+    }
+
+    async monitorTransactionConfirmations(txId) {
+        console.log(`[COINJOIN] 👀 Avvio monitoring conferme per transazione: ${txId}`);
+        
+        const checkConfirmations = async () => {
+            try {
+                // Ottieni info transazione da Bitcoin
+                const txInfo = await BitcoinService.getTransactionInfo(txId);
+                
+                if (txInfo && txInfo.confirmations !== undefined) {
+                    // *** CORREZIONE: Aggiorna database usando attributi Sequelize ***
+                    await Transaction.update(
+                        {
+                            confirmations: txInfo.confirmations,
+                            blockHeight: txInfo.blockHeight,
+                            blockHash: txInfo.blockHash
+                            // *** updatedAt viene gestito automaticamente da Sequelize ***
+                        },
+                        {
+                            where: { txId }
+                        }
+                    );
+    
+                    console.log(`[COINJOIN] 📊 Aggiornate conferme per ${txId}: ${txInfo.confirmations} conferme`);
+    
+                    // Se abbiamo abbastanza conferme, ferma il monitoring
+                    if (txInfo.confirmations >= 1) {
+                        console.log(`[COINJOIN] ✅ Transazione ${txId} confermata con ${txInfo.confirmations} conferme`);
+                        return; // Ferma il monitoring
+                    }
+                }
+    
+                // Se non abbiamo abbastanza conferme, ricontrolla dopo un po'
+                setTimeout(checkConfirmations, 60000); // Controlla ogni minuto
+    
+            } catch (error) {
+                console.error(`[COINJOIN] ❌ Errore monitoring conferme per ${txId}:`, error);
+                
+                // Riprova dopo un po' in caso di errore temporaneo
+                setTimeout(checkConfirmations, 120000); // Riprova dopo 2 minuti
+            }
+        };
+    
+        // Inizia il monitoring
+        setTimeout(checkConfirmations, 30000); // Prima verifica dopo 30 secondi
     }
 
     /**
@@ -333,36 +489,101 @@ class CoinJoinService {
     async finalizeCoinJoin(coinJoinSession) {
         try {
             console.log(`[COINJOIN] 🏁 Finalizzazione CoinJoin - Sessione ${coinJoinSession.sessionId}`);
-
-            // Aggiorna stato sessione
+    
+            // Aggiorna stato sessione con transaction ID
             await VotingSession.update(
                 { 
                     status: 'completed',
                     endTime: new Date(),
-                    finalTallyTransactionId: coinJoinSession.txId
+                    finalTallyTransactionId: coinJoinSession.txId // IMPORTANTE: salva il txId finale
                 },
                 { where: { id: coinJoinSession.sessionId } }
             );
-
+    
             // Aggiorna contatori candidati
             await this.updateCandidateVoteCounts(coinJoinSession);
-
-            // Rimuove dalla memoria
-            this.activeSessions.delete(coinJoinSession.sessionId);
-
-            console.log(`[COINJOIN]  CoinJoin completato per sessione ${coinJoinSession.sessionId}`);
-
-            return {
-                success: true,
+    
+            // Prepara dati riassuntivi per logging e debug
+            const finalSummary = {
                 sessionId: coinJoinSession.sessionId,
+                electionId: coinJoinSession.electionId,
                 txId: coinJoinSession.txId,
                 participantsCount: coinJoinSession.participants.length,
-                completedAt: new Date()
+                totalVotesProcessed: coinJoinSession.outputs.reduce((sum, o) => sum + o.voteValue, 0),
+                candidateVotes: coinJoinSession.outputs.map(output => ({
+                    candidateId: output.candidateId,
+                    votes: output.voteValue
+                })),
+                completedAt: new Date(),
+                processingTimeSeconds: coinJoinSession.broadcastedAt ? 
+                    (new Date() - new Date(coinJoinSession.startTime)) / 1000 : null
             };
-
+    
+            console.log(`[COINJOIN] 📈 Riassunto finale sessione:`, finalSummary);
+    
+            // Rimuove dalla memoria
+            this.activeSessions.delete(coinJoinSession.sessionId);
+    
+            console.log(`[COINJOIN] ✅ CoinJoin completato per sessione ${coinJoinSession.sessionId}`);
+    
+            return {
+                success: true,
+                ...finalSummary
+            };
+    
         } catch (error) {
-            console.error(`[COINJOIN]  Errore finalizzazione:`, error);
+            console.error(`[COINJOIN] ❌ Errore finalizzazione:`, error);
             throw error;
+        }
+    }
+
+    async verifyReceiptDataIntegrity(sessionId) {
+        try {
+            console.log(`[COINJOIN] 🔍 Verifica integrità dati ricevuta per sessione: ${sessionId}`);
+            
+            // Carica sessione con tutti i dati correlati
+            const session = await VotingSession.findByPk(sessionId, {
+                include: [
+                    { model: Vote, as: 'votes' },
+                    { model: Transaction, as: 'sessionTransactions', where: { type: 'coinjoin' } },
+                    { model: Election, as: 'election' }
+                ]
+            });
+    
+            if (!session) {
+                throw new Error(`Sessione ${sessionId} non trovata`);
+            }
+    
+            const issues = [];
+    
+            // Verifica che tutti i voti abbiano il transaction ID
+            const votesWithoutTxId = session.votes.filter(vote => !vote.transactionId);
+            if (votesWithoutTxId.length > 0) {
+                issues.push(`${votesWithoutTxId.length} voti senza transaction ID`);
+            }
+    
+            // Verifica che ci sia almeno una transazione CoinJoin
+            if (!session.sessionTransactions || session.sessionTransactions.length === 0) {
+                issues.push('Nessuna transazione CoinJoin trovata');
+            }
+    
+            // Verifica coerenza transaction ID
+            const txIds = [...new Set(session.votes.map(v => v.transactionId).filter(Boolean))];
+            if (txIds.length > 1) {
+                issues.push(`Multipli transaction ID trovati: ${txIds.join(', ')}`);
+            }
+    
+            if (issues.length > 0) {
+                console.warn(`[COINJOIN] ⚠️ Problemi integrità dati per sessione ${sessionId}:`, issues);
+                return { valid: false, issues };
+            }
+    
+            console.log(`[COINJOIN] ✅ Integrità dati verificata per sessione ${sessionId}`);
+            return { valid: true, issues: [] };
+    
+        } catch (error) {
+            console.error(`[COINJOIN] ❌ Errore verifica integrità:`, error);
+            return { valid: false, issues: [error.message] };
         }
     }
 
