@@ -364,18 +364,17 @@ router.get('/status/:voteId', async (req, res) => {
             include: [
                 {
                     model: VotingSession,
-                    as: 'session', // Usa alias corretto dal database config
+                    as: 'votingSession', 
                     include: [
                         {
                             model: Transaction,
                             as: 'sessionTransactions', 
                             where: { type: 'coinjoin' },
                             required: false,
-                            // *** CORREZIONE: Specifica attributi espliciti ***
                             attributes: [
                                 'id', 'txId', 'type', 'confirmations', 
-                                'blockHeight', 'blockHash', 'metadata',
-                                'createdAt', 'updatedAt' // Usa attributi Sequelize, non colonne DB
+                                'blockHeight', 'blockHash', 'metadata'
+                                //'createdAt', 'updatedAt'
                             ]
                         }
                     ]
@@ -397,10 +396,10 @@ router.get('/status/:voteId', async (req, res) => {
 
         // Se il voto è stato processato, includi dettagli transazione
         if (vote.transactionId) {
-            // *** CORREZIONE: Cerca transazione direttamente senza join complessi ***
             const transaction = await Transaction.findOne({
                 where: { txId: vote.transactionId },
-                attributes: ['id', 'txId', 'confirmations', 'blockHeight', 'blockHash', 'createdAt']
+                //attributes: ['id', 'txId', 'confirmations', 'blockHeight', 'blockHash', 'createdAt']
+                attributes: ['id', 'txId', 'confirmations', 'blockHeight', 'blockHash']
             });
 
             if (transaction) {
@@ -409,7 +408,7 @@ router.get('/status/:voteId', async (req, res) => {
                     confirmations: transaction.confirmations,
                     blockHeight: transaction.blockHeight,
                     blockHash: transaction.blockHash,
-                    broadcastedAt: transaction.createdAt // Usa attributo Sequelize
+                    //broadcastedAt: transaction.createdAt
                 };
             }
         }
@@ -519,7 +518,7 @@ router.get('/receipt/:voteId', async (req, res) => {
                 confirmations: coinJoinTransaction.confirmations || 0,
                 blockHeight: coinJoinTransaction.blockHeight,
                 blockHash: coinJoinTransaction.blockHash,
-                broadcastedAt: coinJoinTransaction.createdAt, // *** Attributo Sequelize ***
+                broadcastedAt: coinJoinTransaction.createdAt,
                 
                 coinjoinDetails: coinJoinTransaction.metadata ? {
                     participantsCount: coinJoinTransaction.metadata.participants || 'N/A',
@@ -615,7 +614,7 @@ router.get('/verify/:txId', async (req, res) => {
         res.json(verificationResult);
 
     } catch (error) {
-        console.error('[VOTING] ❌ Errore verifica transazione:', error);
+        console.error('[VOTING] Errore verifica transazione:', error);
         res.status(500).json({ 
             error: 'Errore nella verifica della transazione',
             details: error.message 

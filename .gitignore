@@ -2,3 +2,4 @@
 /admin.logs/
 /debug/
 /client/node_modules/.cache/
+/admin/node_modules/
