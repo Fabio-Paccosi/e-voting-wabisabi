@@ -584,7 +584,6 @@ const AdminDashboard = () => {
                                 <tr key={candidate.id || index} className={isWinner ? 'bg-green-50' : ''}>
                                   <td className="px-6 py-4 whitespace-nowrap">
                                     <div className="flex items-center">
-                                      {isWinner && <span className="text-yellow-500 mr-2">🏆</span>}
                                       <span className={`text-sm font-medium ${isWinner ? 'text-green-600' : 'text-gray-900'}`}>
                                         #{index + 1}
                                       </span>

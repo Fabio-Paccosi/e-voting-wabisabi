@@ -459,9 +459,9 @@ const VotingPage = () => {
                   </p>
                   <br></br>
                   <p>
-                    Vote ID: ${voteId}
-                    Inviato in data: ${voteSubmittedAt?.toLocaleString('it-IT')}
-                    Elezione: ${election?.title}
+                    Vote ID: {voteId}<br></br>
+                    Inviato in data: {voteSubmittedAt?.toLocaleString('it-IT')}<br></br>
+                    Elezione: {election?.title}
                   </p>
                 </div>
               </div>
@@ -494,7 +494,7 @@ const VotingPage = () => {
             {voteId && (
               <button onClick={showReceiptData} className="button primary">
                 <FileText size={20} />
-                Mostra Dati Ricevuta (Dev)
+                Mostra Dati Ricevuta
               </button>
             )}
 
