@@ -155,6 +155,29 @@ const AdminDashboard = () => {
     }
   };
 
+  const [showPrivateKeys, setShowPrivateKeys] = useState(false);
+  const [decryptedKeys, setDecryptedKeys] = useState({});
+
+  const decryptPrivateKey = async (entryId, encryptedData) => {
+    try {
+      const response = await fetch('/api/admin/decrypt-private-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ encryptedData })
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        setDecryptedKeys(prev => ({
+          ...prev,
+          [entryId]: result.privateKey
+        }));
+      }
+    } catch (error) {
+      console.error('Errore decrittografia:', error);
+    }
+  };
+
   useEffect(() => {
     fetchElections();
     fetchUsers();
@@ -903,12 +926,13 @@ const AdminDashboard = () => {
                   </h4>
                   <div className="flex flex-wrap gap-2">
                     {whitelist[election.id].slice(0, 5).map(entry => (
-                      <span key={entry.id} className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                        {entry.firstName} {entry.lastName}
+                      <span key={entry.id} className="inline-flex items-center px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800">
+                        Nome: {entry.firstName} {entry.lastName}
                         <br></br>
-                        Bitcoin Address:{entry.bitcoinAddress}
+                        Bitcoin Address: {entry.bitcoinAddress}
                         <br></br>
-                        Chiave privata:{entry.bitcoinPrivateKey}
+                        Chiavi private visibili: {entry.bitcoinPrivateKey}
+                        <br></br>
                         {entry.hasVoted && <Check className="ml-1" size={12} />}
                       </span>
                     ))}

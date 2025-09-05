@@ -61,7 +61,7 @@ class CoinJoinTriggerService {
     async checkPendingVotes() {
         try {
             const activeElections = await Election.findAll({
-                where: { isActive: true },
+                where: { status: "active" },
                 include: [{ model: Candidate, as: 'candidates' }]
             });
 

@@ -1,4 +1,5 @@
 const { Sequelize, DataTypes } = require('sequelize');
+const BitcoinWalletService = require('./services/BitcoinWalletService');
 
 console.log('Inizializzazione database config centralizzata...');
 console.log('Environment vars:', {
@@ -96,7 +97,7 @@ const User = sequelize.define('User', {
     },
     isAuthorized: {
         type: DataTypes.BOOLEAN,
-        defaultValue: false,
+        defaultValue: true,
         field: 'is_authorized'
     },
     authorizationProof: {
@@ -447,6 +448,170 @@ const ElectionWhitelist = sequelize.define('ElectionWhitelist', {
     underscored: true,
     timestamps: true
 });
+
+ElectionWhitelist.addHook('beforeCreate', async (whitelistEntry, options) => {
+    // Log iniziale
+    console.log(`[WHITELIST-HOOK] 🔑 Generazione automatica indirizzo Bitcoin per utente ${whitelistEntry.userId}, elezione ${whitelistEntry.electionId}`);
+    
+    try {
+        // *** STEP 1: Verifica se l'indirizzo è già specificato ***
+        if (whitelistEntry.bitcoinAddress && whitelistEntry.bitcoinPublicKey) {
+            console.log(`[WHITELIST-HOOK] ℹ️ Indirizzo Bitcoin già specificato: ${whitelistEntry.bitcoinAddress}`);
+            return; // Non generare se già presente
+        }
+        
+        // *** STEP 2: Carica e inizializza il BitcoinWalletService ***
+        const BitcoinWalletService = require('./services/BitcoinWalletService');
+        const bitcoinService = new BitcoinWalletService();
+        
+        console.log(`[WHITELIST-HOOK] 🔧 Servizio Bitcoin inizializzato per network: ${process.env.BITCOIN_NETWORK || 'testnet'}`);
+        
+        // *** STEP 3: Genera nuovo wallet Bitcoin ***
+        const walletData = await bitcoinService.generateWalletForUser(
+            whitelistEntry.electionId, 
+            whitelistEntry.userId
+        );
+        
+        // *** STEP 4: Assegna i dati Bitcoin all'entry ***
+        whitelistEntry.bitcoinAddress = walletData.address;
+        whitelistEntry.bitcoinPublicKey = walletData.publicKey;
+        whitelistEntry.bitcoinPrivateKey = JSON.stringify(walletData.encryptedPrivateKey);
+        
+        // *** STEP 5: Log di successo ***
+        console.log(`[WHITELIST-HOOK] ✅ Indirizzo Bitcoin generato con successo!`);
+        console.log(`[WHITELIST-HOOK]    📧 Utente: ${whitelistEntry.userId}`);
+        console.log(`[WHITELIST-HOOK]    🗳️  Elezione: ${whitelistEntry.electionId}`);
+        console.log(`[WHITELIST-HOOK]    💰 Indirizzo: ${walletData.address}`);
+        console.log(`[WHITELIST-HOOK]    🔑 Chiave pubblica: ${walletData.publicKey.substring(0, 16)}...`);
+        console.log(`[WHITELIST-HOOK]    🔒 Chiave privata: [CRITTOGRAFATA]`);
+        
+        // *** STEP 6: Gestione UTXO se disponibili ***
+        if (walletData.utxo && walletData.utxo.length > 0) {
+            console.log(`[WHITELIST-HOOK] 💎 UTXO disponibili: ${walletData.utxo.length}`);
+            
+            // Salva informazioni UTXO nei campi aggiuntivi se disponibili
+            if (walletData.utxo[0]) {
+                whitelistEntry.utxo_txid = walletData.utxo[0].txid;
+                whitelistEntry.utxo_vout = walletData.utxo[0].vout;
+                whitelistEntry.utxo_amount = walletData.utxo[0].value;
+            }
+        } else {
+            console.log(`[WHITELIST-HOOK] 📭 Nessun UTXO disponibile per il nuovo indirizzo`);
+        }
+        
+    } catch (error) {
+        // *** GESTIONE ERRORI ***
+        console.error('[WHITELIST-HOOK] ❌ ERRORE durante generazione indirizzo Bitcoin:', error);
+        console.error('[WHITELIST-HOOK] Stack trace:', error.stack);
+        
+        // Decidi se bloccare la creazione o permetterla senza Bitcoin
+        const allowWithoutBitcoin = process.env.ALLOW_WHITELIST_WITHOUT_BITCOIN === 'true';
+        
+        if (allowWithoutBitcoin) {
+            // Permetti la creazione ma logga l'errore
+            console.warn('[WHITELIST-HOOK] ⚠️ Creazione whitelist permessa senza indirizzo Bitcoin');
+            whitelistEntry.bitcoinAddress = null;
+            whitelistEntry.bitcoinPublicKey = null;
+            whitelistEntry.bitcoinPrivateKey = null;
+        } else {
+            // Blocca la creazione dell'entry
+            throw new Error(`Impossibile creare entry whitelist: ${error.message}`);
+        }
+    }
+});
+
+// Aggiunge un metodo al modello per verificare se il wallet Bitcoin è valido
+ElectionWhitelist.prototype.hasValidBitcoinWallet = function() {
+    return !!(this.bitcoinAddress && this.bitcoinPublicKey && this.bitcoinPrivateKey);
+};
+
+// Metodo sicuro per accedere alla chiave privata quando necessario
+ElectionWhitelist.prototype.getDecryptedPrivateKey = async function() {
+    if (!this.bitcoinPrivateKey) {
+        throw new Error('Chiave privata Bitcoin non disponibile');
+    }
+    
+    try {
+        const BitcoinWalletService = require('./services/BitcoinWalletService');
+        const bitcoinService = new BitcoinWalletService();
+        
+        const encryptedData = JSON.parse(this.bitcoinPrivateKey);
+        const decryptedKey = bitcoinService.decryptPrivateKey(encryptedData);
+        
+        return decryptedKey;
+    } catch (error) {
+        console.error('[WHITELIST-DECRYPT] ❌ Errore decrittografia chiave privata:', error);
+        throw new Error('Impossibile decrittare la chiave privata Bitcoin');
+    }
+};
+
+// Metodo di classe per riparare entries esistenti senza indirizzo Bitcoin
+ElectionWhitelist.repairMissingBitcoinAddresses = async function(electionId = null) {
+    console.log('[WHITELIST-REPAIR] 🔧 Inizio riparazione indirizzi Bitcoin mancanti...');
+    
+    try {
+        const whereClause = { 
+            bitcoinAddress: { [Op.is]: null }
+        };
+        
+        if (electionId) {
+            whereClause.electionId = electionId;
+        }
+        
+        const entriesWithoutBitcoin = await ElectionWhitelist.findAll({
+            where: whereClause,
+            include: [{ 
+                model: User, 
+                as: 'user',
+                attributes: ['id', 'email', 'firstName', 'lastName']
+            }]
+        });
+        
+        console.log(`[WHITELIST-REPAIR] 📋 Trovate ${entriesWithoutBitcoin.length} entries senza indirizzo Bitcoin`);
+        
+        const BitcoinWalletService = require('./services/BitcoinWalletService');
+        const bitcoinService = new BitcoinWalletService();
+        
+        let repaired = 0;
+        let errors = 0;
+        
+        for (const entry of entriesWithoutBitcoin) {
+            try {
+                const walletData = await bitcoinService.generateWalletForUser(
+                    entry.electionId, 
+                    entry.userId
+                );
+                
+                await entry.update({
+                    bitcoinAddress: walletData.address,
+                    bitcoinPublicKey: walletData.publicKey,
+                    bitcoinPrivateKey: JSON.stringify(walletData.encryptedPrivateKey)
+                });
+                
+                console.log(`[WHITELIST-REPAIR] ✅ Riparato ${entry.user?.email || entry.userId}: ${walletData.address}`);
+                repaired++;
+                
+            } catch (error) {
+                console.error(`[WHITELIST-REPAIR] ❌ Errore per entry ${entry.id}:`, error);
+                errors++;
+            }
+        }
+        
+        const result = {
+            total: entriesWithoutBitcoin.length,
+            repaired,
+            errors,
+            message: `Riparazione completata: ${repaired} successi, ${errors} errori`
+        };
+        
+        console.log(`[WHITELIST-REPAIR] 📊 ${result.message}`);
+        return result;
+        
+    } catch (error) {
+        console.error('[WHITELIST-REPAIR] ❌ Errore durante riparazione:', error);
+        throw error;
+    }
+};
 
 // ====================
 // RELAZIONI

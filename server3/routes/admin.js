@@ -147,7 +147,6 @@ router.get('/elections', adminAuth, async (req, res) => {
                 startDate: election.startDate,
                 endDate: election.endDate,
                 status: election.status,
-                isActive: election.isActive,
                 votingMethod: election.votingMethod || 'single',
                 coinjoinEnabled: election.coinjoinEnabled !== false,
                 coinjoinTrigger: election.coinjoinTrigger || 10,
@@ -233,7 +232,6 @@ router.get('/elections/:id', adminAuth, async (req, res) => {
                 startDate: election.startDate,
                 endDate: election.endDate,
                 status: election.status,
-                isActive: election.isActive,
                 votingMethod: election.votingMethod,
                 coinjoinEnabled: election.coinjoinEnabled,
                 coinjoinTrigger: election.coinjoinTrigger,
@@ -290,7 +288,6 @@ router.post('/elections', adminAuth, async (req, res) => {
             blockchainNetwork,
             maxVotersAllowed,
             status: 'draft',
-            isActive: false
         });
 
         console.log(` [VOTE ADMIN] Elezione creata: ${election.id}`);
@@ -327,7 +324,6 @@ router.put('/elections/:id/status', adminAuth, async (req, res) => {
 
         await election.update({ 
             status,
-            isActive: status === 'active'
         });
 
         console.log(` [VOTE ADMIN] Status elezione "${election.title}" aggiornato a ${status}`);
@@ -678,7 +674,6 @@ router.post('/elections/:id/activate', adminAuth, async (req, res) => {
         // Attiva l'elezione
         await election.update({ 
             status: 'active',
-            isActive: true 
         });
 
         console.log(` [VOTE ADMIN] Elezione "${election.title}" attivata con successo`);
@@ -690,7 +685,6 @@ router.post('/elections/:id/activate', adminAuth, async (req, res) => {
                 id: election.id,
                 title: election.title,
                 status: election.status,
-                isActive: election.isActive
             }
         });
 
@@ -723,7 +717,6 @@ router.post('/elections/:id/deactivate', adminAuth, async (req, res) => {
         // termina l'elezione
         await election.update({ 
             status: 'completed',
-            isActive: false 
         });
 
         console.log(` [VOTE ADMIN] Elezione "${election.title}" terminata`);
@@ -735,7 +728,6 @@ router.post('/elections/:id/deactivate', adminAuth, async (req, res) => {
                 id: election.id,
                 title: election.title,
                 status: election.status,
-                isActive: election.isActive
             }
         });
 
@@ -880,7 +872,6 @@ router.get('/elections/:id/results', adminAuth, async (req, res) => {
                 startDate: election.startDate,
                 endDate: election.endDate,
                 status: election.status,
-                isActive: election.isActive,
                 coinjoinEnabled: election.coinjoinEnabled,
                 coinjoinTrigger: election.coinjoinTrigger,
                 votingMethod: election.votingMethod,

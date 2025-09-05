@@ -78,7 +78,6 @@ router.get('/', extractUserFromHeaders, async (req, res) => {
         const activeElections = await Election.findAll({
             where: {
                 status: 'active',
-                isActive: true,
                 startDate: { [Op.lte]: now },
                 endDate: { [Op.gte]: now }
             },
@@ -126,7 +125,6 @@ router.get('/', extractUserFromHeaders, async (req, res) => {
                         startDate: election.startDate,
                         endDate: election.endDate,
                         status: election.status,
-                        isActive: election.isActive,
                         votingMethod: election.votingMethod,
                         coinjoinEnabled: election.coinjoinEnabled,
                         coinjoinTrigger: election.coinjoinTrigger,
@@ -214,7 +212,6 @@ router.get('/voted', extractUserFromHeaders, async (req, res) => {
             startDate: entry.election.startDate,
             endDate: entry.election.endDate,
             status: entry.election.status,
-            isActive: entry.election.isActive,
             votingMethod: entry.election.votingMethod,
             coinjoinEnabled: entry.election.coinjoinEnabled,
             blockchainNetwork: entry.election.blockchainNetwork,
@@ -337,7 +334,6 @@ router.get('/:id/results', extractUserFromHeaders, async (req, res) => {
                 startDate: election.startDate,
                 endDate: election.endDate,
                 status: election.status,
-                isActive: election.isActive,
                 completedAt: election.updatedAt  // Quando è stata aggiornata l'ultima volta
             },
             results: results,
@@ -390,7 +386,7 @@ router.get('/:id', extractUserFromHeaders, async (req, res) => {
 
         // 2. Verifica che l'elezione sia attiva
         const now = new Date();
-        if (election.status !== 'active' || !election.isActive || 
+        if (election.status !== 'active' || 
             now < new Date(election.startDate) || now > new Date(election.endDate)) {
             return res.status(400).json({ 
                 error: 'Elezione non attiva o non nel periodo di voto' 
@@ -430,7 +426,6 @@ router.get('/:id', extractUserFromHeaders, async (req, res) => {
                 startDate: election.startDate,
                 endDate: election.endDate,
                 status: election.status,
-                isActive: election.isActive,
                 votingMethod: election.votingMethod,
                 coinjoinEnabled: election.coinjoinEnabled,
                 coinjoinTrigger: election.coinjoinTrigger,

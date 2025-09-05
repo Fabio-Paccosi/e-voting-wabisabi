@@ -64,7 +64,7 @@ router.post('/address', extractUserFromHeaders, async (req, res) => {
             return res.status(404).json({ error: 'Elezione non trovata' });
         }
 
-        if (election.status !== 'active' || !election.isActive) {
+        if (election.status !== 'active') {
             return res.status(400).json({ error: 'Elezione non attiva' });
         }
 

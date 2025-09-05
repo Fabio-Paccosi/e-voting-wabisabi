@@ -152,12 +152,12 @@ class BitcoinAddressGenerator {
             const bitcoinData = generateBitcoinAddress();
 
             // Critta la chiave privata
-            const encryptedPrivateKey = encryptPrivateKey(bitcoinData.privateKey);
+            //const encryptedPrivateKey = encryptPrivateKey(bitcoinData.privateKey);
 
             // Aggiorna l'utente nel database
             await user.update({
                 bitcoinAddress: bitcoinData.address,
-                bitcoinPrivateKey: encryptedPrivateKey
+                bitcoinPrivateKey: bitcoinData.privateKey
             });
 
             console.log(` Indirizzo generato: ${bitcoinData.address}`);

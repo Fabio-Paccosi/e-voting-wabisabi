@@ -27,7 +27,7 @@ router.post('/verify-access', authMiddleware, async (req, res) => {
             });
         }
 
-        if (election.status !== 'active' || !election.isActive) {
+        if (election.status !== 'active') {
             return res.status(400).json({ 
                 success: false,
                 error: 'Elezione non attiva' 

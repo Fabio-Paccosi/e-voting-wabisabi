@@ -49,7 +49,6 @@ async function getCurrentElection(electionId = null) {
         const activeElection = await Election.findOne({
             where: {
                 status: 'active',
-                isActive: true,
                 startDate: { [Op.lte]: new Date() },
                 endDate: { [Op.gte]: new Date() }
             },
@@ -491,7 +490,6 @@ router.get('/whitelist/check', async (req, res) => {
         if (!user) {
             return res.json({
                 inWhitelist: false,
-                isActive: false,
                 canVote: false,
                 message: 'Utente non registrato nel sistema'
             });
@@ -507,7 +505,6 @@ router.get('/whitelist/check', async (req, res) => {
 
         const response = {
             inWhitelist: !!whitelistEntry,
-            isActive: !!whitelistEntry,
             canVote: whitelistEntry && !whitelistEntry.hasVoted,
             election: {
                 id: currentElection.id,
