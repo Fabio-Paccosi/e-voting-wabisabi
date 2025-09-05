@@ -3,6 +3,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const router = express.Router();
+const BitcoinWalletService = require('../../shared/services/BitcoinWalletService');
 
 // Importa modelli database 
 const {
@@ -349,25 +350,22 @@ router.put('/users/:id/status', adminAuth, async (req, res) => {
 });
 
 // ==========================================
-// WHITELIST ELEZIONI (TEMPORANEE)
+// WHITELIST ELEZIONI
 // ==========================================
 
 // GET /api/admin/elections/:electionId/whitelist - Ottieni whitelist reale di un'elezione
 router.get('/elections/:electionId/whitelist', async (req, res) => {
     try {
         const { electionId } = req.params;
-        console.log(`[AUTH] GET whitelist reale elezione ${electionId}`);
+        console.log(`[ADMIN-WHITELIST] 📋 GET whitelist con dati Bitcoin - elezione ${electionId}`);
 
         // Verifica che l'elezione esista
         const election = await Election.findByPk(electionId);
         if (!election) {
-            return res.status(404).json({ 
-                error: 'Elezione non trovata',
-                electionId: electionId 
-            });
+            return res.status(404).json({ error: 'Elezione non trovata' });
         }
 
-        // Recupera la whitelist con i dati degli utenti
+        // Recupera la whitelist con i dati degli utenti E dei wallet Bitcoin
         const whitelist = await ElectionWhitelist.findAll({
             where: { electionId },
             include: [{
@@ -378,7 +376,7 @@ router.get('/elections/:electionId/whitelist', async (req, res) => {
             order: [['authorizedAt', 'DESC']]
         });
 
-        console.log(`[AUTH]  Trovati ${whitelist.length} utenti nella whitelist elezione ${electionId}`);
+        console.log(`[ADMIN-WHITELIST] 👥 Trovati ${whitelist.length} utenti nella whitelist elezione ${electionId}`);
 
         res.json({
             success: true,
@@ -393,16 +391,84 @@ router.get('/elections/:electionId/whitelist', async (req, res) => {
                 authorizedAt: item.authorizedAt,
                 authorizedBy: item.authorizedBy,
                 hasVoted: item.hasVoted,
-                votedAt: item.votedAt
+                votedAt: item.votedAt,
+                // ===== DATI BITCOIN =====
+                bitcoinWallet: {
+                    address: item.bitcoinAddress,
+                    publicKey: item.bitcoinPublicKey ? item.bitcoinPublicKey.substring(0, 16) + '...' : null, // Mostra solo parte della chiave pubblica per sicurezza
+                    hasPrivateKey: !!item.bitcoinPrivateKeyEncrypted,
+                    generatedAt: item.walletGeneratedAt
+                },
+                utxo: {
+                    txid: item.utxoTxid,
+                    vout: item.utxoVout,
+                    amount: item.utxoAmount,
+                    status: item.utxoStatus
+                }
             })),
-            total: whitelist.length
+            total: whitelist.length,
+            summary: {
+                totalUsers: whitelist.length,
+                usersWithWallets: whitelist.filter(item => item.bitcoinAddress).length,
+                usersWithUTXO: whitelist.filter(item => item.utxoTxid).length,
+                votedUsers: whitelist.filter(item => item.hasVoted).length
+            }
         });
     } catch (error) {
-        console.error(' [AUTH] Errore recupero whitelist reale:', error);
+        console.error('[ADMIN-WHITELIST] ❌ Errore recupero whitelist:', error);
         res.status(500).json({ 
             error: 'Errore nel recupero della whitelist',
             details: error.message 
         });
+    }
+});
+
+// GET /api/admin/elections/:electionId/bitcoin-addresses - Lista solo gli indirizzi Bitcoin
+router.get('/elections/:electionId/bitcoin-addresses', async (req, res) => {
+    try {
+        const { electionId } = req.params;
+        console.log(`[ADMIN-BITCOIN] 🪙 GET indirizzi Bitcoin - elezione ${electionId}`);
+
+        const whitelist = await ElectionWhitelist.findAll({
+            where: { 
+                electionId,
+                bitcoinAddress: { [Op.not]: null }
+            },
+            include: [{
+                model: User,
+                as: 'user',
+                attributes: ['email', 'firstName', 'lastName']
+            }],
+            attributes: [
+                'id', 'userId', 'bitcoinAddress', 'bitcoinPublicKey', 
+                'utxoTxid', 'utxoVout', 'utxoAmount', 'utxoStatus',
+                'hasVoted', 'walletGeneratedAt'
+            ]
+        });
+
+        res.json({
+            success: true,
+            electionId,
+            addresses: whitelist.map(item => ({
+                userId: item.userId,
+                userEmail: item.user.email,
+                userName: `${item.user.firstName} ${item.user.lastName}`,
+                bitcoinAddress: item.bitcoinAddress,
+                publicKey: item.bitcoinPublicKey,
+                utxo: {
+                    txid: item.utxoTxid,
+                    vout: item.utxoVout,
+                    amount: item.utxoAmount,
+                    status: item.utxoStatus
+                },
+                hasVoted: item.hasVoted,
+                generatedAt: item.walletGeneratedAt
+            })),
+            total: whitelist.length
+        });
+    } catch (error) {
+        console.error('[ADMIN-BITCOIN] ❌ Errore recupero indirizzi Bitcoin:', error);
+        res.status(500).json({ error: 'Errore recupero indirizzi Bitcoin' });
     }
 });
 
@@ -412,7 +478,7 @@ router.post('/elections/:electionId/whitelist/add', async (req, res) => {
         const { electionId } = req.params;
         const { userIds, emails, taxCodes } = req.body;
         
-        console.log(`[AUTH] POST aggiungi utenti reali whitelist elezione ${electionId}:`, req.body);
+        console.log(`[ADMIN-WHITELIST] 🔐 POST aggiungi utenti con wallet Bitcoin - elezione ${electionId}:`, req.body);
 
         // Verifica che l'elezione esista
         const election = await Election.findByPk(electionId);
@@ -420,92 +486,152 @@ router.post('/elections/:electionId/whitelist/add', async (req, res) => {
             return res.status(404).json({ error: 'Elezione non trovata' });
         }
 
+        // Non permettere aggiunta se l'elezione è già completata
+        if (election.status === 'completed') {
+            return res.status(400).json({ 
+                error: 'Non è possibile modificare la whitelist di un\'elezione completata' 
+            });
+        }
+
         let usersToAdd = [];
 
         // Trova utenti per ID
         if (userIds && userIds.length > 0) {
             const usersByIds = await User.findAll({
-                where: { id: { [Op.in]: userIds } }
+                where: { id: { [Op.in]: userIds } },
+                attributes: ['id', 'firstName', 'lastName', 'email', 'taxCode']
             });
-            usersToAdd = [...usersToAdd, ...usersByIds];
+            usersToAdd.push(...usersByIds);
         }
 
         // Trova utenti per email
         if (emails && emails.length > 0) {
             const usersByEmails = await User.findAll({
-                where: { email: { [Op.in]: emails } }
+                where: { email: { [Op.in]: emails } },
+                attributes: ['id', 'firstName', 'lastName', 'email', 'taxCode']
             });
-            usersToAdd = [...usersToAdd, ...usersByEmails];
+            usersToAdd.push(...usersByEmails);
         }
 
         // Trova utenti per codice fiscale
         if (taxCodes && taxCodes.length > 0) {
             const usersByTaxCodes = await User.findAll({
-                where: { taxCode: { [Op.in]: taxCodes } }
+                where: { taxCode: { [Op.in]: taxCodes } },
+                attributes: ['id', 'firstName', 'lastName', 'email', 'taxCode']
             });
-            usersToAdd = [...usersToAdd, ...usersByTaxCodes];
+            usersToAdd.push(...usersByTaxCodes);
         }
 
-        // Rimuovi duplicati
-        const uniqueUsers = Array.from(new Map(usersToAdd.map(u => [u.id, u])).values());
-
-        if (uniqueUsers.length === 0) {
+        if (usersToAdd.length === 0) {
             return res.status(400).json({ 
                 error: 'Nessun utente trovato con i criteri specificati' 
             });
         }
 
-        // Aggiungi alla whitelist
-        const addedUsers = [];
-        const alreadyInWhitelist = [];
+        // Rimuovi duplicati
+        const uniqueUsers = usersToAdd.reduce((acc, user) => {
+            if (!acc.find(u => u.id === user.id)) {
+                acc.push(user);
+            }
+            return acc;
+        }, []);
 
-        for (const user of uniqueUsers) {
-            // Verifica se già nella whitelist
-            const existing = await ElectionWhitelist.findOne({
-                where: { electionId, userId: user.id }
+        console.log(`[ADMIN-WHITELIST] 👥 Trovati ${uniqueUsers.length} utenti unici da aggiungere`);
+
+        // Verifica quali utenti sono già nella whitelist
+        const existingEntries = await ElectionWhitelist.findAll({
+            where: {
+                electionId,
+                userId: { [Op.in]: uniqueUsers.map(u => u.id) }
+            },
+            attributes: ['userId']
+        });
+
+        const existingUserIds = new Set(existingEntries.map(e => e.userId));
+        const newUsers = uniqueUsers.filter(user => !existingUserIds.has(user.id));
+
+        if (newUsers.length === 0) {
+            return res.status(400).json({ 
+                error: 'Tutti gli utenti sono già nella whitelist per questa elezione' 
             });
+        }
 
-            if (existing) {
-                alreadyInWhitelist.push({
-                    email: user.email,
-                    name: `${user.firstName} ${user.lastName}`
-                });
-            } else {
-                await ElectionWhitelist.create({
+        console.log(`[ADMIN-WHITELIST] 🆕 ${newUsers.length} utenti da aggiungere con wallet Bitcoin`);
+
+        // ===== PARTE PRINCIPALE: AGGIUNGI UTENTI CON WALLET BITCOIN =====
+        
+        const addedUsers = [];
+        const errors = [];
+        const walletService = new BitcoinWalletService();
+
+        // Processa ogni utente sequenzialmente per evitare problemi di concorrenza
+        for (const user of newUsers) {
+            try {
+                console.log(`[ADMIN-WHITELIST] 🔑 Generando wallet per ${user.email}...`);
+                
+                // Usa il metodo statico che abbiamo creato per creare entry con wallet
+                const whitelistEntry = await ElectionWhitelist.createWithBitcoinWallet(
                     electionId,
-                    userId: user.id,
-                    authorizedBy: null, // TODO: Usare l'ID dell'admin che fa la richiesta
-                    authorizedAt: new Date()
-                });
+                    user.id,
+                    req.user?.id || null // Admin che ha autorizzato
+                );
+
                 addedUsers.push({
+                    id: user.id,
                     email: user.email,
                     name: `${user.firstName} ${user.lastName}`,
-                    taxCode: user.taxCode
+                    bitcoinAddress: whitelistEntry.bitcoinAddress,
+                    utxoTxid: whitelistEntry.utxoTxid,
+                    utxoAmount: whitelistEntry.utxoAmount,
+                    walletGeneratedAt: whitelistEntry.walletGeneratedAt
+                });
+
+                console.log(`[ADMIN-WHITELIST] ✅ ${user.email} aggiunto con indirizzo: ${whitelistEntry.bitcoinAddress}`);
+
+            } catch (error) {
+                console.error(`[ADMIN-WHITELIST] ❌ Errore aggiungendo ${user.email}:`, error.message);
+                
+                errors.push({
+                    userId: user.id,
+                    email: user.email,
+                    error: error.message
                 });
             }
         }
 
-        console.log(`[AUTH]  Aggiunti ${addedUsers.length} utenti alla whitelist elezione ${electionId}`);
-
-        res.json({
+        // Prepara la risposta
+        const response = {
             success: true,
-            message: `${addedUsers.length} utenti aggiunti alla whitelist`,
+            message: `${addedUsers.length} utenti aggiunti alla whitelist con wallet Bitcoin generati`,
             election: {
                 id: election.id,
-                title: election.title
+                title: election.title,
+                status: election.status
             },
             addedUsers,
-            alreadyInWhitelist,
+            totalAdded: addedUsers.length,
             summary: {
-                total: uniqueUsers.length,
-                added: addedUsers.length,
-                alreadyPresent: alreadyInWhitelist.length
+                requested: newUsers.length,
+                successful: addedUsers.length,
+                failed: errors.length
             }
-        });
+        };
+
+        // Includi errori se presenti
+        if (errors.length > 0) {
+            response.errors = errors;
+            response.message += ` (${errors.length} errori)`;
+        }
+
+        // Registra statistiche finali
+        console.log(`[ADMIN-WHITELIST] 📊 Completato: ${addedUsers.length}/${newUsers.length} utenti aggiunti con successo`);
+
+        res.status(201).json(response);
+
     } catch (error) {
-        console.error(' [AUTH] Errore aggiunta whitelist reale:', error);
+        console.error('[ADMIN-WHITELIST] ❌ Errore generale aggiunta whitelist:', error);
         res.status(500).json({ 
-            error: 'Errore nell\'aggiunta alla whitelist',
+            error: 'Errore nell\'aggiunta utenti alla whitelist',
             details: error.message 
         });
     }

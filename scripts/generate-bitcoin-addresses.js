@@ -131,14 +131,14 @@ class BitcoinAddressGenerator {
                 }
             }
 
-            console.log('\n🎉 GENERAZIONE COMPLETATA!');
+            console.log('\nGENERAZIONE COMPLETATA!');
             console.log(` Statistiche:`);
             console.log(`   • Utenti totali: ${this.stats.total}`);
             console.log(`   • Indirizzi generati: ${this.stats.generated}`);
             console.log(`   • Errori: ${this.stats.errors}`);
 
         } catch (error) {
-            console.error('💥 Errore durante la generazione:', error.message);
+            console.error('Errore durante la generazione:', error.message);
             throw error;
         }
     }
@@ -365,7 +365,7 @@ async function main() {
                 process.exit(1);
         }
     } catch (error) {
-        console.error('💥 Errore fatale:', error.message);
+        console.error('Errore fatale:', error.message);
         process.exit(1);
     } finally {
         await sequelize.close();
@@ -375,7 +375,7 @@ async function main() {
 // Esegui solo se chiamato direttamente
 if (require.main === module) {
     main().catch(error => {
-        console.error('💥 Errore fatale:', error.message);
+        console.error('Errore fatale:', error.message);
         process.exit(1);
     });
 }

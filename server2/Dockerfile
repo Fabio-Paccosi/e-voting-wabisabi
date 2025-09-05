@@ -11,7 +11,7 @@ RUN apk add --no-cache \
 # Crea directory di lavoro  
 WORKDIR /app
 
-# Prima copia shared/ (ora funziona perché build context è dalla root)
+# Copia shared/
 COPY shared/ ./shared/
 
 # Copia package.json del server2

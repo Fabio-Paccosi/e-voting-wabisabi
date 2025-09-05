@@ -145,7 +145,7 @@ app.use('*', (req, res) => {
 
 // Error handler globale
 app.use((err, req, res, next) => {
-    console.error('💥 Errore non gestito:', err);
+    console.error('Errore non gestito:', err);
     res.status(500).json({ 
         error: 'Errore interno del server',
         message: err.message,
