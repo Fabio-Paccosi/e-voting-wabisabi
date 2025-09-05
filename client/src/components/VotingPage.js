@@ -1,5 +1,5 @@
 // client/src/components/VotingPage.js
-// Versione CSS-compatibile senza Tailwind - Solo CSS inline
+// Versione con integrazione WabiSabi completa
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
@@ -17,6 +17,7 @@ import {
   Wallet
 } from 'lucide-react';
 import api from '../services/api';
+import WabiSabiVoting from '../services/WabiSabiVoting'; // NUOVO IMPORT
 
 const VotingPage = () => {
   const { electionId } = useParams();
@@ -37,6 +38,16 @@ const VotingPage = () => {
   const [transactionId, setTransactionId] = useState('');
   const [votingProgress, setVotingProgress] = useState(0);
   const [cryptoStatus, setCryptoStatus] = useState('');
+
+  // NUOVI STATI PER WABISABI
+  const [isWabiSabiEnabled] = useState(
+    process.env.REACT_APP_WABISABI_ENABLED === 'true'
+  );
+  const [wabiSabiStep, setWabiSabiStep] = useState('');
+  const [wabiSabiProgress, setWabiSabiProgress] = useState(0);
+  const [credentials, setCredentials] = useState(null);
+  const [voteCommitment, setVoteCommitment] = useState(null);
+  const [zkProof, setZkProof] = useState(null);
 
   useEffect(() => {
     initializeVoting();
@@ -101,6 +112,7 @@ const VotingPage = () => {
     setShowPrivateKeyModal(true);
   };
 
+  // FUNZIONE CONFIRMVOTE COMPLETAMENTE RISCRITTA PER SUPPORTARE WABISABI
   const confirmVote = async () => {
     if (!privateKey.trim()) {
       setError('Inserisci la chiave privata per confermare il voto');
@@ -111,50 +123,161 @@ const VotingPage = () => {
       setSubmitting(true);
       setError('');
       setVotingProgress(0);
+      setWabiSabiProgress(0);
       
-      // Step 1: Inizializzazione processo di voto
-      setCryptoStatus('Inizializzazione processo di voto sicuro...');
-      setVotingProgress(20);
-      
-      // Step 2: Verifica finale wallet e candidato
-      setCryptoStatus('Verifica autorizzazioni e parametri di voto...');
-      setVotingProgress(40);
-      
-      // Step 3: Creazione commitment crittografico
-      setCryptoStatus('Creazione commitment crittografico del voto...');
-      setVotingProgress(60);
-      
-      const voteCommitment = generateVoteCommitment(selectedCandidate);
-      
-      // Step 4: Invio voto con chiave privata
-      setCryptoStatus('Firma e invio voto alla blockchain...');
-      setVotingProgress(80);
-      
-      const voteResponse = await api.post(`/elections/${electionId}/vote`, {
-        candidateId: selectedCandidate.id,
-        bitcoinAddress: bitcoinAddress,
-        privateKey: privateKey.trim(),
-        voteCommitment: voteCommitment,
-        timestamp: new Date().toISOString(),
-        userAgent: navigator.userAgent
-      });
-
-      if (voteResponse.data.success) {
-        setCryptoStatus('Voto registrato con successo!');
-        setVotingProgress(100);
+      if (isWabiSabiEnabled) {
+        // ============ FLUSSO WABISABI COMPLETO ============
+        console.log('[WABISABI] 🚀 Inizializzazione voto anonimo');
         
-        setTransactionId(voteResponse.data.transactionId || 'N/A');
+        // FASE 1: Inizializzazione WabiSabi
+        setWabiSabiStep('Inizializzazione servizio WabiSabi...');
+        setCryptoStatus('Inizializzazione protocollo di voto anonimo...');
+        setVotingProgress(10);
+        setWabiSabiProgress(10);
+        
+        const wabiSabi = new WabiSabiVoting(user, api);
+        await new Promise(resolve => setTimeout(resolve, 1000)); // UX delay
+        
+        // FASE 2: Richiesta credenziali KVAC
+        setWabiSabiStep('Richiesta credenziali anonime (KVAC)...');
+        setCryptoStatus('Richiesta credenziali KVAC dal coordinatore...');
+        setVotingProgress(25);
+        setWabiSabiProgress(25);
+        
+        const requestedCredentials = await wabiSabi.requestCredentials(electionId);
+        setCredentials(requestedCredentials);
+        console.log('[WABISABI] ✓ Credenziali KVAC ricevute:', requestedCredentials.credentialId);
+        
+        // FASE 3: Generazione commitment omomorfico
+        setWabiSabiStep('Generazione commitment crittografico...');
+        setCryptoStatus('Creazione commitment omomorfico del voto...');
+        setVotingProgress(45);
+        setWabiSabiProgress(45);
+        
+        // IMPORTANTE: Usa l'indirizzo e chiave privata specifici dell'utente per questa elezione
+        const commitment = await wabiSabi.createVoteCommitment(
+          selectedCandidate.id,
+          requestedCredentials.serialNumber,
+          privateKey.trim() // Chiave privata specifica dell'utente
+        );
+        setVoteCommitment(commitment);
+        console.log('[WABISABI] ✓ Commitment creato per indirizzo:', bitcoinAddress);
+        
+        // FASE 4: Generazione Zero-Knowledge Proof
+        setWabiSabiStep('Generazione zero-knowledge proof...');
+        setCryptoStatus('Creazione prova crittografica di validità...');
+        setVotingProgress(65);
+        setWabiSabiProgress(65);
+        
+        const generatedZkProof = await wabiSabi.generateZKProof(
+          commitment,
+          requestedCredentials
+        );
+        setZkProof(generatedZkProof);
+        console.log('[WABISABI] ✓ ZK-proof generato');
+        
+        // FASE 5: Invio voto anonimo
+        setWabiSabiStep('Invio voto anonimo...');
+        setCryptoStatus('Invio voto anonimo al coordinatore...');
+        setVotingProgress(80);
+        setWabiSabiProgress(80);
+        
+        const voteResult = await wabiSabi.submitAnonymousVote({
+          electionId,
+          commitment: commitment.commitment,
+          zkProof: generatedZkProof,
+          serialNumber: requestedCredentials.serialNumber,
+          bitcoinAddress: bitcoinAddress // PASSA L'INDIRIZZO SPECIFICO
+        });
+        
+        console.log('[WABISABI] ✓ Voto anonimo inviato:', voteResult.voteId);
+        
+        // FASE 6: Attesa CoinJoin
+        setWabiSabiStep('Attesa aggregazione CoinJoin...');
+        setCryptoStatus('Attendendo altri voti per avviare CoinJoin...');
+        setVotingProgress(90);
+        setWabiSabiProgress(90);
+        
+        // Attendi completamento (con timeout ridotto per UX)
+        try {
+          const finalResult = await wabiSabi.waitForCoinJoinCompletion(
+            voteResult.voteId,
+            5, // max 5 tentativi
+            3000 // 3 secondi tra tentativi
+          );
+          
+          // FASE 7: Completamento
+          setWabiSabiStep('Voto registrato su blockchain!');
+          setCryptoStatus('Voto confermato e registrato su blockchain Bitcoin!');
+          setVotingProgress(100);
+          setWabiSabiProgress(100);
+          
+          setTransactionId(finalResult.transactionId || voteResult.voteId);
+        } catch (coinjoinError) {
+          // Se CoinJoin non è immediato, mostra comunque successo
+          console.log('[WABISABI] ⚠️ CoinJoin in corso, voto comunque registrato');
+          setWabiSabiStep('Voto registrato, CoinJoin in elaborazione...');
+          setCryptoStatus('Voto registrato con successo, aggregazione in corso...');
+          setVotingProgress(100);
+          setWabiSabiProgress(100);
+          setTransactionId(voteResult.voteId);
+        }
+        
         setVoteSuccess(true);
         setShowPrivateKeyModal(false);
         
         // Pulisci dati sensibili
         setPrivateKey('');
+        setCredentials(null);
+        setVoteCommitment(null);
+        setZkProof(null);
         sessionStorage.removeItem(`bitcoinAddress_${electionId}`);
         
-        console.log('[VOTING] ✅ Voto registrato con successo');
+        console.log('[WABISABI] ✅ Processo completato con successo');
         
       } else {
-        throw new Error(voteResponse.data.error || 'Errore durante l\'invio del voto');
+        // ============ FLUSSO SEMPLIFICATO ORIGINALE ============
+        console.log('[VOTING] 📝 Voto modalità semplificata');
+        
+        // Mantieni la logica originale per compatibilità
+        setCryptoStatus('Inizializzazione processo di voto sicuro...');
+        setVotingProgress(20);
+        
+        setCryptoStatus('Verifica autorizzazioni e parametri di voto...');
+        setVotingProgress(40);
+        
+        setCryptoStatus('Creazione commitment crittografico del voto...');
+        setVotingProgress(60);
+        
+        const voteCommitment = generateVoteCommitment(selectedCandidate);
+        
+        setCryptoStatus('Firma e invio voto alla blockchain...');
+        setVotingProgress(80);
+        
+        const voteResponse = await api.post(`/elections/${electionId}/vote`, {
+          candidateId: selectedCandidate.id,
+          bitcoinAddress: bitcoinAddress,
+          privateKey: privateKey.trim(),
+          voteCommitment: voteCommitment,
+          timestamp: new Date().toISOString(),
+          userAgent: navigator.userAgent
+        });
+
+        if (voteResponse.data.success) {
+          setCryptoStatus('Voto registrato con successo!');
+          setVotingProgress(100);
+          
+          setTransactionId(voteResponse.data.transactionId || 'N/A');
+          setVoteSuccess(true);
+          setShowPrivateKeyModal(false);
+          
+          setPrivateKey('');
+          sessionStorage.removeItem(`bitcoinAddress_${electionId}`);
+          
+          console.log('[VOTING] ✅ Voto semplificato registrato');
+        } else {
+          throw new Error(voteResponse.data.error || 'Errore durante l\'invio del voto');
+        }
       }
 
     } catch (error) {
@@ -162,6 +285,13 @@ const VotingPage = () => {
       
       setCryptoStatus('');
       setVotingProgress(0);
+      setWabiSabiProgress(0);
+      setWabiSabiStep('');
+      
+      // Pulisci stati WabiSabi in caso di errore
+      setCredentials(null);
+      setVoteCommitment(null);
+      setZkProof(null);
       
       if (error.response?.status === 403) {
         setError('Chiave privata non valida o non corrispondente al wallet autorizzato');
@@ -201,7 +331,7 @@ const VotingPage = () => {
     });
   };
 
-  // Modal per la chiave privata
+  // MODAL AGGIORNATO PER MOSTRARE INFO WABISABI
   const PrivateKeyModal = () => (
     <div style={{
       position: 'fixed',
@@ -239,8 +369,8 @@ const VotingPage = () => {
             gap: '0.5rem',
             margin: 0
           }}>
-            <Key size={20} style={{ color: '#8b5cf6' }} />
-            Conferma Voto
+            <Key size={20} style={{ color: isWabiSabiEnabled ? '#0ea5e9' : '#8b5cf6' }} />
+            {isWabiSabiEnabled ? 'Voto Anonimo WabiSabi' : 'Conferma Voto'}
           </h3>
           <button 
             onClick={() => setShowPrivateKeyModal(false)}
@@ -263,10 +393,10 @@ const VotingPage = () => {
           </button>
         </div>
 
-        {/* Dettagli voto */}
+        {/* Info modalità voto - AGGIORNATO */}
         <div style={{
-          backgroundColor: '#eff6ff',
-          border: '1px solid #bfdbfe',
+          backgroundColor: isWabiSabiEnabled ? '#f0f9ff' : '#eff6ff',
+          border: `1px solid ${isWabiSabiEnabled ? '#0ea5e9' : '#bfdbfe'}`,
           borderRadius: '8px',
           padding: '1rem',
           marginBottom: '1rem'
@@ -276,25 +406,64 @@ const VotingPage = () => {
             alignItems: 'center',
             marginBottom: '0.5rem'
           }}>
-            <User size={16} style={{ color: '#1e40af', marginRight: '0.5rem' }} />
+            {isWabiSabiEnabled ? (
+              <Shield size={16} style={{ color: '#0ea5e9', marginRight: '0.5rem' }} />
+            ) : (
+              <User size={16} style={{ color: '#1e40af', marginRight: '0.5rem' }} />
+            )}
             <p style={{
               fontWeight: '500',
-              color: '#1e40af',
+              color: isWabiSabiEnabled ? '#0ea5e9' : '#1e40af',
               margin: 0
-            }}>Stai votando per:</p>
+            }}>
+              {isWabiSabiEnabled ? 'Modalità Voto Anonimo (WabiSabi)' : 'Stai votando per:'}
+            </p>
           </div>
-          <p style={{
-            fontSize: '1.125rem',
-            fontWeight: '600',
-            color: '#1e40af',
-            margin: '0 0 0.25rem 0'
-          }}>{selectedCandidate?.name}</p>
-          {selectedCandidate?.party && (
-            <p style={{
-              fontSize: '0.875rem',
-              color: '#3730a3',
-              margin: 0
-            }}>{selectedCandidate.party}</p>
+          
+          {isWabiSabiEnabled ? (
+            <div>
+              <p style={{
+                fontSize: '0.875rem',
+                color: '#0c4a6e',
+                margin: '0 0 0.5rem 0',
+                fontWeight: '500'
+              }}>
+                🔒 Voto completamente anonimo con protocollo WabiSabi
+              </p>
+              <p style={{
+                fontSize: '1rem',
+                fontWeight: '600',
+                color: '#0369a1',
+                margin: '0 0 0.5rem 0'
+              }}>Candidato: {selectedCandidate?.name}</p>
+              <ul style={{
+                fontSize: '0.75rem',
+                color: '#075985',
+                margin: 0,
+                paddingLeft: '1rem'
+              }}>
+                <li>Credenziali anonime (KVAC)</li>
+                <li>Commitment omomorfico</li>
+                <li>Zero-knowledge proof</li>
+                <li>CoinJoin su blockchain Bitcoin</li>
+              </ul>
+            </div>
+          ) : (
+            <div>
+              <p style={{
+                fontSize: '1.125rem',
+                fontWeight: '600',
+                color: '#1e40af',
+                margin: '0 0 0.25rem 0'
+              }}>{selectedCandidate?.name}</p>
+              {selectedCandidate?.party && (
+                <p style={{
+                  fontSize: '0.875rem',
+                  color: '#3730a3',
+                  margin: 0
+                }}>{selectedCandidate.party}</p>
+              )}
+            </div>
           )}
         </div>
 
@@ -311,7 +480,7 @@ const VotingPage = () => {
             marginBottom: '0.25rem'
           }}>
             <Wallet size={12} style={{ color: '#6b7280', marginRight: '0.25rem' }} />
-            <span style={{ fontWeight: '500' }}>Wallet:</span>
+            <span style={{ fontWeight: '500' }}>Wallet autorizzato per questa elezione:</span>
           </div>
           <p style={{
             fontFamily: 'monospace',
@@ -332,12 +501,12 @@ const VotingPage = () => {
             marginBottom: '0.5rem'
           }}>
             <Lock size={16} style={{ marginRight: '0.25rem' }} />
-            Chiave Privata Bitcoin (WIF)
+            Chiave Privata Bitcoin (WIF) per l'indirizzo sopra
           </label>
           <textarea
             value={privateKey}
             onChange={(e) => setPrivateKey(e.target.value)}
-            placeholder="Inserisci la tua chiave privata WIF (es: L1aW4aubDFB7yfras2S1mN3bqg9nkoLmJebSLD5BWv3ENZ)"
+            placeholder="Inserisci la chiave privata WIF corrispondente al wallet autorizzato"
             disabled={submitting}
             rows="3"
             style={{
@@ -352,7 +521,7 @@ const VotingPage = () => {
               backgroundColor: submitting ? '#f9fafb' : 'white',
               cursor: submitting ? 'not-allowed' : 'text'
             }}
-            onFocus={(e) => e.target.style.borderColor = '#8b5cf6'}
+            onFocus={(e) => e.target.style.borderColor = isWabiSabiEnabled ? '#0ea5e9' : '#8b5cf6'}
             onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
           />
           <p style={{
@@ -361,11 +530,14 @@ const VotingPage = () => {
             marginTop: '0.25rem',
             margin: '0.25rem 0 0 0'
           }}>
-            La chiave privata è necessaria per firmare crittograficamente il voto sulla blockchain
+            {isWabiSabiEnabled 
+              ? 'La chiave privata è necessaria per firmare il commitment WabiSabi e partecipare al CoinJoin'
+              : 'La chiave privata è necessaria per firmare crittograficamente il voto sulla blockchain'
+            }
           </p>
         </div>
 
-        {/* Progress bar durante invio */}
+        {/* Progress bar durante invio - AGGIORNATO */}
         {submitting && (
           <div style={{ marginBottom: '1rem' }}>
             <div style={{
@@ -374,8 +546,12 @@ const VotingPage = () => {
               fontSize: '0.875rem',
               marginBottom: '0.25rem'
             }}>
-              <span style={{ color: '#6b7280' }}>Progresso:</span>
-              <span style={{ color: '#3b82f6' }}>{votingProgress}%</span>
+              <span style={{ color: '#6b7280' }}>
+                {isWabiSabiEnabled ? 'Progresso WabiSabi:' : 'Progresso:'}
+              </span>
+              <span style={{ color: isWabiSabiEnabled ? '#0ea5e9' : '#3b82f6' }}>
+                {isWabiSabiEnabled ? wabiSabiProgress : votingProgress}%
+              </span>
             </div>
             <div style={{
               width: '100%',
@@ -384,21 +560,37 @@ const VotingPage = () => {
               height: '0.5rem'
             }}>
               <div style={{
-                backgroundColor: '#3b82f6',
+                backgroundColor: isWabiSabiEnabled ? '#0ea5e9' : '#3b82f6',
                 height: '0.5rem',
                 borderRadius: '9999px',
                 transition: 'width 0.5s ease',
-                width: `${votingProgress}%`
+                width: `${isWabiSabiEnabled ? wabiSabiProgress : votingProgress}%`
               }}></div>
             </div>
-            {cryptoStatus && (
+            
+            {/* Status WabiSabi dettagliato */}
+            {isWabiSabiEnabled && wabiSabiStep && (
               <p style={{
                 fontSize: '0.75rem',
-                color: '#3b82f6',
+                color: '#0ea5e9',
                 marginTop: '0.5rem',
                 display: 'flex',
                 alignItems: 'center',
                 margin: '0.5rem 0 0 0'
+              }}>
+                <Shield size={12} style={{ marginRight: '0.25rem' }} />
+                {wabiSabiStep}
+              </p>
+            )}
+            
+            {cryptoStatus && (
+              <p style={{
+                fontSize: '0.75rem',
+                color: isWabiSabiEnabled ? '#0ea5e9' : '#3b82f6',
+                marginTop: '0.25rem',
+                display: 'flex',
+                alignItems: 'center',
+                margin: '0.25rem 0 0 0'
               }}>
                 <Clock size={12} style={{ marginRight: '0.25rem' }} />
                 {cryptoStatus}
@@ -426,7 +618,7 @@ const VotingPage = () => {
           </div>
         )}
 
-        {/* Pulsanti */}
+        {/* Pulsanti - AGGIORNATI */}
         <div style={{
           display: 'flex',
           gap: '0.75rem'
@@ -457,7 +649,9 @@ const VotingPage = () => {
               padding: '0.75rem 1rem',
               fontSize: '0.875rem',
               fontWeight: '500',
-              background: (submitting || !privateKey.trim()) ? '#9ca3af' : 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+              background: (submitting || !privateKey.trim()) ? '#9ca3af' : 
+                         isWabiSabiEnabled ? 'linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%)' :
+                         'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
               color: 'white',
               border: 'none',
               borderRadius: '6px',
@@ -478,12 +672,12 @@ const VotingPage = () => {
                   borderRadius: '50%',
                   animation: 'spin 1s linear infinite'
                 }}></div>
-                Invio...
+                {isWabiSabiEnabled ? 'Processo WabiSabi...' : 'Invio...'}
               </>
             ) : (
               <>
                 <Shield size={16} />
-                Conferma Voto
+                {isWabiSabiEnabled ? 'Voto Anonimo WabiSabi' : 'Conferma Voto'}
               </>
             )}
           </button>
@@ -492,7 +686,7 @@ const VotingPage = () => {
     </div>
   );
 
-  // Schermata di successo
+  // Schermata di successo - AGGIORNATA
   if (voteSuccess) {
     return (
       <div style={{
@@ -530,13 +724,18 @@ const VotingPage = () => {
             color: '#1e293b',
             marginBottom: '0.5rem',
             margin: '0 0 0.5rem 0'
-          }}>Voto Registrato!</h2>
+          }}>
+            {isWabiSabiEnabled ? 'Voto Anonimo Registrato!' : 'Voto Registrato!'}
+          </h2>
           <p style={{
             color: '#6b7280',
             marginBottom: '1rem',
             margin: '0 0 1rem 0'
           }}>
-            Il tuo voto è stato inviato con successo alla blockchain Bitcoin
+            {isWabiSabiEnabled 
+              ? 'Il tuo voto anonimo è stato processato con il protocollo WabiSabi'
+              : 'Il tuo voto è stato inviato con successo alla blockchain Bitcoin'
+            }
           </p>
           
           {transactionId && (
@@ -551,7 +750,9 @@ const VotingPage = () => {
                 color: '#6b7280',
                 marginBottom: '0.25rem',
                 margin: '0 0 0.25rem 0'
-              }}>ID Transazione:</p>
+              }}>
+                {isWabiSabiEnabled ? 'ID Voto/Transazione:' : 'ID Transazione:'}
+              </p>
               <p style={{
                 fontSize: '0.875rem',
                 fontFamily: 'monospace',
@@ -572,7 +773,10 @@ const VotingPage = () => {
               marginBottom: '0.5rem'
             }}>
               <Shield size={16} style={{ marginRight: '0.5rem' }} />
-              Voto anonimo e crittograficamente sicuro
+              {isWabiSabiEnabled 
+                ? 'Voto completamente anonimo con WabiSabi'
+                : 'Voto anonimo e crittograficamente sicuro'
+              }
             </div>
             <div style={{
               display: 'flex',
@@ -582,7 +786,10 @@ const VotingPage = () => {
               color: '#6b7280'
             }}>
               <Bitcoin size={16} style={{ marginRight: '0.5rem' }} />
-              Registrato su blockchain Bitcoin
+              {isWabiSabiEnabled 
+                ? 'Elaborato tramite CoinJoin su blockchain Bitcoin'
+                : 'Registrato su blockchain Bitcoin'
+              }
             </div>
           </div>
 
@@ -590,7 +797,9 @@ const VotingPage = () => {
             onClick={() => navigate('/')}
             style={{
               width: '100%',
-              background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+              background: isWabiSabiEnabled 
+                ? 'linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%)'
+                : 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
               color: 'white',
               border: 'none',
               padding: '0.75rem 1rem',
@@ -602,7 +811,9 @@ const VotingPage = () => {
             }}
             onMouseOver={(e) => {
               e.target.style.transform = 'translateY(-1px)';
-              e.target.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
+              e.target.style.boxShadow = isWabiSabiEnabled 
+                ? '0 4px 12px rgba(14, 165, 233, 0.3)'
+                : '0 4px 12px rgba(59, 130, 246, 0.3)';
             }}
             onMouseOut={(e) => {
               e.target.style.transform = 'translateY(0)';
@@ -648,6 +859,30 @@ const VotingPage = () => {
       margin: '0 auto',
       padding: '2rem 1rem'
     }}>
+      {/* BADGE MODALITÀ WABISABI */}
+      {isWabiSabiEnabled && (
+        <div style={{
+          backgroundColor: '#f0f9ff',
+          border: '1px solid #0ea5e9',
+          borderRadius: '8px',
+          padding: '0.75rem 1rem',
+          marginBottom: '1rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '0.5rem'
+        }}>
+          <Shield size={20} style={{ color: '#0ea5e9' }} />
+          <span style={{
+            color: '#0c4a6e',
+            fontWeight: '600',
+            fontSize: '0.9rem'
+          }}>
+            🔒 Modalità Voto Anonimo WabiSabi Attivata
+          </span>
+        </div>
+      )}
+
       {/* Header con pulsante indietro */}
       <div style={{ marginBottom: '1.5rem' }}>
         <button
@@ -741,7 +976,7 @@ const VotingPage = () => {
               marginBottom: '0.25rem'
             }}>
               <Wallet size={16} style={{ marginRight: '0.5rem' }} />
-              <span style={{ fontWeight: '500' }}>Wallet autorizzato:</span>
+              <span style={{ fontWeight: '500' }}>Wallet autorizzato per questa elezione:</span>
             </div>
             <p style={{
               fontSize: '0.875rem',
@@ -798,9 +1033,13 @@ const VotingPage = () => {
               onClick={() => handleCandidateSelect(candidate)}
               style={{
                 padding: '1rem',
-                border: selectedCandidate?.id === candidate.id ? '2px solid #3b82f6' : '2px solid #e5e7eb',
+                border: selectedCandidate?.id === candidate.id ? 
+                        `2px solid ${isWabiSabiEnabled ? '#0ea5e9' : '#3b82f6'}` : 
+                        '2px solid #e5e7eb',
                 borderRadius: '8px',
-                backgroundColor: selectedCandidate?.id === candidate.id ? '#eff6ff' : 'white',
+                backgroundColor: selectedCandidate?.id === candidate.id ? 
+                                 isWabiSabiEnabled ? '#f0f9ff' : '#eff6ff' : 
+                                 'white',
                 cursor: 'pointer',
                 transition: 'all 0.2s ease'
               }}
@@ -847,7 +1086,7 @@ const VotingPage = () => {
                     <div style={{
                       width: '1.5rem',
                       height: '1.5rem',
-                      backgroundColor: '#3b82f6',
+                      backgroundColor: isWabiSabiEnabled ? '#0ea5e9' : '#3b82f6',
                       borderRadius: '50%',
                       display: 'flex',
                       alignItems: 'center',
@@ -869,7 +1108,7 @@ const VotingPage = () => {
           ))}
         </div>
 
-        {/* Pulsante invio voto */}
+        {/* Pulsante invio voto - AGGIORNATO */}
         <div style={{
           paddingTop: '1.5rem',
           borderTop: '1px solid #e5e7eb'
@@ -883,7 +1122,9 @@ const VotingPage = () => {
               alignItems: 'center',
               justifyContent: 'center',
               gap: '0.5rem',
-              background: !selectedCandidate ? '#9ca3af' : 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+              background: !selectedCandidate ? '#9ca3af' : 
+                         isWabiSabiEnabled ? 'linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%)' :
+                         'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
               color: 'white',
               border: 'none',
               padding: '0.875rem 1.5rem',
@@ -896,7 +1137,9 @@ const VotingPage = () => {
             onMouseOver={(e) => {
               if (selectedCandidate) {
                 e.target.style.transform = 'translateY(-1px)';
-                e.target.style.boxShadow = '0 4px 12px rgba(139, 92, 246, 0.3)';
+                e.target.style.boxShadow = isWabiSabiEnabled 
+                  ? '0 4px 12px rgba(14, 165, 233, 0.3)'
+                  : '0 4px 12px rgba(139, 92, 246, 0.3)';
               }
             }}
             onMouseOut={(e) => {
@@ -906,8 +1149,8 @@ const VotingPage = () => {
               }
             }}
           >
-            <Key size={20} />
-            Procedi con il Voto
+            {isWabiSabiEnabled ? <Shield size={20} /> : <Key size={20} />}
+            {isWabiSabiEnabled ? 'Voto Anonimo WabiSabi' : 'Procedi con il Voto'}
           </button>
           {!selectedCandidate && (
             <p style={{

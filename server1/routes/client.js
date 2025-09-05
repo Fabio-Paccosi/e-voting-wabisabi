@@ -220,6 +220,27 @@ router.get('/elections/available', addUserToHeaders, async (req, res) => {
     }
 });
 
+router.get('/elections/:id/details', addUserToHeaders, async (req, res) => {
+    try {
+        const { id } = req.params;
+        console.log(`[CLIENT GATEWAY] Richiesta dettagli elezione ${id} (route /details)`);
+        
+        // Usa la stessa logica della route principale
+        // Passa tutti i header inclusi quelli con informazioni utente
+        const response = await callService('vote', `/api/elections/${id}`, 'GET', null, req.headers);
+        console.log(`[CLIENT GATEWAY] ✓ Dettagli elezione ${id} caricati (route /details)`);
+        res.json(response);
+    } catch (error) {
+        console.error(`[CLIENT GATEWAY] ✗ Errore caricamento elezione ${req.params.id} (route /details):`, error.message);
+        res.status(error.status || 500).json({ 
+            error: 'Errore nel caricamento dei dettagli dell\'elezione',
+            details: error.originalError || error.message,
+            service: 'vote'
+        });
+    }
+});
+
+
 // GET /api/elections/:id - Dettagli elezione specifica
 router.get('/elections/:id', addUserToHeaders, async (req, res) => {
     try {

@@ -240,8 +240,17 @@ const VotingSession = sequelize.define('VotingSession', {
         }
     },
     status: {
-        type: DataTypes.ENUM('pending', 'active', 'completed', 'failed'),
-        defaultValue: 'pending'
+        type: DataTypes.ENUM(
+            'preparing',           // Preparazione sessione
+            'input_registration',  // Registrazione input WabiSabi
+            'output_registration', // Registrazione output WabiSabi
+            'signing',            // Firma transazione CoinJoin
+            'completed',          // Completato con successo
+            'failed',             // Fallito
+            'pending',            // In attesa (legacy)
+            'active'              // Attivo (legacy)
+        ),
+        defaultValue: 'preparing'
     },
     minParticipants: {
         type: DataTypes.INTEGER,
@@ -257,6 +266,26 @@ const VotingSession = sequelize.define('VotingSession', {
         type: DataTypes.INTEGER,
         defaultValue: 0,
         field: 'current_participants'
+    },
+    startTime: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'start_time'
+    },
+    endTime: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'end_time'
+    },
+    transactionCount: {
+        type: DataTypes.INTEGER,
+        defaultValue: 0,
+        field: 'transaction_count'
+    },
+    finalTallyTransactionId: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        field: 'final_tally_transaction_id'
     }
 }, {
     tableName: 'voting_sessions',

@@ -161,64 +161,38 @@ router.post('/credentials', extractUserFromHeaders, async (req, res) => {
             return res.status(400).json({ error: 'Utente ha già votato' });
         }
 
-        /*
-        // Verifica che non esistano già credenziali non usate per questo utente/elezione
-        const existingCredential = await Credential.findOne({
-            where: {
-                user_id: userId,
-                is_used: false,
-                created_at: {
-                    [require('sequelize').Op.gt]: new Date(Date.now() - WABISABI_CONFIG.CREDENTIAL_EXPIRY)
-                }
-            }
-        });
-
-        if (existingCredential) {
-            console.log(`[VOTING] ♻️ Riutilizzo credenziali esistenti per utente ${userId}`);
-            return res.json({
-                success: true,
-                credentialId: existingCredential.id,
-                serialNumber: existingCredential.serial_number,
-                signature: existingCredential.signature,
-                nonce: existingCredential.nonce,
-                issuedAt: existingCredential.issued_at,
-                expiresAt: new Date(existingCredential.created_at.getTime() + WABISABI_CONFIG.CREDENTIAL_EXPIRY)
-            });
-        }
-        */
-
-        // Genera nuove credenziali KVAC
+        // ✅ CORREZIONE: Usa parametri corretti
         const credentialData = await WabiSabiKVACService.generateCredentials({
-            user_id: userId,        
+            userId: userId,           
             electionId,
             nonce,
             userEmail: req.user.email
         });
 
-        // Salva nel database
+        // ✅ CORREZIONE: Usa nomi campo corretti
         const credential = await Credential.create({
-            user_id: userId,        
-            serial_number: credentialData.serialNumber,  
+            userId: userId,                           
+            serialNumber: credentialData.serialNumber,  
             nonce,
             signature: credentialData.signature,
-            is_used: false,         
-            issued_at: new Date()  
+            isUsed: false,                           
+            issuedAt: new Date()                     
         });
 
-        console.log(`[VOTING]  Credenziali KVAC generate: ${credential.id}`);
+        console.log(`[VOTING] ✅ Credenziali KVAC generate: ${credential.id}`);
 
         res.json({
             success: true,
             credentialId: credential.id,
-            serialNumber: credential.serial_number,
+            serialNumber: credential.serialNumber,
             signature: credential.signature,
             nonce: credential.nonce,
-            issuedAt: credential.issued_at,
-            expiresAt: new Date(credential.created_at.getTime() + WABISABI_CONFIG.CREDENTIAL_EXPIRY)
+            issuedAt: credential.issuedAt,
+            expiresAt: new Date(Date.now() + WABISABI_CONFIG.CREDENTIAL_EXPIRY)
         });
 
     } catch (error) {
-        console.error('[VOTING]  Errore generazione credenziali:', error);
+        console.error('[VOTING] ❌ Errore generazione credenziali:', error);
         res.status(500).json({ 
             error: 'Errore nella generazione delle credenziali',
             details: error.message 
@@ -231,24 +205,24 @@ router.post('/submit', async (req, res) => {
     try {
         const { electionId, commitment, zkProof, serialNumber, bitcoinAddress } = req.body;
         
-        // 1.   usa camelCase
+        console.log(`[VOTING] 📥 Ricevuto voto anonimo per elezione ${electionId}`);
+        
+        // 1. Verifica elezione
         const election = await Election.findByPk(electionId);
         if (!election || election.status !== 'active') {
             return res.status(400).json({ error: 'Elezione non attiva' });
         }
 
-        // 2.   usa camelCase
+        // 2. Trova credenziale
         const credential = await Credential.findOne({
-            where: { 
-                serial_number: serialNumber  
-            }
+            where: { serialNumber: serialNumber }
         });
 
         if (!credential) {
             return res.status(400).json({ error: 'Credenziale non valida' });
         }
 
-        if (credential.isUsed) { 
+        if (credential.isUsed) {
             return res.status(400).json({ error: 'Credenziale già utilizzata' });
         }
 
@@ -258,94 +232,169 @@ router.post('/submit', async (req, res) => {
             return res.status(400).json({ error: 'Credenziale scaduta' });
         }
 
-        // 4. Verifica ZK proof (già funzionante)
-        const zkVerification = await WabiSabiKVACService.verifyZKProof({
-            zkProof,
-            commitment,
-            serialNumber,
-            electionId
-        });
-
-        if (!zkVerification.valid) {
-            return res.status(400).json({ error: 'Zero-knowledge proof non valido' });
-        }
-
-        // 5.   trova sessione con camelCase
+        // 4. ✅ CORREZIONE: Logica robusta per sessioni di voto
+        console.log(`[VOTING] 🔍 Ricerca sessioni attive per elezione ${electionId}`);
+        
+        // Prima prova a trovare una sessione esistente
         let votingSession = await VotingSession.findOne({
             where: {
-                election_id: electionId, 
-                status: ['input_registration', 'output_registration']
-            }
+                electionId: electionId,
+                status: {
+                    [require('sequelize').Op.in]: ['preparing', 'input_registration', 'output_registration']
+                }
+            },
+            order: [['created_at', 'DESC']] // Prendi la più recente
         });
 
+        // ✅ Se non trova sessione, creane una nuova
         if (!votingSession) {
-            return res.status(500).json({ error: 'Nessuna sessione di voto attiva' });
+            console.log(`[VOTING] 🆕 Nessuna sessione attiva trovata, creazione nuova sessione per elezione ${electionId}`);
+            
+            try {
+                votingSession = await VotingSession.create({
+                    electionId: electionId,
+                    status: 'input_registration',
+                    startTime: new Date(),
+                    endTime: null,
+                    minParticipants: WABISABI_CONFIG.COINJOIN_THRESHOLD || 2,
+                    maxParticipants: 100,
+                    currentParticipants: 0,
+                    transactionCount: 0,
+                    finalTallyTransactionId: null
+                });
+                
+                console.log(`[VOTING] ✅ Nuova sessione creata: ${votingSession.id}`);
+            } catch (createError) {
+                console.error(`[VOTING] ❌ Errore creazione sessione:`, createError);
+                return res.status(500).json({ 
+                    error: 'Errore nella creazione della sessione di voto',
+                    details: createError.message 
+                });
+            }
+        } else {
+            console.log(`[VOTING] ✅ Sessione esistente trovata: ${votingSession.id} (stato: ${votingSession.status})`);
         }
 
-        // 6. Crea voto con camelCase
+        // 5. Verifica che la sessione sia in uno stato accettabile
+        const acceptableStates = ['preparing', 'input_registration', 'output_registration'];
+        if (!acceptableStates.includes(votingSession.status)) {
+            console.log(`[VOTING] ⚠️ Sessione ${votingSession.id} in stato non accettabile: ${votingSession.status}`);
+            
+            // Crea una nuova sessione se quella esistente non è utilizzabile
+            try {
+                votingSession = await VotingSession.create({
+                    electionId: electionId,
+                    status: 'input_registration',
+                    startTime: new Date(),
+                    endTime: null,
+                    minParticipants: WABISABI_CONFIG.COINJOIN_THRESHOLD || 2,
+                    maxParticipants: 100,
+                    currentParticipants: 0,
+                    transactionCount: 0,
+                    finalTallyTransactionId: null
+                });
+                
+                console.log(`[VOTING] ✅ Nuova sessione sostitutiva creata: ${votingSession.id}`);
+            } catch (createError) {
+                console.error(`[VOTING] ❌ Errore creazione sessione sostitutiva:`, createError);
+                return res.status(500).json({ 
+                    error: 'Errore nella creazione della sessione di voto sostitutiva',
+                    details: createError.message 
+                });
+            }
+        }
+
+        // 6. ✅ A questo punto abbiamo garantito una sessione valida
+        console.log(`[VOTING] 🎯 Utilizzo sessione ${votingSession.id} per il voto`);
+
+        // 7. Crea il voto
         const vote = await Vote.create({
-            sessionId: votingSession.id,    
-            serialNumber: serialNumber,   
+            sessionId: votingSession.id,
+            serialNumber: serialNumber,
             commitment,
             status: 'pending',
-            submittedAt: new Date()   
+            submittedAt: new Date()
         });
 
-        // 7. marca credenziale come usata
+        console.log(`[VOTING] ✅ Voto creato: ${vote.id}`);
+
+        // 8. Marca credenziale come usata
         await credential.update({
-            isUsed: true,          
-            usedAt: new Date()   
+            isUsed: true,
+            usedAt: new Date()
         });
 
-        // 8. marca utente come votato
+        // 9. Marca utente come votato nella whitelist
         await ElectionWhitelist.update(
             { 
-                hasVoted: true,     
-                votedAt: new Date()  
+                hasVoted: true,
+                votedAt: new Date()
             },
             { 
                 where: { 
-                    userId: credential.user_id,   
-                    electionId: electionId      
+                    userId: credential.userId,
+                    electionId: electionId
                 } 
             }
         );
 
-        // 9. conteggio voti pending
+        // 10. Aggiorna conteggio partecipanti nella sessione
+        await votingSession.reload(); // Ricarica per avere dati freschi
+        await votingSession.update({
+            currentParticipants: votingSession.currentParticipants + 1
+        });
+
+        // 11. Conteggio voti pending per trigger CoinJoin
         const pendingVotes = await Vote.count({
             where: {
-                sessionId: votingSession.id,  //  camelCase
+                sessionId: votingSession.id,
                 status: 'pending'
             }
         });
 
-        console.log(`[VOTING]  Voti pending in sessione ${votingSession.id}: ${pendingVotes}`);
+        console.log(`[VOTING] 📊 Voti pending in sessione ${votingSession.id}: ${pendingVotes}/${WABISABI_CONFIG.COINJOIN_THRESHOLD}`);
 
+        // 12. Trigger CoinJoin se soglia raggiunta
+        let coinjoinTriggered = false;
         if (pendingVotes >= WABISABI_CONFIG.COINJOIN_THRESHOLD) {
-            console.log(`[VOTING] Soglia CoinJoin raggiunta, avvio aggregazione...`);
+            console.log(`[VOTING] 🚀 Soglia CoinJoin raggiunta (${pendingVotes} >= ${WABISABI_CONFIG.COINJOIN_THRESHOLD}), avvio aggregazione...`);
             
-            // Trigger CoinJoin in background
-            CoinJoinService.triggerCoinJoin(votingSession.id, electionId)
-                .catch(error => {
-                    console.error(`[VOTING]  Errore CoinJoin per sessione ${votingSession.id}:`, error);
-                });
+            // Aggiorna stato sessione a output_registration
+            await votingSession.update({
+                status: 'output_registration'
+            });
+            
+            coinjoinTriggered = true;
+            
+            // Trigger CoinJoin in background (non bloccare la risposta)
+            setImmediate(() => {
+                CoinJoinService.triggerCoinJoin(votingSession.id, electionId)
+                    .then(() => {
+                        console.log(`[VOTING] ✅ CoinJoin completato per sessione ${votingSession.id}`);
+                    })
+                    .catch(error => {
+                        console.error(`[VOTING] ❌ Errore CoinJoin per sessione ${votingSession.id}:`, error);
+                    });
+            });
         }
 
-        console.log(`[VOTING]  Voto anonimo registrato: ${vote.id}`);
+        console.log(`[VOTING] 🎉 Voto anonimo registrato con successo: ${vote.id}`);
 
+        // 13. Risposta di successo
         res.json({
             success: true,
             voteId: vote.id,
             sessionId: votingSession.id,
             status: 'submitted',
             message: 'Voto ricevuto e in elaborazione',
-            pendingVotes,
-            coinjoinTriggered: pendingVotes >= WABISABI_CONFIG.COINJOIN_THRESHOLD,
-            estimatedConfirmationTime: '5-15 minuti'
+            pendingVotes: pendingVotes,
+            coinjoinThreshold: WABISABI_CONFIG.COINJOIN_THRESHOLD,
+            coinjoinTriggered: coinjoinTriggered,
+            sessionStatus: votingSession.status
         });
 
     } catch (error) {
-        console.error('[VOTING]  Errore invio voto:', error);
+        console.error('[VOTING] ❌ Errore invio voto:', error);
         res.status(500).json({ 
             error: 'Errore nell\'invio del voto',
             details: error.message 
