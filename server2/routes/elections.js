@@ -1,6 +1,6 @@
 // Route per verificare accesso elezione con indirizzo Bitcoin
 
-const BitcoinWalletService = require('../../shared/services/BitcoinWalletService');
+const BitcoinWalletService = require('../shared/services/BitcoinWalletService');
 
 // POST /api/elections/verify-access - Verifica accesso elezione con indirizzo Bitcoin
 router.post('/verify-access', authMiddleware, async (req, res) => {
