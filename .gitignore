@@ -3,3 +3,6 @@
 /debug/
 /client/node_modules/.cache/
 /admin/node_modules/
+node_modules/
+.cache/
+client/node_modules/.cache/
