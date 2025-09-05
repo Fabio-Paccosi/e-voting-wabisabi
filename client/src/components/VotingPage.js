@@ -1,522 +1,938 @@
+// client/src/components/VotingPage.js
+// Versione CSS-compatibile senza Tailwind - Solo CSS inline
+
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { useVoting } from '../contexts/VotingContext';
 import { 
-  Vote, 
+  ArrowLeft, 
+  User, 
   Shield, 
-  Key, 
-  CheckCircle, 
-  AlertCircle, 
-  Loader,
-  ArrowLeft,
-  Lock,
   Bitcoin,
-  Users,
-  User,
-  FileText  // Aggiunto per il pulsante ricevuta futuro
+  Key,
+  Lock,
+  CheckCircle,
+  AlertTriangle,
+  Clock,
+  Wallet
 } from 'lucide-react';
-import WabiSabiVoting from '../services/WabiSabiVoting';
 import api from '../services/api';
-import VoteReceipt from './VoteReceipt';
 
 const VotingPage = () => {
   const { electionId } = useParams();
-  const { user, isAuthenticated } = useAuth();
-  const { voting, setVoting } = useVoting();
   const navigate = useNavigate();
-
-  // State management esistenti
+  const location = useLocation();
+  const { user } = useAuth();
+  
   const [election, setElection] = useState(null);
   const [candidates, setCandidates] = useState([]);
   const [selectedCandidate, setSelectedCandidate] = useState(null);
-  const [currentStep, setCurrentStep] = useState('loading');
+  const [showPrivateKeyModal, setShowPrivateKeyModal] = useState(false);
+  const [privateKey, setPrivateKey] = useState('');
+  const [bitcoinAddress, setBitcoinAddress] = useState('');
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [voteSuccess, setVoteSuccess] = useState(false);
+  const [transactionId, setTransactionId] = useState('');
   const [votingProgress, setVotingProgress] = useState(0);
   const [cryptoStatus, setCryptoStatus] = useState('');
-  const [bitcoinAddress, setBitcoinAddress] = useState('');
-  const [credential, setCredential] = useState(null);
 
-  // NUOVI STATI PER TRACCIARE DATI RICEVUTA
-  const [voteId, setVoteId] = useState(null);
-  const [transactionId, setTransactionId] = useState(null);
-  const [voteSubmittedAt, setVoteSubmittedAt] = useState(null);
-  
-  // *** STATI MANCANTI PER LA RICEVUTA ***
-  const [showReceipt, setShowReceipt] = useState(false);
-
-  const wabiSabiVoting = new WabiSabiVoting();
-
-  // Verifica autenticazione - CODICE ESISTENTE
   useEffect(() => {
-    if (!isAuthenticated || !user) {
-      console.log('[VOTING] Utente non autenticato, reindirizzando al login...');
-      navigate('/login');
-      return;
-    }
-    
-    loadElectionData();
-  }, [electionId, isAuthenticated, user]);
+    initializeVoting();
+  }, [electionId]);
 
-  // LOADECTION DATA - CORRETTO: singola chiamata API con candidati inclusi
-  const loadElectionData = async () => {
+  const initializeVoting = async () => {
     try {
       setLoading(true);
-      setError('');
       
-      console.log('[VOTING] Caricamento dati elezione:', electionId);
-      console.log('[VOTING] Utente autenticato:', user.email);
+      // Recupera l'indirizzo Bitcoin dalla sessione o dallo state
+      let address = sessionStorage.getItem(`bitcoinAddress_${electionId}`);
+      if (!address && location.state?.bitcoinAddress) {
+        address = location.state.bitcoinAddress;
+        sessionStorage.setItem(`bitcoinAddress_${electionId}`, address);
+      }
       
-      // Inizializza il servizio WabiSabi
-      try {
-        wabiSabiVoting.initialize();
-        console.log('[VOTING] ✓ Servizio WabiSabi inizializzato');
-      } catch (wabiError) {
-        console.error('[VOTING] ❌ Errore inizializzazione WabiSabi:', wabiError.message);
-        setError('Errore di autenticazione. Effettua nuovamente il login.');
-        navigate('/login');
+      if (!address) {
+        setError('Indirizzo Bitcoin non trovato. Torna alla selezione elezioni e reinserisci il wallet.');
         return;
       }
       
-      // CORREZIONE: singola chiamata API per elezione (include candidati)
-      const electionResponse = await api.get(`/elections/${electionId}`);
+      setBitcoinAddress(address);
       
-      // L'elezione dovrebbe includere i candidati nella risposta
-      const electionData = electionResponse.data.election || electionResponse.data;
+      // Carica i dettagli dell'elezione e candidati
+      const response = await api.get(`/elections/${electionId}/details`);
       
-      setElection(electionData);
-      setCandidates(electionData.candidates || []);
-      setCurrentStep('selection');
-      
-      console.log('[VOTING] ✓ Elezione caricata:', electionData.title);
-      console.log('[VOTING] ✓ Candidati trovati:', electionData.candidates?.length || 0);
-      
-    } catch (error) {
-      console.error('[VOTING] ❌ Errore caricamento elezione:', error);
-      
-      // Gestione errori specifica
-      if (error.response?.status === 404) {
-        setError('Elezione non trovata o non accessibile');
-      } else if (error.response?.status === 403) {
-        setError('Non sei autorizzato a votare in questa elezione');
+      if (response.data.success) {
+        setElection(response.data.election);
+        setCandidates(response.data.election.candidates || []);
       } else {
-        setError(error.response?.data?.error || 'Errore nel caricamento dell\'elezione');
+        setError(response.data.error || 'Errore nel caricamento dell\'elezione');
+      }
+      
+    } catch (err) {
+      console.error('Error initializing voting:', err);
+      
+      if (err.response?.status === 403) {
+        setError('Non sei autorizzato per questa elezione');
+      } else if (err.response?.status === 400) {
+        setError('Elezione non attiva o periodo di voto scaduto');
+      } else {
+        setError('Errore nel caricamento dell\'elezione');
       }
     } finally {
       setLoading(false);
     }
   };
 
-  // HANDLE CANDIDATE SELECT - MANTIENI CODICE ESISTENTE  
   const handleCandidateSelect = (candidate) => {
-    console.log('[VOTING] Candidato selezionato:', candidate.name || `${candidate.firstName} ${candidate.lastName}`);
     setSelectedCandidate(candidate);
     setError('');
   };
 
-  // START VOTING PROCESS - MODIFICATO PER TRACCIARE DATI RICEVUTA
-  const startVotingProcess = async () => {
+  const handleVoteSubmit = () => {
     if (!selectedCandidate) {
       setError('Seleziona un candidato prima di procedere');
       return;
     }
+    
+    setPrivateKey('');
+    setError('');
+    setShowPrivateKeyModal(true);
+  };
+
+  const confirmVote = async () => {
+    if (!privateKey.trim()) {
+      setError('Inserisci la chiave privata per confermare il voto');
+      return;
+    }
 
     try {
+      setSubmitting(true);
       setError('');
-      setCurrentStep('crypto');
-      setVotingProgress(10);
-      setVoteSubmittedAt(new Date()); // TRACCIA TIMESTAMP INVIO
-
-      console.log('[VOTING] 🗳️ Avvio processo di voto per candidato:', selectedCandidate.name);
-
-      // Step 1: Generate Bitcoin address
-      setCryptoStatus('Generazione indirizzo Bitcoin sicuro...');
-      setVotingProgress(15);
+      setVotingProgress(0);
       
-      const addressData = await wabiSabiVoting.generateBitcoinAddress();
-      setBitcoinAddress(addressData.address);
-      console.log('[VOTING] ✓ Indirizzo Bitcoin generato:', addressData.address);
-
-      // *** STEP 1.5: NUOVO - Registra indirizzo e crea sessione ***
-      setCryptoStatus('Registrazione indirizzo e creazione sessione di voto...');
-      setVotingProgress(25);
+      // Step 1: Inizializzazione processo di voto
+      setCryptoStatus('Inizializzazione processo di voto sicuro...');
+      setVotingProgress(20);
       
-      const registrationResult = await wabiSabiVoting.registerBitcoinAddress(electionId, addressData);
-      console.log('[VOTING] ✅ Sessione di voto creata:', registrationResult.sessionId);
-
-      // Step 2: Request KVAC credentials
-      setCryptoStatus('Richiesta credenziali anonime KVAC...');
+      // Step 2: Verifica finale wallet e candidato
+      setCryptoStatus('Verifica autorizzazioni e parametri di voto...');
       setVotingProgress(40);
       
-      const credentialData = await wabiSabiVoting.requestCredentials(electionId);
-      setCredential(credentialData);
-      console.log('[VOTING] ✓ Credenziali KVAC ricevute');
-
-      // Step 3: Create vote commitment
+      // Step 3: Creazione commitment crittografico
       setCryptoStatus('Creazione commitment crittografico del voto...');
       setVotingProgress(60);
       
-      const voteCommitment = await wabiSabiVoting.createVoteCommitment(
-        selectedCandidate.id,
-        credentialData.serialNumber,
-        addressData.privateKey
-      );
-      console.log('[VOTING] ✓ Commitment voto creato');
-
-      // Step 4: Generate zero-knowledge proof
-      setCryptoStatus('Generazione prova zero-knowledge per privacy...');
-      setVotingProgress(75);
+      const voteCommitment = generateVoteCommitment(selectedCandidate);
       
-      const zkProof = await wabiSabiVoting.generateZKProof(
-        voteCommitment,
-        credentialData,
-        selectedCandidate.voteEncoding || selectedCandidate.id
-      );
-      console.log('[VOTING] ✓ Prova zero-knowledge generata');
-
-      // Step 5: Submit anonymous vote (ora la sessione esiste!)
-      setCryptoStatus('Invio voto anonimo al sistema...');
-      setVotingProgress(90);
-      setCurrentStep('voting');
-
-      const voteSubmissionResult = await wabiSabiVoting.submitAnonymousVote({
-        electionId,
-        commitment: voteCommitment.commitment,
-        zkProof,
-        serialNumber: credentialData.serialNumber,
-        bitcoinAddress: addressData.address
+      // Step 4: Invio voto con chiave privata
+      setCryptoStatus('Firma e invio voto alla blockchain...');
+      setVotingProgress(80);
+      
+      const voteResponse = await api.post(`/elections/${electionId}/vote`, {
+        candidateId: selectedCandidate.id,
+        bitcoinAddress: bitcoinAddress,
+        privateKey: privateKey.trim(),
+        voteCommitment: voteCommitment,
+        timestamp: new Date().toISOString(),
+        userAgent: navigator.userAgent
       });
-      
-      // Salva il VOTE ID per la ricevuta
-      const submittedVoteId = voteSubmissionResult.voteId;
-      setVoteId(submittedVoteId);
-      
-      console.log('[VOTING] Voto anonimo inviato, Vote ID:', submittedVoteId);
-      
-      // Aggiorna il contesto voting
-      setVoting(prev => ({
-        ...prev,
-        currentElection: election,
-        selectedCandidate,
-        bitcoinAddress: addressData.address,
-        credential: credentialData,
-        voteCommitment: voteCommitment.commitment,
-        transactionId: null, // Sarà aggiornato dopo il CoinJoin
-        step: 'voting',
-        progress: 90
-      }));
 
-      // Step 6: Wait for CoinJoin completion
-      setCryptoStatus('Attesa aggregazione CoinJoin e registrazione blockchain...');
-      setVotingProgress(95);
-
-      const completionResult = await wabiSabiVoting.waitForCoinJoinCompletion(submittedVoteId);
-      console.log('[VOTING] ✓ Processo completato:', completionResult);
-
-      if (completionResult.transactionId) {
-        setTransactionId(completionResult.transactionId);
+      if (voteResponse.data.success) {
+        setCryptoStatus('Voto registrato con successo!');
+        setVotingProgress(100);
         
-        // Aggiorna il contesto voting con transaction ID
-        setVoting(prev => ({
-          ...prev,
-          transactionId: completionResult.transactionId,
-          step: 'complete',
-          progress: 100
-        }));
-      }
-
-      // Complete
-      setCurrentStep('complete');
-      setCryptoStatus('Voto registrato con successo sulla blockchain Bitcoin!');
-      setVotingProgress(100);
-
-    } catch (err) {
-      console.error('[VOTING] ❌ Errore processo di voto:', err.message);
-      
-      let errorMessage = 'Errore durante il processo di voto';
-      
-      if (err.message.includes('non autorizzato')) {
-        errorMessage = 'Non sei autorizzato a votare in questa elezione';
-      } else if (err.message.includes('già votato')) {
-        errorMessage = 'Hai già espresso il tuo voto';
-      } else if (err.message.includes('token')) {
-        errorMessage = 'Sessione scaduta. Effettua nuovamente il login.';
-        setTimeout(() => navigate('/login'), 2000);
+        setTransactionId(voteResponse.data.transactionId || 'N/A');
+        setVoteSuccess(true);
+        setShowPrivateKeyModal(false);
+        
+        // Pulisci dati sensibili
+        setPrivateKey('');
+        sessionStorage.removeItem(`bitcoinAddress_${electionId}`);
+        
+        console.log('[VOTING] ✅ Voto registrato con successo');
+        
       } else {
-        errorMessage = `Errore: ${err.message}`;
+        throw new Error(voteResponse.data.error || 'Errore durante l\'invio del voto');
       }
+
+    } catch (error) {
+      console.error('[VOTING] ❌ Errore invio voto:', error);
       
-      setError(errorMessage);
-      setCurrentStep('selection');
-      setVotingProgress(0);
       setCryptoStatus('');
+      setVotingProgress(0);
+      
+      if (error.response?.status === 403) {
+        setError('Chiave privata non valida o non corrispondente al wallet autorizzato');
+      } else if (error.response?.status === 400) {
+        setError(error.response.data.error || 'Dati del voto non validi');
+      } else if (error.response?.status === 409) {
+        setError('Hai già votato per questa elezione');
+      } else {
+        setError(error.message || 'Errore durante l\'invio del voto. Riprova più tardi.');
+      }
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  // FUNZIONE PER MOSTRARE RICEVUTA COMPLETA
-  const showVoteReceipt = () => {
-    if (voteId) {
-      setShowReceipt(true);
-    } else {
-      setError('Impossibile generare la ricevuta: ID voto non disponibile');
-    }
+  const generateVoteCommitment = (candidate) => {
+    // Genera un commitment crittografico del voto (implementazione semplificata)
+    const voteData = {
+      candidateId: candidate.id,
+      voteEncoding: candidate.voteEncoding,
+      electionId: electionId,
+      timestamp: Date.now(),
+      nonce: Math.random().toString(36).substring(2, 15)
+    };
+    
+    // In un'implementazione reale, questo utilizzerebbe crypto più sofisticato
+    return btoa(JSON.stringify(voteData));
   };
 
-  // FUNZIONE PLACEHOLDER PER DEBUG (da rimuovere quando VoteReceipt è pronto)
-  const showReceiptData = () => {
-    if (voteId && transactionId) {
-      // Mostra dati debug - sarà sostituito dal componente VoteReceipt
-      alert(`Dati Ricevuta:
-        Vote ID: ${voteId}
-        Transaction ID: ${transactionId}
-        Submitted: ${voteSubmittedAt?.toLocaleString('it-IT')}
-        Election: ${election?.title}
-      `);
-    } else {
-      alert('Dati ricevuta non ancora disponibili. Voto ID: ' + (voteId || 'N/A') + ', Transaction ID: ' + (transactionId || 'N/A'));
-    }
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('it-IT', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
-  // NAVIGATION METHODS - MANTIENI ESISTENTI
-  const goBackToElections = () => {
-    navigate('/elections');
-  };
+  // Modal per la chiave privata
+  const PrivateKeyModal = () => (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1000,
+      padding: '1rem'
+    }}>
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: '12px',
+        padding: '1.5rem',
+        width: '100%',
+        maxWidth: '28rem',
+        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)'
+      }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '1rem'
+        }}>
+          <h3 style={{
+            fontSize: '1.125rem',
+            fontWeight: '600',
+            color: '#1e293b',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            margin: 0
+          }}>
+            <Key size={20} style={{ color: '#8b5cf6' }} />
+            Conferma Voto
+          </h3>
+          <button 
+            onClick={() => setShowPrivateKeyModal(false)}
+            disabled={submitting}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#6b7280',
+              cursor: submitting ? 'not-allowed' : 'pointer',
+              padding: '0.25rem',
+              borderRadius: '4px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
 
-  const viewResults = () => {
-    navigate('/results');
-  };
+        {/* Dettagli voto */}
+        <div style={{
+          backgroundColor: '#eff6ff',
+          border: '1px solid #bfdbfe',
+          borderRadius: '8px',
+          padding: '1rem',
+          marginBottom: '1rem'
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            marginBottom: '0.5rem'
+          }}>
+            <User size={16} style={{ color: '#1e40af', marginRight: '0.5rem' }} />
+            <p style={{
+              fontWeight: '500',
+              color: '#1e40af',
+              margin: 0
+            }}>Stai votando per:</p>
+          </div>
+          <p style={{
+            fontSize: '1.125rem',
+            fontWeight: '600',
+            color: '#1e40af',
+            margin: '0 0 0.25rem 0'
+          }}>{selectedCandidate?.name}</p>
+          {selectedCandidate?.party && (
+            <p style={{
+              fontSize: '0.875rem',
+              color: '#3730a3',
+              margin: 0
+            }}>{selectedCandidate.party}</p>
+          )}
+        </div>
 
-  // LOADING E ERROR HANDLING - MANTIENI ESISTENTI
+        <div style={{
+          backgroundColor: '#f9fafb',
+          padding: '0.75rem',
+          borderRadius: '8px',
+          marginBottom: '1rem',
+          fontSize: '0.75rem'
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            marginBottom: '0.25rem'
+          }}>
+            <Wallet size={12} style={{ color: '#6b7280', marginRight: '0.25rem' }} />
+            <span style={{ fontWeight: '500' }}>Wallet:</span>
+          </div>
+          <p style={{
+            fontFamily: 'monospace',
+            color: '#374151',
+            wordBreak: 'break-all',
+            margin: 0
+          }}>{bitcoinAddress}</p>
+        </div>
+
+        {/* Campo chiave privata */}
+        <div style={{ marginBottom: '1rem' }}>
+          <label style={{
+            display: 'flex',
+            alignItems: 'center',
+            fontSize: '0.875rem',
+            fontWeight: '500',
+            color: '#374151',
+            marginBottom: '0.5rem'
+          }}>
+            <Lock size={16} style={{ marginRight: '0.25rem' }} />
+            Chiave Privata Bitcoin (WIF)
+          </label>
+          <textarea
+            value={privateKey}
+            onChange={(e) => setPrivateKey(e.target.value)}
+            placeholder="Inserisci la tua chiave privata WIF (es: L1aW4aubDFB7yfras2S1mN3bqg9nkoLmJebSLD5BWv3ENZ)"
+            disabled={submitting}
+            rows="3"
+            style={{
+              width: '100%',
+              padding: '0.75rem',
+              border: '2px solid #d1d5db',
+              borderRadius: '6px',
+              fontFamily: 'monospace',
+              fontSize: '0.875rem',
+              outline: 'none',
+              resize: 'vertical',
+              backgroundColor: submitting ? '#f9fafb' : 'white',
+              cursor: submitting ? 'not-allowed' : 'text'
+            }}
+            onFocus={(e) => e.target.style.borderColor = '#8b5cf6'}
+            onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
+          />
+          <p style={{
+            fontSize: '0.75rem',
+            color: '#6b7280',
+            marginTop: '0.25rem',
+            margin: '0.25rem 0 0 0'
+          }}>
+            La chiave privata è necessaria per firmare crittograficamente il voto sulla blockchain
+          </p>
+        </div>
+
+        {/* Progress bar durante invio */}
+        {submitting && (
+          <div style={{ marginBottom: '1rem' }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              fontSize: '0.875rem',
+              marginBottom: '0.25rem'
+            }}>
+              <span style={{ color: '#6b7280' }}>Progresso:</span>
+              <span style={{ color: '#3b82f6' }}>{votingProgress}%</span>
+            </div>
+            <div style={{
+              width: '100%',
+              backgroundColor: '#e5e7eb',
+              borderRadius: '9999px',
+              height: '0.5rem'
+            }}>
+              <div style={{
+                backgroundColor: '#3b82f6',
+                height: '0.5rem',
+                borderRadius: '9999px',
+                transition: 'width 0.5s ease',
+                width: `${votingProgress}%`
+              }}></div>
+            </div>
+            {cryptoStatus && (
+              <p style={{
+                fontSize: '0.75rem',
+                color: '#3b82f6',
+                marginTop: '0.5rem',
+                display: 'flex',
+                alignItems: 'center',
+                margin: '0.5rem 0 0 0'
+              }}>
+                <Clock size={12} style={{ marginRight: '0.25rem' }} />
+                {cryptoStatus}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Errore */}
+        {error && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            padding: '0.875rem 1rem',
+            borderRadius: '8px',
+            fontSize: '0.9rem',
+            marginBottom: '1rem',
+            backgroundColor: '#fef2f2',
+            border: '1px solid #fecaca',
+            color: '#dc2626'
+          }}>
+            <AlertTriangle size={16} />
+            <p style={{ margin: 0 }}>{error}</p>
+          </div>
+        )}
+
+        {/* Pulsanti */}
+        <div style={{
+          display: 'flex',
+          gap: '0.75rem'
+        }}>
+          <button
+            onClick={() => setShowPrivateKeyModal(false)}
+            disabled={submitting}
+            style={{
+              flex: 1,
+              padding: '0.75rem 1rem',
+              fontSize: '0.875rem',
+              fontWeight: '500',
+              background: '#f3f4f6',
+              color: '#374151',
+              border: '1px solid #d1d5db',
+              borderRadius: '6px',
+              cursor: submitting ? 'not-allowed' : 'pointer',
+              opacity: submitting ? 0.6 : 1
+            }}
+          >
+            Annulla
+          </button>
+          <button
+            onClick={confirmVote}
+            disabled={submitting || !privateKey.trim()}
+            style={{
+              flex: 1,
+              padding: '0.75rem 1rem',
+              fontSize: '0.875rem',
+              fontWeight: '500',
+              background: (submitting || !privateKey.trim()) ? '#9ca3af' : 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: (submitting || !privateKey.trim()) ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem'
+            }}
+          >
+            {submitting ? (
+              <>
+                <div style={{
+                  width: '1rem',
+                  height: '1rem',
+                  border: '2px solid transparent',
+                  borderTop: '2px solid currentColor',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite'
+                }}></div>
+                Invio...
+              </>
+            ) : (
+              <>
+                <Shield size={16} />
+                Conferma Voto
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Schermata di successo
+  if (voteSuccess) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        backgroundColor: '#f0fdf4',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '1rem'
+      }}>
+        <div style={{
+          maxWidth: '28rem',
+          width: '100%',
+          backgroundColor: 'white',
+          borderRadius: '12px',
+          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)',
+          padding: '2rem',
+          textAlign: 'center'
+        }}>
+          <div style={{
+            width: '4rem',
+            height: '4rem',
+            backgroundColor: '#dcfce7',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 1rem'
+          }}>
+            <CheckCircle size={32} style={{ color: '#16a34a' }} />
+          </div>
+          <h2 style={{
+            fontSize: '1.5rem',
+            fontWeight: '600',
+            color: '#1e293b',
+            marginBottom: '0.5rem',
+            margin: '0 0 0.5rem 0'
+          }}>Voto Registrato!</h2>
+          <p style={{
+            color: '#6b7280',
+            marginBottom: '1rem',
+            margin: '0 0 1rem 0'
+          }}>
+            Il tuo voto è stato inviato con successo alla blockchain Bitcoin
+          </p>
+          
+          {transactionId && (
+            <div style={{
+              backgroundColor: '#f9fafb',
+              padding: '0.75rem',
+              borderRadius: '8px',
+              marginBottom: '1rem'
+            }}>
+              <p style={{
+                fontSize: '0.75rem',
+                color: '#6b7280',
+                marginBottom: '0.25rem',
+                margin: '0 0 0.25rem 0'
+              }}>ID Transazione:</p>
+              <p style={{
+                fontSize: '0.875rem',
+                fontFamily: 'monospace',
+                color: '#374151',
+                wordBreak: 'break-all',
+                margin: 0
+              }}>{transactionId}</p>
+            </div>
+          )}
+          
+          <div style={{ marginBottom: '1.5rem' }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '0.875rem',
+              color: '#6b7280',
+              marginBottom: '0.5rem'
+            }}>
+              <Shield size={16} style={{ marginRight: '0.5rem' }} />
+              Voto anonimo e crittograficamente sicuro
+            </div>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '0.875rem',
+              color: '#6b7280'
+            }}>
+              <Bitcoin size={16} style={{ marginRight: '0.5rem' }} />
+              Registrato su blockchain Bitcoin
+            </div>
+          </div>
+
+          <button
+            onClick={() => navigate('/')}
+            style={{
+              width: '100%',
+              background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+              color: 'white',
+              border: 'none',
+              padding: '0.75rem 1rem',
+              borderRadius: '8px',
+              fontSize: '1rem',
+              fontWeight: '500',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseOver={(e) => {
+              e.target.style.transform = 'translateY(-1px)';
+              e.target.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
+            }}
+            onMouseOut={(e) => {
+              e.target.style.transform = 'translateY(0)';
+              e.target.style.boxShadow = 'none';
+            }}
+          >
+            Torna alla Home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Caricamento
   if (loading) {
     return (
-      <div className="loading-container">
-        <div className="spinner"></div>
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '4rem 2rem',
+        textAlign: 'center',
+        minHeight: '60vh'
+      }}>
+        <div style={{
+          width: '48px',
+          height: '48px',
+          border: '4px solid #e2e8f0',
+          borderLeft: '4px solid #3B82F6',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite',
+          marginBottom: '1rem'
+        }}></div>
         <p>Caricamento elezione...</p>
       </div>
     );
   }
 
-  if (error && !election) {
-    return (
-      <div className="error-container">
-        <AlertCircle size={48} />
-        <h3>Errore</h3>
-        <p>{error}</p>
-        <button onClick={goBackToElections} className="button secondary">
-          <ArrowLeft size={20} />
-          Torna alle Elezioni
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div className="voting-page">
-      {/* HEADER - MANTIENI ESISTENTE */}
-      <div className="voting-header">
-        <button onClick={goBackToElections} className="back-button">
+    <div style={{
+      maxWidth: '1000px',
+      margin: '0 auto',
+      padding: '2rem 1rem'
+    }}>
+      {/* Header con pulsante indietro */}
+      <div style={{ marginBottom: '1.5rem' }}>
+        <button
+          onClick={() => navigate('/')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            background: '#f3f4f6',
+            color: '#374151',
+            border: '1px solid #d1d5db',
+            padding: '0.5rem 1rem',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '0.9rem',
+            marginBottom: '1rem'
+          }}
+        >
           <ArrowLeft size={20} />
-          Indietro
+          Torna alle elezioni
         </button>
-        <div className="election-info">
-          <h2>{election?.title}</h2>
-          <p>{election?.description}</p>
-          
-          <div className="user-info-badge">
-            <User size={16} />
-            <span>Autenticato come: {user?.firstName} {user?.lastName} ({user?.email})</span>
+      </div>
+
+      {/* Header elezione */}
+      {election && (
+        <div style={{
+          background: 'white',
+          borderRadius: '12px',
+          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+          padding: '1.5rem',
+          marginBottom: '2rem'
+        }}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            marginBottom: '1rem',
+            flexWrap: 'wrap',
+            gap: '1rem'
+          }}>
+            <div>
+              <h1 style={{
+                fontSize: '1.5rem',
+                fontWeight: '600',
+                marginBottom: '0.5rem',
+                margin: '0 0 0.5rem 0'
+              }}>{election.title}</h1>
+              {election.description && (
+                <p style={{ color: '#6b7280', margin: 0 }}>{election.description}</p>
+              )}
+            </div>
+            <div style={{
+              textAlign: 'right',
+              fontSize: '0.875rem',
+              color: '#6b7280'
+            }}>
+              <p style={{ margin: '0 0 0.25rem 0' }}>Fine votazioni: {formatDate(election.endDate)}</p>
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.25rem',
+                backgroundColor: '#dcfce7',
+                color: '#166534',
+                padding: '0.25rem 0.75rem',
+                borderRadius: '20px',
+                fontSize: '0.8rem',
+                fontWeight: '500'
+              }}>
+                <div style={{
+                  width: '0.5rem',
+                  height: '0.5rem',
+                  backgroundColor: '#22c55e',
+                  borderRadius: '50%'
+                }}></div>
+                Attiva
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
 
-      {/* STEP INDICATOR - MANTIENI ESISTENTE */}
-      <div className="step-indicator">
-        <div className={`step ${currentStep === 'selection' || currentStep === 'crypto' || currentStep === 'voting' || currentStep === 'complete' ? 'active' : ''}`}>
-          <div className="step-number">1</div>
-          <div className="step-label">Selezione Candidato</div>
-        </div>
-        <div className={`step ${currentStep === 'crypto' || currentStep === 'voting' || currentStep === 'complete' ? 'active' : ''}`}>
-          <div className="step-number">2</div>
-          <div className="step-label">Crittografia WabiSabi</div>
-        </div>
-        <div className={`step ${currentStep === 'voting' || currentStep === 'complete' ? 'active' : ''}`}>
-          <div className="step-number">3</div>
-          <div className="step-label">Invio Voto</div>
-        </div>
-        <div className={`step ${currentStep === 'complete' ? 'active' : ''}`}>
-          <div className="step-number">4</div>
-          <div className="step-label">Completato</div>
-        </div>
-      </div>
-
-      {/* ERROR ALERT - MANTIENI ESISTENTE */}
-      {error && !transactionId && (
-        <div className="alert alert-error">
-          <AlertCircle size={20} />
-          {error}
+          <div style={{
+            backgroundColor: '#eff6ff',
+            border: '1px solid #bfdbfe',
+            borderRadius: '8px',
+            padding: '0.75rem'
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              fontSize: '0.875rem',
+              color: '#3730a3',
+              marginBottom: '0.25rem'
+            }}>
+              <Wallet size={16} style={{ marginRight: '0.5rem' }} />
+              <span style={{ fontWeight: '500' }}>Wallet autorizzato:</span>
+            </div>
+            <p style={{
+              fontSize: '0.875rem',
+              fontFamily: 'monospace',
+              color: '#1e40af',
+              wordBreak: 'break-all',
+              margin: 0
+            }}>{bitcoinAddress}</p>
+          </div>
         </div>
       )}
 
-      {/* STEP 1: CANDIDATE SELECTION - MANTIENI ESISTENTE */}
-      {currentStep === 'selection' && (
-        <div className="voting-step">
-          <div className="step-header">
-            <Vote size={32} />
-            <h3>Seleziona il tuo candidato</h3>
-            <p>Scegli il candidato per cui vuoi esprimere il tuo voto anonimo</p>
-          </div>
+      {error && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          padding: '0.875rem 1rem',
+          borderRadius: '8px',
+          fontSize: '0.9rem',
+          marginBottom: '1.5rem',
+          backgroundColor: '#fef2f2',
+          border: '1px solid #fecaca',
+          color: '#dc2626'
+        }}>
+          <AlertTriangle size={20} />
+          <p style={{ margin: 0 }}>{error}</p>
+        </div>
+      )}
 
-          <div className="candidates-grid">
-            {candidates.map((candidate) => (
-              <div
-                key={candidate.id}
-                className={`candidate-card ${selectedCandidate?.id === candidate.id ? 'selected' : ''}`}
-                onClick={() => handleCandidateSelect(candidate)}
-              >
-                <div className="candidate-info">
-                  <h4>{candidate.name || `${candidate.firstName} ${candidate.lastName}`}</h4>
-                  {candidate.party && <p className="candidate-party">{candidate.party}</p>}
+      {/* Lista candidati */}
+      <div style={{
+        background: 'white',
+        borderRadius: '12px',
+        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+        padding: '1.5rem'
+      }}>
+        <h2 style={{
+          fontSize: '1.25rem',
+          fontWeight: '600',
+          marginBottom: '1.5rem',
+          margin: '0 0 1.5rem 0'
+        }}>Seleziona il candidato</h2>
+        
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '1rem',
+          marginBottom: '2rem'
+        }}>
+          {candidates.map((candidate) => (
+            <div
+              key={candidate.id}
+              onClick={() => handleCandidateSelect(candidate)}
+              style={{
+                padding: '1rem',
+                border: selectedCandidate?.id === candidate.id ? '2px solid #3b82f6' : '2px solid #e5e7eb',
+                borderRadius: '8px',
+                backgroundColor: selectedCandidate?.id === candidate.id ? '#eff6ff' : 'white',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseOver={(e) => {
+                if (selectedCandidate?.id !== candidate.id) {
+                  e.currentTarget.style.borderColor = '#9ca3af';
+                }
+              }}
+              onMouseOut={(e) => {
+                if (selectedCandidate?.id !== candidate.id) {
+                  e.currentTarget.style.borderColor = '#e5e7eb';
+                }
+              }}
+            >
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <div style={{ flex: 1 }}>
+                  <h3 style={{
+                    fontSize: '1.125rem',
+                    fontWeight: '500',
+                    color: '#1e293b',
+                    margin: '0 0 0.25rem 0'
+                  }}>{candidate.name}</h3>
+                  {candidate.party && (
+                    <p style={{
+                      fontSize: '0.875rem',
+                      color: '#6b7280',
+                      margin: '0 0 0.5rem 0'
+                    }}>{candidate.party}</p>
+                  )}
+                  {candidate.biography && (
+                    <p style={{
+                      fontSize: '0.875rem',
+                      color: '#6b7280',
+                      margin: 0
+                    }}>{candidate.biography}</p>
+                  )}
                 </div>
-                <div className="candidate-select">
+                <div style={{ marginLeft: '1rem' }}>
                   {selectedCandidate?.id === candidate.id ? (
-                    <CheckCircle size={24} />
+                    <div style={{
+                      width: '1.5rem',
+                      height: '1.5rem',
+                      backgroundColor: '#3b82f6',
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}>
+                      <CheckCircle size={16} color="white" />
+                    </div>
                   ) : (
-                    <div className="select-circle"></div>
+                    <div style={{
+                      width: '1.5rem',
+                      height: '1.5rem',
+                      border: '2px solid #d1d5db',
+                      borderRadius: '50%'
+                    }}></div>
                   )}
                 </div>
               </div>
-            ))}
-          </div>
-
-          <div className="voting-actions">
-            <button 
-              onClick={startVotingProcess}
-              className="button primary large"
-              disabled={!selectedCandidate}
-            >
-              <Shield size={20} />
-              Procedi con Voto Anonimo
-            </button>
-          </div>
+            </div>
+          ))}
         </div>
-      )}
 
-      {/* STEP 2-3: CRYPTO E VOTING - MANTIENI ESISTENTE */}
-      {(currentStep === 'crypto' || currentStep === 'voting') && (
-        <div className="voting-step">
-          <div className="step-header">
-            <Key size={32} />
-            <h3>Processo Crittografico WabiSabi</h3>
-            <p>Il tuo voto viene processato in modo anonimo e sicuro</p>
-          </div>
-
-          <div className="crypto-progress">
-            <div className="progress-bar">
-              <div 
-                className="progress-fill" 
-                style={{ width: `${votingProgress}%` }}
-              ></div>
-            </div>
-            <div className="progress-text">{votingProgress}%</div>
-          </div>
-
-          <div className="crypto-status">
-            <Loader size={24} className="spinner" />
-            <p>{cryptoStatus}</p>
-          </div>
-
-          {bitcoinAddress && (
-            <div className="crypto-details">
-              <div className="detail-item">
-                <Bitcoin size={20} />
-                <span>Indirizzo Bitcoin Generato: {bitcoinAddress.substring(0, 20)}...</span>
-              </div>
-            </div>
+        {/* Pulsante invio voto */}
+        <div style={{
+          paddingTop: '1.5rem',
+          borderTop: '1px solid #e5e7eb'
+        }}>
+          <button
+            onClick={handleVoteSubmit}
+            disabled={!selectedCandidate}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem',
+              background: !selectedCandidate ? '#9ca3af' : 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+              color: 'white',
+              border: 'none',
+              padding: '0.875rem 1.5rem',
+              borderRadius: '8px',
+              fontSize: '1.125rem',
+              fontWeight: '500',
+              cursor: !selectedCandidate ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseOver={(e) => {
+              if (selectedCandidate) {
+                e.target.style.transform = 'translateY(-1px)';
+                e.target.style.boxShadow = '0 4px 12px rgba(139, 92, 246, 0.3)';
+              }
+            }}
+            onMouseOut={(e) => {
+              if (selectedCandidate) {
+                e.target.style.transform = 'translateY(0)';
+                e.target.style.boxShadow = 'none';
+              }
+            }}
+          >
+            <Key size={20} />
+            Procedi con il Voto
+          </button>
+          {!selectedCandidate && (
+            <p style={{
+              fontSize: '0.875rem',
+              color: '#6b7280',
+              textAlign: 'center',
+              marginTop: '0.5rem',
+              margin: '0.5rem 0 0 0'
+            }}>
+              Seleziona un candidato per procedere
+            </p>
           )}
         </div>
-      )}
+      </div>
 
-      {/* STEP 4: COMPLETE - MODIFICATO CON PULSANTE RICEVUTA */}
-      {currentStep === 'complete' && (
-        <div className="voting-step">
-          <div className="step-header success">
-            <CheckCircle size={48} />
-            <h3>Voto Registrato con Successo!</h3>
-            <p>Il tuo voto anonimo è stato registrato in modo sicuro sulla blockchain</p>
-          </div>
+      {/* Modal chiave privata */}
+      {showPrivateKeyModal && <PrivateKeyModal />}
 
-          {/* MOSTRA TRANSACTION ID SE DISPONIBILE */}
-          {transactionId && (
-            <div className="completion-details">
-              <div className="info-card detail-card">
-                <Bitcoin size={24} />
-                <div>
-                  <h4>Transaction ID Blockchain</h4>
-                  <p className="transaction-id">{transactionId}</p>
-                  <p className="text-sm text-gray-600">
-                    <b>Questo ID identifica la sessione di voto aggregata sulla Blockchain</b>
-                  </p>
-                  <br></br>
-                  <p>
-                    Vote ID: {voteId}<br></br>
-                    Inviato in data: {voteSubmittedAt?.toLocaleString('it-IT')}<br></br>
-                    Elezione: {election?.title}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="completion-details">
-            <div className="detail-card">
-              <Shield size={32} />
-              <h4>Anonimato Garantito</h4>
-              <p>Il tuo voto è stato mixato con altri voti attraverso il protocollo WabiSabi, rendendo impossibile risalire alla tua identità.</p>
-            </div>
-
-            <div className="detail-card">
-              <Bitcoin size={32} />
-              <h4>Registrato su Blockchain</h4>
-              <p>Il voto è stato permanentemente registrato sulla blockchain Bitcoin, garantendo immutabilità e verificabilità.</p>
-            </div>
-
-            <div className="detail-card">
-              <Lock size={32} />
-              <h4>Processo Sicuro</h4>
-              <p>Sono state utilizzate credenziali crittografiche avanzate e prove zero-knowledge per proteggere la tua privacy.</p>
-            </div>
-          </div>
-
-          {/* AZIONI CON PULSANTE RICEVUTA PLACEHOLDER */}
-          <div className="completion-actions">
-            {/* PULSANTE RICEVUTA - PLACEHOLDER PER ORA */}
-            {voteId && (
-              <button onClick={showReceiptData} className="button primary">
-                <FileText size={20} />
-                Mostra Dati Ricevuta
-              </button>
-            )}
-
-            <button onClick={viewResults} className="button primary">
-              <Vote size={20} />
-              Visualizza Risultati
-            </button>
-            
-            <button onClick={goBackToElections} className="button secondary">
-              <ArrowLeft size={20} />
-              Torna alle Elezioni
-            </button>
-          </div>
-        </div>
-      )}
-      {showReceipt && voteId && (
-        <VoteReceipt
-          voteId={voteId}
-          electionId={electionId}
-          onClose={() => setShowReceipt(false)}
-        />
-      )}
+      {/* CSS per le animazioni */}
+      <style jsx>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 };

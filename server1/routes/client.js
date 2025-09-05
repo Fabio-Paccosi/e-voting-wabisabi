@@ -240,6 +240,25 @@ router.get('/elections/:id', addUserToHeaders, async (req, res) => {
     }
 });
 
+router.post('/elections/:id/verify-wallet', addUserToHeaders, async (req, res) => {
+    try {
+        const { id } = req.params;
+        console.log(`[CLIENT GATEWAY] Verifica wallet per elezione ${id}`);
+        
+        // Passa tutti i header inclusi quelli con informazioni utente
+        const response = await callService('vote', `/api/elections/${id}/verify-wallet`, 'POST', req.body, req.headers);
+        console.log(`[CLIENT GATEWAY] ✓ Wallet verificato per elezione ${id}`);
+        res.json(response);
+    } catch (error) {
+        console.error(`[CLIENT GATEWAY] ✗ Errore verifica wallet elezione ${req.params.id}:`, error.message);
+        res.status(error.status || 500).json({ 
+            error: 'Errore nella verifica del wallet',
+            details: error.originalError || error.message,
+            service: 'vote'
+        });
+    }
+});
+
 // POST /api/elections/:id/vote - Invio voto
 router.post('/elections/:id/vote', addUserToHeaders, async (req, res) => {
     try {

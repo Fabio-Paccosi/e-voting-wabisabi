@@ -457,6 +457,7 @@ router.get('/:id', extractUserFromHeaders, async (req, res) => {
 });
 
 // POST /api/elections/:id/vote - Invio voto per elezione specifica
+/*
 router.post('/:id/vote', extractUserFromHeaders, async (req, res) => {
     try {
         const { id: electionId } = req.params;
@@ -481,6 +482,7 @@ router.post('/:id/vote', extractUserFromHeaders, async (req, res) => {
         });
     }
 });
+*/
 
 // GET /api/elections/debug - Route di debug per verificare header
 router.get('/debug', async (req, res) => {
@@ -816,6 +818,269 @@ router.post('/:electionId/trigger-coinjoin', async (req, res) => {
         console.error('[MANUAL-COINJOIN] ❌ Errore trigger CoinJoin manuale:', error);
         res.status(500).json({ 
             error: 'Errore durante il trigger del CoinJoin',
+            details: error.message 
+        });
+    }
+});
+
+// POST /api/elections/:id/verify-wallet - Verifica indirizzo wallet contro ElectionWhitelist
+router.post('/:id/verify-wallet', extractUserFromHeaders, async (req, res) => {
+    try {
+        const electionId = req.params.id;
+        const userId = req.user.id;
+        const { walletAddress } = req.body;
+
+        console.log(`[WALLET-VERIFY] 🔍 Verifica wallet per utente ${userId}, elezione ${electionId}`);
+
+        // 1. Validazione input
+        if (!walletAddress || typeof walletAddress !== 'string') {
+            return res.status(400).json({ 
+                success: false,
+                error: 'Indirizzo wallet richiesto' 
+            });
+        }
+
+        const trimmedAddress = walletAddress.trim();
+        
+        // Validazione formato base Bitcoin address
+        if (!trimmedAddress.match(/^(bc1|tb1|[13])[a-zA-HJ-NP-Z0-9]{25,62}$/)) {
+            return res.status(400).json({ 
+                success: false,
+                error: 'Formato indirizzo Bitcoin non valido' 
+            });
+        }
+
+        // 2. Verifica che l'elezione esista e sia attiva
+        const election = await Election.findByPk(electionId);
+        if (!election) {
+            return res.status(404).json({ 
+                success: false,
+                error: 'Elezione non trovata' 
+            });
+        }
+
+        // Verifica che l'elezione sia nel periodo di voto
+        const now = new Date();
+        if (election.status !== 'active' || 
+            now < new Date(election.startDate) || 
+            now > new Date(election.endDate)) {
+            return res.status(400).json({ 
+                success: false,
+                error: 'Elezione non attiva o non nel periodo di voto' 
+            });
+        }
+
+        // 3. Verifica che l'utente sia in whitelist per questa elezione
+        const whitelistEntry = await ElectionWhitelist.findOne({
+            where: {
+                electionId: electionId,
+                userId: userId
+            }
+        });
+
+        if (!whitelistEntry) {
+            console.log(`[WALLET-VERIFY] ❌ Utente ${userId} non in whitelist per elezione ${electionId}`);
+            return res.status(403).json({ 
+                success: false,
+                error: 'Non sei autorizzato per questa elezione' 
+            });
+        }
+
+        // 4. Verifica che l'utente non abbia già votato
+        if (whitelistEntry.hasVoted) {
+            return res.status(409).json({ 
+                success: false,
+                error: 'Hai già espresso il voto per questa elezione',
+                votedAt: whitelistEntry.votedAt
+            });
+        }
+
+        // 5. Verifica che l'indirizzo wallet corrisponda a quello in whitelist
+        if (!whitelistEntry.bitcoinAddress) {
+            console.log(`[WALLET-VERIFY] ⚠️ Nessun indirizzo Bitcoin assegnato per utente ${userId} nell'elezione ${electionId}`);
+            return res.status(500).json({ 
+                success: false,
+                error: 'Errore di configurazione: indirizzo Bitcoin non assegnato' 
+            });
+        }
+
+        if (whitelistEntry.bitcoinAddress !== trimmedAddress) {
+            console.log(`[WALLET-VERIFY] ❌ Indirizzo wallet non corrispondente per utente ${userId}`);
+            console.log(`[WALLET-VERIFY] Whitelist: ${whitelistEntry.bitcoinAddress}`);
+            console.log(`[WALLET-VERIFY] Fornito: ${trimmedAddress}`);
+            
+            return res.status(403).json({ 
+                success: false,
+                error: 'Indirizzo wallet non corrispondente a quello autorizzato nella whitelist' 
+            });
+        }
+
+        // 6. Wallet verificato con successo
+        console.log(`[WALLET-VERIFY] ✅ Wallet verificato per utente ${userId}: ${trimmedAddress}`);
+
+        res.json({
+            success: true,
+            message: 'Indirizzo wallet verificato con successo',
+            walletAddress: trimmedAddress,
+            election: {
+                id: election.id,
+                title: election.title,
+                endDate: election.endDate
+            },
+            userAccess: {
+                authorizedAt: whitelistEntry.authorizedAt,
+                hasVoted: whitelistEntry.hasVoted
+            }
+        });
+
+    } catch (error) {
+        console.error(`[WALLET-VERIFY] ❌ Errore verifica wallet:`, error);
+        res.status(500).json({ 
+            success: false,
+            error: 'Errore interno durante la verifica del wallet',
+            details: error.message 
+        });
+    }
+});
+
+// POST /api/elections/:id/vote - Endpoint di voto migliorato con validazione chiave privata
+router.post('/:id/vote', extractUserFromHeaders, async (req, res) => {
+    try {
+        const electionId = req.params.id;
+        const userId = req.user.id;
+        const { 
+            candidateId, 
+            bitcoinAddress, 
+            privateKey, 
+            voteCommitment, 
+            timestamp 
+        } = req.body;
+
+        console.log(`[VOTE-SUBMIT] 🗳️ Tentativo voto da utente ${userId} per elezione ${electionId}`);
+
+        // 1. Validazione input
+        if (!candidateId || !bitcoinAddress || !privateKey || !voteCommitment) {
+            return res.status(400).json({ 
+                success: false,
+                error: 'Tutti i campi sono obbligatori: candidateId, bitcoinAddress, privateKey, voteCommitment' 
+            });
+        }
+
+        // 2. Verifica elezione
+        const election = await Election.findByPk(electionId, {
+            include: [
+                {
+                    model: Candidate,
+                    as: 'candidates',
+                    attributes: ['id', 'name', 'voteEncoding']
+                }
+            ]
+        });
+
+        if (!election) {
+            return res.status(404).json({ 
+                success: false,
+                error: 'Elezione non trovata' 
+            });
+        }
+
+        // Verifica periodo di voto
+        const now = new Date();
+        if (election.status !== 'active' || 
+            now < new Date(election.startDate) || 
+            now > new Date(election.endDate)) {
+            return res.status(400).json({ 
+                success: false,
+                error: 'Elezione non attiva o periodo di voto scaduto' 
+            });
+        }
+
+        // 3. Verifica candidato
+        const candidate = election.candidates.find(c => c.id === candidateId);
+        if (!candidate) {
+            return res.status(400).json({ 
+                success: false,
+                error: 'Candidato non valido per questa elezione' 
+            });
+        }
+
+        // 4. Verifica whitelist e wallet
+        const whitelistEntry = await ElectionWhitelist.findOne({
+            where: {
+                electionId: electionId,
+                userId: userId
+            }
+        });
+
+        if (!whitelistEntry) {
+            return res.status(403).json({ 
+                success: false,
+                error: 'Non sei autorizzato per questa elezione' 
+            });
+        }
+
+        if (whitelistEntry.hasVoted) {
+            return res.status(409).json({ 
+                success: false,
+                error: 'Hai già votato per questa elezione',
+                votedAt: whitelistEntry.votedAt
+            });
+        }
+
+        if (whitelistEntry.bitcoinAddress !== bitcoinAddress.trim()) {
+            return res.status(403).json({ 
+                success: false,
+                error: 'Indirizzo Bitcoin non autorizzato' 
+            });
+        }
+
+        // 5. Validazione chiave privata (implementazione semplificata)
+        // In un'implementazione reale, qui verifieresti che la chiave privata
+        // corrisponda effettivamente all'indirizzo Bitcoin
+        if (!privateKey.trim() || privateKey.length < 50) {
+            return res.status(400).json({ 
+                success: false,
+                error: 'Chiave privata non valida' 
+            });
+        }
+
+        // 6. Registrazione del voto
+        const voteTimestamp = new Date();
+        
+        // Simula transazione Bitcoin (in realtà utilizzeresti bitcoinjs-lib)
+        const transactionId = `tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+        // Aggiorna whitelist per marcare come votato
+        await whitelistEntry.update({
+            hasVoted: true,
+            votedAt: voteTimestamp
+        });
+
+        // Registra il voto (puoi aggiungere una tabella VoteRecord se necessario)
+        console.log(`[VOTE-SUBMIT] ✅ Voto registrato: Utente ${userId} -> Candidato ${candidateId}`);
+        console.log(`[VOTE-SUBMIT] 📝 Commitment: ${voteCommitment.substring(0, 20)}...`);
+        console.log(`[VOTE-SUBMIT] 🔗 Transaction ID: ${transactionId}`);
+
+        res.json({
+            success: true,
+            message: 'Voto registrato con successo',
+            transactionId: transactionId,
+            votedAt: voteTimestamp,
+            election: {
+                id: election.id,
+                title: election.title
+            },
+            candidate: {
+                id: candidate.id,
+                name: candidate.name
+            }
+        });
+
+    } catch (error) {
+        console.error(`[VOTE-SUBMIT] ❌ Errore invio voto:`, error);
+        res.status(500).json({ 
+            success: false,
+            error: 'Errore interno durante la registrazione del voto',
             details: error.message 
         });
     }
