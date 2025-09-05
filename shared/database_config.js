@@ -108,7 +108,9 @@ const User = sequelize.define('User', {
         field: 'has_voted'
     }
 }, {
-    tableName: 'users'
+    tableName: 'users',
+    underscored: true,
+    timestamps: true
 });
 
 // Modello Election (usato da server2 e server3)
@@ -408,9 +410,13 @@ const Vote = sequelize.define('Vote', {
         allowNull: false
     },
     transactionId: {
-        type: DataTypes.STRING,
+        type: DataTypes.UUID,
         allowNull: true,
-        field: 'transaction_id'
+        field: 'transaction_id',
+        references: {
+            model: 'transactions',
+            key: 'id'
+        }
     },
     status: {
         type: DataTypes.ENUM('pending', 'processed', 'confirmed', 'failed'),
@@ -659,7 +665,27 @@ const initializeDatabase = async () => {
         console.log(' Connessione database stabilita');
         
         console.log('Sincronizzazione modelli...');
-        await sequelize.sync({ alter: true });
+        try {
+            await sequelize.authenticate();
+            
+            // Sync con alter: true per riparare schema
+            await sequelize.sync({ 
+                alter: true,    
+                force: false 
+            });
+            
+            return true;
+        } catch (error) {
+            console.error('Database error:', error);
+            
+            // Se sync fallisce, prova con force (ATTENZIONE: cancella dati!)
+            if (process.env.NODE_ENV === 'development') {
+                console.log('Tentativo force sync...');
+                await sequelize.sync({ force: true });
+            }
+            
+            return false;
+        }
         console.log(' Modelli sincronizzati');
         
         return true;

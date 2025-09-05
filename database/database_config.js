@@ -19,6 +19,9 @@ const sequelize = new Sequelize(
         host: process.env.DB_HOST || 'localhost',
         dialect: 'postgres',
         logging: process.env.NODE_ENV === 'development' ? console.log : false,
+        sync: {
+            force: true  // FORZA LA RICREAZIONE
+        },
         
         // CONFIGURAZIONE CRITICA PER SNAKE_CASE <-> CAMELCASE
         define: {
@@ -98,6 +101,11 @@ const User = sequelize.define('User', {
         type: DataTypes.BOOLEAN,
         defaultValue: false,
         field: 'has_voted'
+    },
+    createdAt: {
+        type: DataTypes.TIMESTAMP,
+        defaultValue: false,
+        field: 'created_at'
     }
 }, {
     tableName: 'users',
