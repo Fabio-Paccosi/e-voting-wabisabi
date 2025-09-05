@@ -98,6 +98,11 @@ const User = sequelize.define('User', {
         type: DataTypes.BOOLEAN,
         defaultValue: false,
         field: 'has_voted'
+    },
+    createdAt: {
+        type: DataTypes.TIMESTAMP,
+        defaultValue: false,
+        field: 'created_at'
     }
 }, {
     tableName: 'users',
