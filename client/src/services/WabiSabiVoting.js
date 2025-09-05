@@ -58,7 +58,7 @@ class WabiSabiVoting {
         try {
             this.ensureAuthenticated();
             
-            console.log('[WABISABI] 🪙 Generazione indirizzo Bitcoin per voto');
+            console.log('[WABISABI]  Generazione indirizzo Bitcoin per voto');
             
             // Generate a new key pair using elliptic.js
             const keyPair = secp256k1.genKeyPair();

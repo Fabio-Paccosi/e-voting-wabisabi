@@ -237,7 +237,7 @@ else
 fi
 
 echo ""
-echo "🎉 Fix completato!"
+echo "Fix completato!"
 echo ""
 echo "Riassunto modifiche:"
 echo "   ✓ Aggiunta route POST /api/admin/elections/:id/activate all'API Gateway"

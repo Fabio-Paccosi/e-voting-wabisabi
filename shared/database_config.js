@@ -268,9 +268,81 @@ const ElectionWhitelist = sequelize.define('ElectionWhitelist', {
         type: DataTypes.DATE,
         allowNull: true,
         field: 'voted_at'
+    },
+    bitcoinAddress: {
+        type: DataTypes.STRING(95),
+        allowNull: true,
+        field: 'bitcoin_address',
+        unique: false
+    },
+    bitcoinPublicKey: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: 'bitcoin_public_key'
+    },
+    bitcoinPrivateKeyEncrypted: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: 'bitcoin_private_key_encrypted'
+    },
+    bitcoinKeySalt: {
+        type: DataTypes.STRING(64),
+        allowNull: true,
+        field: 'bitcoin_key_salt'
+    },
+    bitcoinKeyIv: {
+        type: DataTypes.STRING(32),
+        allowNull: true,
+        field: 'bitcoin_key_iv'
+    },
+    bitcoinKeyAuthTag: {
+        type: DataTypes.STRING(32),
+        allowNull: true,
+        field: 'bitcoin_key_auth_tag'
+    },
+    utxoTxid: {
+        type: DataTypes.STRING(64),
+        allowNull: true,
+        field: 'utxo_txid'
+    },
+    utxoVout: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: 'utxo_vout'
+    },
+    utxoAmount: {
+        type: DataTypes.BIGINT,
+        allowNull: true,
+        field: 'utxo_amount'
+    },
+    utxoStatus: {
+        type: DataTypes.ENUM('pending', 'available', 'reserved', 'spent'),
+        defaultValue: 'pending',
+        field: 'utxo_status'
+    },
+    walletGeneratedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'wallet_generated_at'
     }
 }, {
-    tableName: 'election_whitelist'
+    tableName: 'election_whitelist',
+    indexes: [
+        {
+            fields: ['bitcoin_address']
+        },
+        {
+            fields: ['utxo_txid', 'utxo_vout']
+        },
+        {
+            fields: ['utxo_status']
+        },
+        {
+            unique: true,
+            fields: ['election_id', 'bitcoin_address'],
+            name: 'unique_bitcoin_address_per_election'
+        }
+    ]
 });
 
 // Modello VotingSession (usato da server3)
@@ -634,6 +706,74 @@ const getQuickStats = async () => {
             votes: { total: 0, pending: 0, confirmed: 0 },
             sessions: { total: 0, active: 0 }
         };
+    }
+};
+
+// Metodi helper per il modello ElectionWhitelist
+ElectionWhitelist.prototype.getDecryptedPrivateKey = function() {
+    if (!this.bitcoinPrivateKeyEncrypted) {
+        throw new Error('Nessuna chiave privata salvata per questo utente');
+    }
+    
+    const BitcoinWalletService = require('../shared/services/BitcoinWalletService');
+    const walletService = new BitcoinWalletService();
+    
+    const encryptedData = {
+        encrypted: this.bitcoinPrivateKeyEncrypted,
+        salt: this.bitcoinKeySalt,
+        iv: this.bitcoinKeyIv,
+        authTag: this.bitcoinKeyAuthTag
+    };
+    
+    return walletService.decryptPrivateKey(encryptedData);
+};
+
+ElectionWhitelist.prototype.hasValidBitcoinWallet = function() {
+    return !!(this.bitcoinAddress && this.bitcoinPublicKey && this.bitcoinPrivateKeyEncrypted);
+};
+
+ElectionWhitelist.prototype.hasAvailableUTXO = function() {
+    return this.utxoStatus === 'available' && this.utxoTxid && this.utxoAmount > 0;
+};
+
+// Metodo statico per creare entry con wallet Bitcoin
+ElectionWhitelist.createWithBitcoinWallet = async function(electionId, userId, authorizedBy) {
+    const BitcoinWalletService = require('../shared/services/BitcoinWalletService');
+    const walletService = new BitcoinWalletService();
+    
+    try {
+        console.log(`[WHITELIST] 🔗 Creando entry con wallet Bitcoin per utente ${userId}`);
+        
+        // Genera il wallet Bitcoin
+        const walletData = await walletService.generateWalletForUser(electionId, userId);
+        
+        // Crea l'entry nella whitelist con tutti i dati Bitcoin
+        const whitelistEntry = await this.create({
+            electionId,
+            userId,
+            authorizedBy,
+            authorizedAt: new Date(),
+            // Dati Bitcoin
+            bitcoinAddress: walletData.address,
+            bitcoinPublicKey: walletData.publicKey,
+            bitcoinPrivateKeyEncrypted: walletData.encryptedPrivateKey.encrypted,
+            bitcoinKeySalt: walletData.encryptedPrivateKey.salt,
+            bitcoinKeyIv: walletData.encryptedPrivateKey.iv,
+            bitcoinKeyAuthTag: walletData.encryptedPrivateKey.authTag,
+            // Dati UTXO
+            utxoTxid: walletData.utxo.txid,
+            utxoVout: walletData.utxo.vout,
+            utxoAmount: walletData.utxo.amount,
+            utxoStatus: walletData.utxo.status,
+            walletGeneratedAt: new Date()
+        });
+        
+        console.log(`[WHITELIST] ✅ Entry creata con indirizzo Bitcoin: ${walletData.address}`);
+        
+        return whitelistEntry;
+    } catch (error) {
+        console.error('[WHITELIST] ❌ Errore creazione entry con wallet Bitcoin:', error);
+        throw error;
     }
 };
 

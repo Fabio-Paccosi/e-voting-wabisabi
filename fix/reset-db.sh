@@ -128,7 +128,7 @@ verify_setup() {
     done
     
     echo ""
-    print_msg "🎉 Reset completato!"
+    print_msg "Reset completato!"
     echo ""
     echo "Prossimi passi:"
     echo "1. I servizi dovrebbero creare automaticamente le tabelle al primo avvio"
