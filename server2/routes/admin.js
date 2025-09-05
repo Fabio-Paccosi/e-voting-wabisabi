@@ -1,114 +1,157 @@
-// server2/routes/admin.js - Auth Service Admin Routes con Database REALE
-const express = require('express');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const router = express.Router();
-const BitcoinWalletService = require('../../shared/services/BitcoinWalletService');
 
-// Importa modelli database 
+const express = require('express');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
+const { Op } = require('sequelize');
+const router = express.Router();
+
+// Importa modelli database SOLO per l'Auth Service (non vote models)
 const {
     sequelize,
     User,
-    Election,                    
-    ElectionWhitelist,         
-    SystemSettings,
-    Whitelist,
+    Election,
+    ElectionWhitelist,
     getQuickStats,
     initializeDatabase
 } = require('../shared/database_config').getModelsForService('auth');
 
-const { Op } = require('sequelize');
-
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
+console.log('[AUTH ADMIN ROUTES] Inizializzazione route admin...');
+
 // Inizializza database all'avvio
-console.log('[AUTH ADMIN] Inizializzazione database...');
 initializeDatabase()
     .then(success => {
         if (success) {
-            console.log(' [AUTH ADMIN] Database inizializzato correttamente');
+            console.log('[AUTH ADMIN] Database inizializzato correttamente');
         } else {
-            console.error(' [AUTH ADMIN] Errore inizializzazione database');
+            console.error('[AUTH ADMIN] Errore inizializzazione database');
         }
     })
     .catch(error => {
-        console.error(' [AUTH ADMIN] Errore database:', error);
+        console.error('[AUTH ADMIN] Errore database:', error);
     });
 
 // Middleware di autenticazione admin
-// Middleware di autenticazione admin - SEMPLIFICATO PER CHIAMATE INTERNE
 const adminAuth = (req, res, next) => {
-    // Per chiamate interne dai servizi, non richiede autenticazione
-    // L'autenticazione è gestita dall'API Gateway
+    // Per ora bypass per debugging, ma mantenere struttura per implementazione futura
     next();
 };
+
 // ==========================================
-// AUTH MANAGEMENT
+// AUTENTICAZIONE ADMIN
 // ==========================================
 
 // POST /api/admin/auth/login - Login amministratore
 router.post('/auth/login', async (req, res) => {
     try {
         const { username, password } = req.body;
-        console.log('🔐 [AUTH ADMIN] Tentativo login:', username);
+        console.log('[AUTH ADMIN] Tentativo login:', { username });
         
-        // Per ora usa credenziali hardcoded, poi integra con database
-        if (username === 'admin@example.com' && password === 'admin123') {
+        // Prima cerca un utente admin nel database
+        let adminUser = await User.findOne({
+            where: { 
+                username: username,
+                role: 'administrator'
+            }
+        });
+        
+        // Se non esiste, crea admin di default per primo accesso
+        if (!adminUser && username === 'admin') {
+            console.log('[AUTH ADMIN] Creando admin di default...');
+            const hashedPassword = await bcrypt.hash('admin123', 10);
+            adminUser = await User.create({
+                username: 'admin',
+                email: 'admin@evoting.local',
+                password: hashedPassword,
+                role: 'administrator',
+                status: 'active'
+            });
+            console.log('[AUTH ADMIN] Admin di default creato');
+        }
+        
+        // Verifica credenziali
+        if (adminUser) {
+            const isValidPassword = await bcrypt.compare(password, adminUser.password);
+            if (isValidPassword) {
+                const token = jwt.sign(
+                    { 
+                        id: adminUser.id, 
+                        username: adminUser.username, 
+                        role: adminUser.role 
+                    }, 
+                    JWT_SECRET, 
+                    { expiresIn: '24h' }
+                );
+                
+                // Aggiorna ultimo login
+                await adminUser.update({ lastLoginAt: new Date() });
+                
+                console.log('[AUTH ADMIN] Login admin riuscito');
+                res.json({
+                    success: true,
+                    token,
+                    user: {
+                        id: adminUser.id,
+                        username: adminUser.username,
+                        email: adminUser.email,
+                        role: adminUser.role
+                    }
+                });
+                return;
+            }
+        }
+        
+        // Fallback per testing (rimuovere in produzione)
+        if (username === 'admin' && password === 'admin123') {
             const token = jwt.sign(
-                { 
-                    id: 'admin_001',
-                    username: username,
-                    role: 'administrator'
-                },
-                JWT_SECRET,
+                { id: 1, username: 'admin', role: 'administrator' }, 
+                JWT_SECRET, 
                 { expiresIn: '24h' }
             );
-
-            console.log(' [AUTH ADMIN] Login riuscito per:', username);
-
+            
+            console.log('[AUTH ADMIN] Login fallback riuscito');
             res.json({
                 success: true,
                 token,
-                user: {
-                    id: 'admin_001',
-                    username: username,
-                    role: 'administrator'
-                }
+                user: { id: 1, username: 'admin', role: 'administrator' }
             });
-        } else {
-            console.log(' [AUTH ADMIN] Login fallito per:', username);
-            res.status(401).json({ error: 'Credenziali non valide' });
+            return;
         }
+        
+        console.log('[AUTH ADMIN] Credenziali non valide');
+        res.status(401).json({ error: 'Credenziali non valide' });
+        
     } catch (error) {
-        console.error(' [AUTH ADMIN] Errore login:', error);
-        res.status(500).json({ error: 'Errore interno del server' });
+        console.error('[AUTH ADMIN] Errore login:', error);
+        res.status(500).json({ error: 'Errore interno durante il login' });
     }
 });
 
-// POST /api/admin/auth/verify - Verifica token amministratore
+// POST /api/admin/auth/verify - Verifica token
 router.post('/auth/verify', async (req, res) => {
     try {
         const { token } = req.body;
         
-        const decoded = jwt.verify(token, JWT_SECRET);
-        
-        if (decoded.role === 'administrator') {
-            res.json({
-                valid: true,
-                user: {
-                    id: decoded.id,
-                    username: decoded.username,
-                    role: decoded.role
-                }
-            });
-        } else {
-            res.status(401).json({ 
+        if (!token) {
+            return res.status(401).json({ 
                 valid: false, 
-                error: 'Ruolo non autorizzato' 
+                error: 'Token mancante' 
             });
         }
+        
+        const decoded = jwt.verify(token, JWT_SECRET);
+        
+        res.json({
+            valid: true,
+            user: {
+                id: decoded.id,
+                username: decoded.username,
+                role: decoded.role
+            }
+        });
     } catch (error) {
-        console.error(' [AUTH ADMIN] Errore verifica token:', error);
+        console.error('[AUTH ADMIN] Errore verifica token:', error);
         res.status(401).json({ 
             valid: false, 
             error: 'Token non valido' 
@@ -117,118 +160,104 @@ router.post('/auth/verify', async (req, res) => {
 });
 
 // ==========================================
-// STATISTICHE UTENTI REALI DAL DATABASE
-// ==========================================
-
-// GET /api/admin/stats - Statistiche auth service dal database
-router.get('/stats', adminAuth, async (req, res) => {
-    try {
-        console.log(' [AUTH ADMIN] Caricamento statistiche dal database...');
-        
-        const stats = await getQuickStats();
-        
-        // Statistiche aggiuntive per auth service
-        const [
-            pendingUsers,
-            suspendedUsers,
-            todayRegistrations,
-            whitelistCount,
-            recentLogins
-        ] = await Promise.all([
-            User.count({ where: { status: 'pending' } }),
-            User.count({ where: { status: 'suspended' } }),
-            User.count({
-                where: {
-                    createdAt: {
-                        [Op.gte]: new Date(new Date().setHours(0, 0, 0, 0))
-                    }
-                }
-            }),
-            Whitelist.count(),
-            User.count({
-                where: {
-                    lastLogin: {
-                        [Op.gte]: new Date(Date.now() - 24 * 60 * 60 * 1000)
-                    }
-                }
-            })
-        ]);
-
-        const authStats = {
-            totalUsers: stats.users.total,
-            activeUsers: stats.users.active,
-            pendingUsers,
-            suspendedUsers,
-            todayRegistrations,
-            todayLogins: recentLogins,
-            whitelistEntries: whitelistCount,
-            verifiedUsers: stats.users.active
-        };
-
-        console.log(' [AUTH ADMIN] Statistiche caricate:', authStats);
-        res.json(authStats);
-    } catch (error) {
-        console.error(' [AUTH ADMIN] Errore stats:', error);
-        res.status(500).json({ error: 'Errore statistiche autenticazione' });
-    }
-});
-
-// ==========================================
-// GESTIONE UTENTI REALI DAL DATABASE
+// GESTIONE UTENTI - API REALI DATABASE
 // ==========================================
 
 // GET /api/admin/users - Lista utenti dal database
 router.get('/users', adminAuth, async (req, res) => {
     try {
         const { 
-            page = 1, 
-            limit = 20, 
-            status = 'all', 
-            search = '' 
+            limit = 100, 
+            offset = 0, 
+            search = '', 
+            status = '', 
+            role = '' 
         } = req.query;
-
-        console.log('[AUTH ADMIN] Caricamento utenti:', { page, limit, status, search });
-
-        const offset = (parseInt(page) - 1) * parseInt(limit);
         
-        // Costruisci filtri
-        const where = {};
+        console.log(`[AUTH ADMIN] GET users - limit: ${limit}, offset: ${offset}, search: "${search}"`);
         
-        if (status !== 'all') {
-            where.status = status;
-        }
+        // Costruisci filtri WHERE
+        const whereClause = {};
         
         if (search) {
-            where[Op.or] = [
+            whereClause[Op.or] = [
+                { username: { [Op.iLike]: `%${search}%` } },
                 { email: { [Op.iLike]: `%${search}%` } },
                 { firstName: { [Op.iLike]: `%${search}%` } },
-                { lastName: { [Op.iLike]: `%${search}%` } },
-                { taxCode: { [Op.iLike]: `%${search}%` } }
+                { lastName: { [Op.iLike]: `%${search}%` } }
             ];
         }
-
+        
+        if (status) {
+            whereClause.status = status;
+        }
+        
+        if (role) {
+            whereClause.role = role;
+        }
+        
+        // Query database
         const { count, rows: users } = await User.findAndCountAll({
-            where,
+            where: whereClause,
             limit: parseInt(limit),
-            offset,
-            order: [['created_at', 'DESC']],
-            attributes: { exclude: ['password'] } // Escludi password
-        });
-
-        console.log(` [AUTH ADMIN] Caricati ${users.length} utenti di ${count} totali`);
-
-        res.json({
-            users,
-            pagination: {
-                page: parseInt(page),
-                limit: parseInt(limit),
-                total: count,
-                pages: Math.ceil(count / parseInt(limit))
+            offset: parseInt(offset),
+            order: [['createdAt', 'DESC']],
+            attributes: {
+                exclude: ['password'] // Non restituire password
             }
         });
+        
+        console.log(`[AUTH ADMIN] Trovati ${users.length} utenti su ${count} totali`);
+        
+        res.json({
+            users: users.map(user => ({
+                id: user.id,
+                username: user.username,
+                email: user.email,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                role: user.role,
+                status: user.status,
+                createdAt: user.createdAt,
+                updatedAt: user.updatedAt,
+                lastLoginAt: user.lastLoginAt
+            })),
+            total: count,
+            limit: parseInt(limit),
+            offset: parseInt(offset)
+        });
+        
     } catch (error) {
-        console.error(' [AUTH ADMIN] Errore lista utenti:', error);
-        res.status(500).json({ error: 'Errore caricamento utenti' });
+        console.error('[AUTH ADMIN] Errore caricamento utenti:', error);
+        res.status(500).json({ 
+            error: 'Errore nel caricamento degli utenti',
+            details: error.message
+        });
+    }
+});
+
+// GET /api/admin/users/:id - Dettaglio utente
+router.get('/users/:id', adminAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        console.log(`[AUTH ADMIN] GET user ${id}`);
+        
+        const user = await User.findByPk(id, {
+            attributes: { exclude: ['password'] }
+        });
+        
+        if (!user) {
+            return res.status(404).json({ error: 'Utente non trovato' });
+        }
+        
+        res.json({ user });
+        
+    } catch (error) {
+        console.error('[AUTH ADMIN] Errore caricamento utente:', error);
+        res.status(500).json({ 
+            error: 'Errore nel caricamento dell\'utente',
+            details: error.message
+        });
     }
 });
 
@@ -236,80 +265,75 @@ router.get('/users', adminAuth, async (req, res) => {
 router.post('/users', adminAuth, async (req, res) => {
     try {
         const { 
-            firstName, 
-            lastName, 
+            username, 
             email, 
-            taxCode, 
-            dateOfBirth, 
-            phoneNumber,
-            address,
-            documentType,
-            documentNumber,
-            password 
+            password, 
+            firstName = '', 
+            lastName = '', 
+            role = 'user' 
         } = req.body;
-
-        console.log('🆕 [AUTH ADMIN] Creazione nuovo utente:', email);
-
-        // Verifica che l'email non esista già
-        const existingUser = await User.findOne({ where: { email } });
+        
+        console.log('[AUTH ADMIN] POST nuovo utente:', { username, email, role });
+        
+        // Validazione
+        if (!username || !email || !password) {
+            return res.status(400).json({ 
+                error: 'Username, email e password sono obbligatori' 
+            });
+        }
+        
+        // Verifica che username/email non esistano già
+        const existingUser = await User.findOne({
+            where: {
+                [Op.or]: [
+                    { username },
+                    { email }
+                ]
+            }
+        });
+        
         if (existingUser) {
             return res.status(400).json({ 
-                error: 'Email già registrata' 
+                error: existingUser.username === username ? 
+                    'Username già esistente' : 'Email già esistente' 
             });
         }
-
-        // Verifica che il codice fiscale non esista già
-        const existingTaxCode = await User.findOne({ where: { taxCode } });
-        if (existingTaxCode) {
-            return res.status(400).json({ 
-                error: 'Codice fiscale già registrato' 
-            });
-        }
-
-        // Genera password temporanea se non fornita
-        const tempPassword = password || "qwertyuiop";
-        const hashedPassword = await bcrypt.hash(tempPassword, 10);
-
+        
+        // Hash password
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
         // Crea utente
-        const user = await User.create({
+        const newUser = await User.create({
+            username,
+            email,
+            password: hashedPassword,
             firstName,
             lastName,
-            email,
-            taxCode,
-            dateOfBirth,
-            phoneNumber,
-            address,
-            documentType,
-            documentNumber,
-            password: hashedPassword,
-            status: 'active',
-            isVerified: false
+            role,
+            status: 'active'
         });
-
-        console.log(' [AUTH ADMIN] Utente creato con successo:', user.id);
-
+        
+        console.log('[AUTH ADMIN] Utente creato:', newUser.id);
+        
         res.status(201).json({
             success: true,
             user: {
-                id: user.id,
-                firstName: user.firstName,
-                lastName: user.lastName,
-                email: user.email,
-                taxCode: user.taxCode,
-                dateOfBirth: user.dateOfBirth,
-                phoneNumber: user.phoneNumber,
-                status: user.status,
-                isVerified: user.isVerified,
-                createdAt: user.createdAt
-            },
-            message: 'Utente creato con successo',
-            tempPassword: password ? undefined : tempPassword // Solo se generata automaticamente
+                id: newUser.id,
+                username: newUser.username,
+                email: newUser.email,
+                firstName: newUser.firstName,
+                lastName: newUser.lastName,
+                role: newUser.role,
+                status: newUser.status,
+                createdAt: newUser.createdAt
+            }
         });
+        
     } catch (error) {
-        console.error(' [AUTH ADMIN] Errore creazione utente:', error);
+        console.error('[AUTH ADMIN] Errore creazione utente:', error);
         res.status(500).json({ 
             error: 'Errore nella creazione dell\'utente',
-            details: error.message 
+            details: error.message
         });
     }
 });
@@ -318,580 +342,377 @@ router.post('/users', adminAuth, async (req, res) => {
 router.put('/users/:id/status', adminAuth, async (req, res) => {
     try {
         const { id } = req.params;
-        const { status, reason } = req.body;
+        const { status } = req.body;
         
-        console.log(` [AUTH ADMIN] Aggiornamento status utente ${id} a ${status}`);
+        console.log(`[AUTH ADMIN] PUT status utente ${id}: ${status}`);
+        
+        if (!['active', 'suspended', 'pending'].includes(status)) {
+            return res.status(400).json({ 
+                error: 'Status non valido. Valori ammessi: active, suspended, pending' 
+            });
+        }
         
         const user = await User.findByPk(id);
         if (!user) {
             return res.status(404).json({ error: 'Utente non trovato' });
         }
-
-        await user.update({ 
-            status,
-            updatedAt: new Date()
-        });
-
-        console.log(` [AUTH ADMIN] Status utente ${user.email} aggiornato a ${status}`);
-
+        
+        await user.update({ status });
+        
+        console.log(`[AUTH ADMIN] Status utente ${id} aggiornato a ${status}`);
+        
         res.json({
             success: true,
             message: `Status utente aggiornato a ${status}`,
             user: {
                 id: user.id,
-                email: user.email,
+                username: user.username,
                 status: user.status
             }
         });
+        
     } catch (error) {
-        console.error(' [AUTH ADMIN] Errore aggiornamento status:', error);
-        res.status(500).json({ error: 'Errore aggiornamento status utente' });
+        console.error('[AUTH ADMIN] Errore aggiornamento status:', error);
+        res.status(500).json({ 
+            error: 'Errore nell\'aggiornamento dello status',
+            details: error.message
+        });
+    }
+});
+
+// DELETE /api/admin/users/:id - Elimina utente
+router.delete('/users/:id', adminAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        console.log(`[AUTH ADMIN] DELETE utente ${id}`);
+        
+        const user = await User.findByPk(id);
+        if (!user) {
+            return res.status(404).json({ error: 'Utente non trovato' });
+        }
+        
+        // Non permettere eliminazione di admin
+        if (user.role === 'administrator') {
+            return res.status(400).json({ 
+                error: 'Non è possibile eliminare un amministratore' 
+            });
+        }
+        
+        await user.destroy();
+        
+        console.log(`[AUTH ADMIN] Utente ${id} eliminato`);
+        
+        res.json({
+            success: true,
+            message: 'Utente eliminato con successo'
+        });
+        
+    } catch (error) {
+        console.error('[AUTH ADMIN] Errore eliminazione utente:', error);
+        res.status(500).json({ 
+            error: 'Errore nell\'eliminazione dell\'utente',
+            details: error.message
+        });
     }
 });
 
 // ==========================================
-// WHITELIST ELEZIONI
+// GESTIONE WHITELIST ELEZIONI - API REALI
 // ==========================================
 
-// GET /api/admin/elections/:electionId/whitelist - Ottieni whitelist reale di un'elezione
-router.get('/elections/:electionId/whitelist', async (req, res) => {
+// GET /api/admin/elections/:electionId/whitelist - Whitelist dal database
+router.get('/elections/:electionId/whitelist', adminAuth, async (req, res) => {
     try {
         const { electionId } = req.params;
-        console.log(`[ADMIN-WHITELIST] 📋 GET whitelist con dati Bitcoin - elezione ${electionId}`);
-
-        // Verifica che l'elezione esista
-        const election = await Election.findByPk(electionId);
-        if (!election) {
-            return res.status(404).json({ error: 'Elezione non trovata' });
-        }
-
-        // Recupera la whitelist con i dati degli utenti E dei wallet Bitcoin
+        console.log(`[AUTH ADMIN] GET whitelist elezione ${electionId}`);
+        
+        // Cerca la whitelist per questa elezione
         const whitelist = await ElectionWhitelist.findAll({
             where: { electionId },
             include: [{
                 model: User,
                 as: 'user',
-                attributes: ['id', 'firstName', 'lastName', 'email', 'taxCode', 'status']
+                attributes: ['id', 'username', 'email', 'firstName', 'lastName']
             }],
-            order: [['authorizedAt', 'DESC']]
+            order: [['createdAt', 'DESC']]
         });
-
-        console.log(`[ADMIN-WHITELIST] 👥 Trovati ${whitelist.length} utenti nella whitelist elezione ${electionId}`);
-
+        
+        console.log(`[AUTH ADMIN] Trovati ${whitelist.length} utenti in whitelist`);
+        
         res.json({
-            success: true,
-            election: {
-                id: election.id,
-                title: election.title,
-                status: election.status
-            },
-            whitelist: whitelist.map(item => ({
-                id: item.id,
-                user: item.user,
-                authorizedAt: item.authorizedAt,
-                authorizedBy: item.authorizedBy,
-                hasVoted: item.hasVoted,
-                votedAt: item.votedAt,
-                // ===== DATI BITCOIN =====
-                bitcoinWallet: {
-                    address: item.bitcoinAddress,
-                    publicKey: item.bitcoinPublicKey ? item.bitcoinPublicKey.substring(0, 16) + '...' : null, // Mostra solo parte della chiave pubblica per sicurezza
-                    hasPrivateKey: !!item.bitcoinPrivateKeyEncrypted,
-                    generatedAt: item.walletGeneratedAt
-                },
-                utxo: {
-                    txid: item.utxoTxid,
-                    vout: item.utxoVout,
-                    amount: item.utxoAmount,
-                    status: item.utxoStatus
-                }
-            })),
-            total: whitelist.length,
-            summary: {
-                totalUsers: whitelist.length,
-                usersWithWallets: whitelist.filter(item => item.bitcoinAddress).length,
-                usersWithUTXO: whitelist.filter(item => item.utxoTxid).length,
-                votedUsers: whitelist.filter(item => item.hasVoted).length
-            }
-        });
-    } catch (error) {
-        console.error('[ADMIN-WHITELIST] ❌ Errore recupero whitelist:', error);
-        res.status(500).json({ 
-            error: 'Errore nel recupero della whitelist',
-            details: error.message 
-        });
-    }
-});
-
-// GET /api/admin/elections/:electionId/bitcoin-addresses - Lista solo gli indirizzi Bitcoin
-router.get('/elections/:electionId/bitcoin-addresses', async (req, res) => {
-    try {
-        const { electionId } = req.params;
-        console.log(`[ADMIN-BITCOIN] 🪙 GET indirizzi Bitcoin - elezione ${electionId}`);
-
-        const whitelist = await ElectionWhitelist.findAll({
-            where: { 
-                electionId,
-                bitcoinAddress: { [Op.not]: null }
-            },
-            include: [{
-                model: User,
-                as: 'user',
-                attributes: ['email', 'firstName', 'lastName']
-            }],
-            attributes: [
-                'id', 'userId', 'bitcoinAddress', 'bitcoinPublicKey', 
-                'utxoTxid', 'utxoVout', 'utxoAmount', 'utxoStatus',
-                'hasVoted', 'walletGeneratedAt'
-            ]
-        });
-
-        res.json({
-            success: true,
             electionId,
-            addresses: whitelist.map(item => ({
-                userId: item.userId,
-                userEmail: item.user.email,
-                userName: `${item.user.firstName} ${item.user.lastName}`,
-                bitcoinAddress: item.bitcoinAddress,
-                publicKey: item.bitcoinPublicKey,
-                utxo: {
-                    txid: item.utxoTxid,
-                    vout: item.utxoVout,
-                    amount: item.utxoAmount,
-                    status: item.utxoStatus
-                },
-                hasVoted: item.hasVoted,
-                generatedAt: item.walletGeneratedAt
+            whitelist: whitelist.map(entry => ({
+                id: entry.id,
+                userId: entry.userId,
+                username: entry.user?.username,
+                email: entry.user?.email,
+                firstName: entry.user?.firstName,
+                lastName: entry.user?.lastName,
+                status: entry.status,
+                addedAt: entry.createdAt,
+                addedBy: entry.addedBy
             })),
             total: whitelist.length
         });
+        
     } catch (error) {
-        console.error('[ADMIN-BITCOIN] ❌ Errore recupero indirizzi Bitcoin:', error);
-        res.status(500).json({ error: 'Errore recupero indirizzi Bitcoin' });
+        console.error('[AUTH ADMIN] Errore caricamento whitelist:', error);
+        res.status(500).json({ 
+            error: 'Errore nel caricamento della whitelist',
+            details: error.message
+        });
     }
 });
 
-// POST /api/admin/elections/:electionId/whitelist/add - Aggiungi utenti reali alla whitelist
-router.post('/elections/:electionId/whitelist/add', async (req, res) => {
+// POST /api/admin/elections/:electionId/whitelist/add - Aggiungi a whitelist
+router.post('/elections/:electionId/whitelist/add', adminAuth, async (req, res) => {
     try {
         const { electionId } = req.params;
-        const { userIds, emails, taxCodes } = req.body;
+        const { userIds, emails } = req.body;
         
-        console.log(`[ADMIN-WHITELIST] 🔐 POST aggiungi utenti con wallet Bitcoin - elezione ${electionId}:`, req.body);
-
-        // Verifica che l'elezione esista
-        const election = await Election.findByPk(electionId);
-        if (!election) {
-            return res.status(404).json({ error: 'Elezione non trovata' });
-        }
-
-        // Non permettere aggiunta se l'elezione è già completata
-        if (election.status === 'completed') {
-            return res.status(400).json({ 
-                error: 'Non è possibile modificare la whitelist di un\'elezione completata' 
-            });
-        }
-
-        let usersToAdd = [];
-
-        // Trova utenti per ID
-        if (userIds && userIds.length > 0) {
-            const usersByIds = await User.findAll({
-                where: { id: { [Op.in]: userIds } },
-                attributes: ['id', 'firstName', 'lastName', 'email', 'taxCode']
-            });
-            usersToAdd.push(...usersByIds);
-        }
-
-        // Trova utenti per email
-        if (emails && emails.length > 0) {
-            const usersByEmails = await User.findAll({
-                where: { email: { [Op.in]: emails } },
-                attributes: ['id', 'firstName', 'lastName', 'email', 'taxCode']
-            });
-            usersToAdd.push(...usersByEmails);
-        }
-
-        // Trova utenti per codice fiscale
-        if (taxCodes && taxCodes.length > 0) {
-            const usersByTaxCodes = await User.findAll({
-                where: { taxCode: { [Op.in]: taxCodes } },
-                attributes: ['id', 'firstName', 'lastName', 'email', 'taxCode']
-            });
-            usersToAdd.push(...usersByTaxCodes);
-        }
-
-        if (usersToAdd.length === 0) {
-            return res.status(400).json({ 
-                error: 'Nessun utente trovato con i criteri specificati' 
-            });
-        }
-
-        // Rimuovi duplicati
-        const uniqueUsers = usersToAdd.reduce((acc, user) => {
-            if (!acc.find(u => u.id === user.id)) {
-                acc.push(user);
-            }
-            return acc;
-        }, []);
-
-        console.log(`[ADMIN-WHITELIST] 👥 Trovati ${uniqueUsers.length} utenti unici da aggiungere`);
-
-        // Verifica quali utenti sono già nella whitelist
-        const existingEntries = await ElectionWhitelist.findAll({
-            where: {
-                electionId,
-                userId: { [Op.in]: uniqueUsers.map(u => u.id) }
-            },
-            attributes: ['userId']
-        });
-
-        const existingUserIds = new Set(existingEntries.map(e => e.userId));
-        const newUsers = uniqueUsers.filter(user => !existingUserIds.has(user.id));
-
-        if (newUsers.length === 0) {
-            return res.status(400).json({ 
-                error: 'Tutti gli utenti sono già nella whitelist per questa elezione' 
-            });
-        }
-
-        console.log(`[ADMIN-WHITELIST] 🆕 ${newUsers.length} utenti da aggiungere con wallet Bitcoin`);
-
-        // ===== PARTE PRINCIPALE: AGGIUNGI UTENTI CON WALLET BITCOIN =====
+        console.log(`[AUTH ADMIN] POST aggiungi a whitelist elezione ${electionId}:`, { userIds, emails });
         
-        const addedUsers = [];
+        let addedCount = 0;
         const errors = [];
-        const walletService = new BitcoinWalletService();
-
-        // Processa ogni utente sequenzialmente per evitare problemi di concorrenza
-        for (const user of newUsers) {
-            try {
-                console.log(`[ADMIN-WHITELIST] 🔑 Generando wallet per ${user.email}...`);
-                
-                // Usa il metodo statico che abbiamo creato per creare entry con wallet
-                const whitelistEntry = await ElectionWhitelist.createWithBitcoinWallet(
-                    electionId,
-                    user.id,
-                    req.user?.id || null // Admin che ha autorizzato
-                );
-
-                addedUsers.push({
-                    id: user.id,
-                    email: user.email,
-                    name: `${user.firstName} ${user.lastName}`,
-                    bitcoinAddress: whitelistEntry.bitcoinAddress,
-                    utxoTxid: whitelistEntry.utxoTxid,
-                    utxoAmount: whitelistEntry.utxoAmount,
-                    walletGeneratedAt: whitelistEntry.walletGeneratedAt
-                });
-
-                console.log(`[ADMIN-WHITELIST] ✅ ${user.email} aggiunto con indirizzo: ${whitelistEntry.bitcoinAddress}`);
-
-            } catch (error) {
-                console.error(`[ADMIN-WHITELIST] ❌ Errore aggiungendo ${user.email}:`, error.message);
-                
-                errors.push({
-                    userId: user.id,
-                    email: user.email,
-                    error: error.message
-                });
+        
+        // Aggiungi per userIds
+        if (userIds && Array.isArray(userIds)) {
+            for (const userId of userIds) {
+                try {
+                    // Verifica che l'utente esista
+                    const user = await User.findByPk(userId);
+                    if (!user) {
+                        errors.push(`Utente ID ${userId} non trovato`);
+                        continue;
+                    }
+                    
+                    // Verifica se già in whitelist
+                    const existing = await ElectionWhitelist.findOne({
+                        where: { electionId, userId }
+                    });
+                    
+                    if (existing) {
+                        errors.push(`Utente ${user.username} già in whitelist`);
+                        continue;
+                    }
+                    
+                    // Aggiungi alla whitelist
+                    await ElectionWhitelist.create({
+                        electionId,
+                        userId,
+                        status: 'approved',
+                        addedBy: 1 // TODO: usare ID admin corrente
+                    });
+                    
+                    addedCount++;
+                } catch (error) {
+                    errors.push(`Errore aggiunta utente ID ${userId}: ${error.message}`);
+                }
             }
         }
-
-        // Prepara la risposta
-        const response = {
+        
+        // Aggiungi per emails
+        if (emails && Array.isArray(emails)) {
+            for (const email of emails) {
+                try {
+                    // Trova utente per email
+                    const user = await User.findOne({ where: { email } });
+                    if (!user) {
+                        errors.push(`Utente con email ${email} non trovato`);
+                        continue;
+                    }
+                    
+                    // Verifica se già in whitelist
+                    const existing = await ElectionWhitelist.findOne({
+                        where: { electionId, userId: user.id }
+                    });
+                    
+                    if (existing) {
+                        errors.push(`Utente ${email} già in whitelist`);
+                        continue;
+                    }
+                    
+                    // Aggiungi alla whitelist
+                    await ElectionWhitelist.create({
+                        electionId,
+                        userId: user.id,
+                        status: 'approved',
+                        addedBy: 1 // TODO: usare ID admin corrente
+                    });
+                    
+                    addedCount++;
+                } catch (error) {
+                    errors.push(`Errore aggiunta email ${email}: ${error.message}`);
+                }
+            }
+        }
+        
+        res.json({
             success: true,
-            message: `${addedUsers.length} utenti aggiunti alla whitelist con wallet Bitcoin generati`,
-            election: {
-                id: election.id,
-                title: election.title,
-                status: election.status
-            },
-            addedUsers,
-            totalAdded: addedUsers.length,
-            summary: {
-                requested: newUsers.length,
-                successful: addedUsers.length,
-                failed: errors.length
-            }
-        };
-
-        // Includi errori se presenti
-        if (errors.length > 0) {
-            response.errors = errors;
-            response.message += ` (${errors.length} errori)`;
-        }
-
-        // Registra statistiche finali
-        console.log(`[ADMIN-WHITELIST] 📊 Completato: ${addedUsers.length}/${newUsers.length} utenti aggiunti con successo`);
-
-        res.status(201).json(response);
-
+            message: `${addedCount} utenti aggiunti alla whitelist`,
+            added: addedCount,
+            errors: errors.length > 0 ? errors : undefined
+        });
+        
     } catch (error) {
-        console.error('[ADMIN-WHITELIST] ❌ Errore generale aggiunta whitelist:', error);
+        console.error('[AUTH ADMIN] Errore aggiunta whitelist:', error);
         res.status(500).json({ 
-            error: 'Errore nell\'aggiunta utenti alla whitelist',
-            details: error.message 
+            error: 'Errore nell\'aggiunta alla whitelist',
+            details: error.message
         });
     }
 });
 
-// DELETE /api/admin/elections/:electionId/whitelist/:userId - Rimuovi utente reale dalla whitelist
-router.delete('/elections/:electionId/whitelist/:userId', async (req, res) => {
+// DELETE /api/admin/elections/:electionId/whitelist/:userId - Rimuovi da whitelist
+router.delete('/elections/:electionId/whitelist/:userId', adminAuth, async (req, res) => {
     try {
         const { electionId, userId } = req.params;
+        console.log(`[AUTH ADMIN] DELETE utente ${userId} da whitelist elezione ${electionId}`);
         
-        console.log(`[AUTH] DELETE utente reale ${userId} whitelist elezione ${electionId}`);
-
-        // Trova l'entry nella whitelist
         const whitelistEntry = await ElectionWhitelist.findOne({
-            where: { electionId, userId },
-            include: [{
-                model: User,
-                as: 'user',
-                attributes: ['firstName', 'lastName', 'email']
-            }]
+            where: { electionId, userId }
         });
-
+        
         if (!whitelistEntry) {
             return res.status(404).json({ 
                 error: 'Utente non trovato nella whitelist di questa elezione' 
             });
         }
-
-        // Verifica se l'utente ha già votato
-        if (whitelistEntry.hasVoted) {
-            return res.status(400).json({ 
-                error: 'Non è possibile rimuovere un utente che ha già votato',
-                user: whitelistEntry.user,
-                votedAt: whitelistEntry.votedAt
-            });
-        }
-
-        // Rimuovi dalla whitelist
-        const userData = whitelistEntry.user;
+        
         await whitelistEntry.destroy();
-
-        console.log(`[AUTH]  Utente ${userData.email} rimosso dalla whitelist elezione ${electionId}`);
-
+        
+        console.log(`[AUTH ADMIN] Utente ${userId} rimosso da whitelist elezione ${electionId}`);
+        
         res.json({
             success: true,
-            message: 'Utente rimosso dalla whitelist',
-            removedUser: {
-                id: userId,
-                email: userData.email,
-                name: `${userData.firstName} ${userData.lastName}`
-            }
+            message: 'Utente rimosso dalla whitelist con successo'
         });
+        
     } catch (error) {
-        console.error(' [AUTH] Errore rimozione reale da whitelist:', error);
+        console.error('[AUTH ADMIN] Errore rimozione whitelist:', error);
         res.status(500).json({ 
             error: 'Errore nella rimozione dalla whitelist',
-            details: error.message 
-        });
-    }
-});
-
-// GET /api/admin/elections/:electionId/whitelist/stats - Statistiche whitelist elezione
-router.get('/elections/:electionId/whitelist/stats', async (req, res) => {
-    try {
-        const { electionId } = req.params;
-        console.log(`[AUTH] GET statistiche whitelist elezione ${electionId}`);
-
-        const election = await Election.findByPk(electionId);
-        if (!election) {
-            return res.status(404).json({ error: 'Elezione non trovata' });
-        }
-
-        const stats = await ElectionWhitelist.findAll({
-            where: { electionId },
-            attributes: [
-                [sequelize.fn('COUNT', sequelize.col('id')), 'totalUsers'],
-                [sequelize.fn('SUM', sequelize.case().when({ hasVoted: true }, 1).else(0)), 'votedUsers'],
-                [sequelize.fn('SUM', sequelize.case().when({ hasVoted: false }, 1).else(0)), 'pendingUsers']
-            ],
-            raw: true
-        });
-
-        const result = stats[0] || { totalUsers: 0, votedUsers: 0, pendingUsers: 0 };
-
-        res.json({
-            success: true,
-            election: {
-                id: election.id,
-                title: election.title,
-                status: election.status
-            },
-            stats: {
-                totalUsers: parseInt(result.totalUsers) || 0,
-                votedUsers: parseInt(result.votedUsers) || 0,
-                pendingUsers: parseInt(result.pendingUsers) || 0,
-                turnoutPercentage: result.totalUsers > 0 ? 
-                    Math.round((result.votedUsers / result.totalUsers) * 100) : 0
-            }
-        });
-    } catch (error) {
-        console.error(' [AUTH] Errore statistiche whitelist:', error);
-        res.status(500).json({ 
-            error: 'Errore nel recupero delle statistiche',
-            details: error.message 
+            details: error.message
         });
     }
 });
 
 // ==========================================
-// ATTIVITÀ RECENTE
+// STATISTICHE - API REALI DATABASE
 // ==========================================
 
-// GET /api/admin/activity - Attività recente auth service
-router.get('/activity', adminAuth, async (req, res) => {
+// GET /api/admin/stats - Statistiche reali dal database
+router.get('/stats', adminAuth, async (req, res) => {
     try {
-        const { limit = 25 } = req.query;
+        console.log('[AUTH ADMIN] GET stats dal database');
         
-        console.log(' [AUTH ADMIN] Caricamento attività recenti...');
-        
-        // Query per attività recenti (registrazioni, login, cambi status)
-        const recentUsers = await User.findAll({
-            limit: parseInt(limit),
-            order: [['updated_at', 'DESC']],
-            attributes: ['id', 'email', 'status', 'lastLogin', 'createdAt', 'updatedAt']
-        });
-
-        // Trasforma in formato attività
-        const activities = recentUsers.map(user => {
-            const timeDiff = new Date() - new Date(user.updatedAt);
-            let action = 'Aggiornamento utente';
+        // Usa getQuickStats se disponibile, altrimenti query manuali
+        let stats;
+        try {
+            stats = await getQuickStats();
+        } catch (error) {
+            console.log('[AUTH ADMIN] getQuickStats non disponibile, usando query manuali');
             
-            if (user.lastLogin && new Date(user.lastLogin) > new Date(user.updatedAt)) {
-                action = 'Login utente';
-            } else if (Math.abs(new Date(user.createdAt) - new Date(user.updatedAt)) < 1000) {
-                action = 'Nuovo utente registrato';
-            }
-
-            return {
-                id: `auth_${user.id}`,
-                type: 'auth',
-                action: `${action}: ${user.email}`,
-                timestamp: user.updatedAt,
-                source: 'auth-service',
-                details: {
-                    userId: user.id,
-                    userEmail: user.email,
-                    status: user.status
+            // Query manuali come fallback
+            const [
+                totalUsers,
+                activeUsers,
+                pendingUsers,
+                suspendedUsers,
+                totalWhitelist
+            ] = await Promise.all([
+                User.count(),
+                User.count({ where: { status: 'active' } }),
+                User.count({ where: { status: 'pending' } }),
+                User.count({ where: { status: 'suspended' } }),
+                ElectionWhitelist.count()
+            ]);
+            
+            stats = {
+                users: {
+                    totalUsers,
+                    activeUsers,
+                    pendingUsers,
+                    suspendedUsers
+                },
+                whitelist: {
+                    whitelistEntries: totalWhitelist,
+                    verifiedUsers: activeUsers
                 }
             };
-        });
-
-        console.log(` [AUTH ADMIN] Caricate ${activities.length} attività`);
-        res.json(activities);
-    } catch (error) {
-        console.error(' [AUTH ADMIN] Errore activity:', error);
-        res.status(500).json({ error: 'Errore caricamento attività' });
-    }
-});
-
-// ==========================================
-// IMPOSTAZIONI SISTEMA 
-// ==========================================
-
-// GET /api/admin/settings - Impostazioni sistema dal database
-router.get('/settings', adminAuth, async (req, res) => {
-    try {
-        console.log('[AUTH ADMIN] Caricamento impostazioni sistema...');
-        
-        const settings = await SystemSettings.findAll({
-            order: [['key', 'ASC']]
-        });
-
-        console.log(` [AUTH ADMIN] Caricate ${settings.length} impostazioni`);
-
-        res.json({ 
-            settings: settings.map(setting => ({
-                key: setting.key,
-                value: setting.value,
-                description: setting.description,
-                isPublic: setting.isPublic,
-                updatedAt: setting.updatedAt
-            }))
-        });
-    } catch (error) {
-        console.error(' [AUTH ADMIN] Errore settings:', error);
-        res.status(500).json({ error: 'Errore caricamento impostazioni' });
-    }
-});
-
-// PUT /api/admin/settings/:key - Aggiorna impostazione
-router.put('/settings/:key', adminAuth, async (req, res) => {
-    try {
-        const { key } = req.params;
-        const { value, description } = req.body;
-
-        console.log('[AUTH ADMIN] Aggiornamento setting:', key);
-
-        const [setting, created] = await SystemSettings.findOrCreate({
-            where: { key },
-            defaults: { value, description, isPublic: false }
-        });
-
-        if (!created) {
-            await setting.update({ value, description });
         }
-
-        console.log(` [AUTH ADMIN] Setting ${key} aggiornato`);
-
-        res.json({
-            success: true,
-            message: `Impostazione ${key} aggiornata`,
-            setting: {
-                key: setting.key,
-                value: setting.value,
-                description: setting.description
-            }
-        });
-    } catch (error) {
-        console.error(' [AUTH ADMIN] Errore aggiornamento setting:', error);
-        res.status(500).json({ error: 'Errore aggiornamento impostazione' });
-    }
-});
-
-// ==========================================
-// BACKUP E MANUTENZIONE
-// ==========================================
-
-// GET /api/admin/backups - Lista backup disponibili
-router.get('/backups', adminAuth, async (req, res) => {
-    try {
-        console.log('💾 [AUTH ADMIN] Caricamento lista backup...');
         
-        // Per ora backup mock - implementare logica reale
-        const backups = [
-            {
-                id: '1',
-                filename: `backup_${new Date().toISOString().split('T')[0]}.sql`,
-                size: '2.4 MB',
-                createdAt: new Date(),
-                type: 'full'
-            }
-        ];
-
-        res.json({ backups });
+        console.log('[AUTH ADMIN] Stats generate:', stats);
+        
+        res.json({
+            ...stats,
+            timestamp: new Date().toISOString()
+        });
+        
     } catch (error) {
-        console.error(' [AUTH ADMIN] Errore backups:', error);
-        res.status(500).json({ error: 'Errore caricamento backup' });
+        console.error('[AUTH ADMIN] Errore stats:', error);
+        res.status(500).json({ 
+            error: 'Errore nel caricamento delle statistiche',
+            details: error.message
+        });
     }
 });
 
-// Health check
+// ==========================================
+// ATTIVITÀ - API REALI DATABASE
+// ==========================================
+
+// GET /api/admin/activity - Log attività reali
+router.get('/activity', adminAuth, async (req, res) => {
+    try {
+        const { limit = 10 } = req.query;
+        console.log(`[AUTH ADMIN] GET activity - limit: ${limit}`);
+        
+        // Query degli ultimi utenti registrati come attività
+        const recentUsers = await User.findAll({
+            limit: Math.min(parseInt(limit), 50),
+            order: [['createdAt', 'DESC']],
+            attributes: ['id', 'username', 'email', 'createdAt', 'lastLoginAt', 'status']
+        });
+        
+        const activities = recentUsers.map(user => ({
+            id: `auth_user_${user.id}`,
+            type: 'auth',
+            action: user.lastLoginAt ? 'Login utente' : 'Nuovo utente registrato',
+            timestamp: user.lastLoginAt || user.createdAt,
+            source: 'auth-service',
+            details: {
+                userId: user.id,
+                username: user.username,
+                email: user.email,
+                status: user.status
+            }
+        }));
+        
+        res.json(activities);
+        
+    } catch (error) {
+        console.error('[AUTH ADMIN] Errore activity:', error);
+        res.status(500).json({ 
+            error: 'Errore caricamento attività',
+            details: error.message
+        });
+    }
+});
+
+// ==========================================
+// HEALTH CHECK
+// ==========================================
+
+// GET /api/admin/health - Health check admin
 router.get('/health', (req, res) => {
     res.json({ 
         status: 'ok', 
-        service: 'auth-service',
-        database: sequelize.authenticate ? 'connected' : 'disconnected',
-        timestamp: new Date().toISOString()
+        service: 'auth-admin',
+        timestamp: new Date().toISOString(),
+        database: sequelize ? 'connected' : 'disconnected'
     });
 });
 
-console.log('[AUTH ADMIN ROUTES] ✓ Route admin auth con database reale caricate');
-
+console.log('[AUTH ADMIN ROUTES] Route admin auth caricate correttamente');
 module.exports = router;
