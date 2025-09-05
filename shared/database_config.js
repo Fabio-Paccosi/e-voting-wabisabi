@@ -108,7 +108,9 @@ const User = sequelize.define('User', {
         field: 'has_voted'
     }
 }, {
-    tableName: 'users'
+    tableName: 'users',
+    createdAt: 'created_at',  
+    updatedAt: 'updated_at' 
 });
 
 // Modello Election (usato da server2 e server3)
