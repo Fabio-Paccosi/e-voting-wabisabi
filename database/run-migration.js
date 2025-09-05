@@ -222,14 +222,14 @@ class MigrationRunner {
                 }
             }
 
-            console.log('\n🎉 TUTTE LE MIGRAZIONI COMPLETATE!');
+            console.log('\nTUTTE LE MIGRAZIONI COMPLETATE!');
             console.log(` Statistiche:`);
             console.log(`   • Migrazioni eseguite: ${executedCount}`);
             console.log(`   • Migrazioni saltate: ${skippedCount}`);
             console.log(`   • Totale file: ${migrationFiles.length}`);
 
         } catch (error) {
-            console.error('\n💥 ERRORE DURANTE L\'ESECUZIONE DELLE MIGRAZIONI:');
+            console.error('\nERRORE DURANTE L\'ESECUZIONE DELLE MIGRAZIONI:');
             console.error(error.message);
             process.exit(1);
         } finally {
@@ -369,19 +369,19 @@ async function main() {
 
 // Gestione errori non catturati
 process.on('unhandledRejection', (reason, promise) => {
-    console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
     process.exit(1);
 });
 
 process.on('uncaughtException', (error) => {
-    console.error('💥 Uncaught Exception:', error);
+    console.error('Uncaught Exception:', error);
     process.exit(1);
 });
 
 // Esegui solo se chiamato direttamente
 if (require.main === module) {
     main().catch(error => {
-        console.error('💥 Errore fatale:', error.message);
+        console.error('Errore fatale:', error.message);
         process.exit(1);
     });
 }

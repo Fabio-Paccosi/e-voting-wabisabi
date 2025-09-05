@@ -1,6 +1,7 @@
 // server3/routes/elections.js - Vote Service per utenti normali (SENZA JWT)
 const express = require('express');
 const router = express.Router();
+const CoinJoinService = require('../services/CoinJoinService');
 
 // Importa modelli database condivisi
 const {
@@ -505,6 +506,324 @@ router.get('/debug', async (req, res) => {
         },
         message: 'Headers ricevuti dal vote-service'
     });
+});
+
+// GET /api/elections/:electionId/results - Risultati dell'elezione
+router.get('/:electionId/results', async (req, res) => {
+    try {
+        const { electionId } = req.params;
+        
+        console.log(`[ELECTION-RESULTS] 📊 Caricamento risultati per elezione ${electionId}`);
+
+        // Verifica che l'elezione esista
+        const election = await Election.findByPk(electionId);
+        if (!election) {
+            return res.status(404).json({ error: 'Elezione non trovata' });
+        }
+
+        // Ottieni i candidati con i voti
+        const candidates = await Candidate.findAll({
+            where: { electionId },
+            attributes: ['id', 'name', 'firstName', 'lastName', 'party', 'bitcoinAddress'],
+            order: [['voteEncoding', 'ASC']]
+        });
+
+        // Conta i voti per ogni candidato dalle transazioni CoinJoin confermate
+        const voteResults = await sequelize.query(`
+            SELECT 
+                c.id as candidateId,
+                c.name,
+                c.party,
+                c.bitcoin_address as bitcoinAddress,
+                COALESCE(vote_counts.vote_count, 0) as votes
+            FROM candidates c
+            LEFT JOIN (
+                SELECT 
+                    v.candidate_id,
+                    COUNT(v.id) as vote_count
+                FROM votes v
+                JOIN transactions t ON v.transaction_id = t.txid
+                WHERE v.election_id = :electionId 
+                AND t.confirmations >= 1
+                GROUP BY v.candidate_id
+            ) vote_counts ON c.id = vote_counts.candidate_id
+            WHERE c.election_id = :electionId
+            ORDER BY votes DESC, c.vote_encoding ASC
+        `, {
+            replacements: { electionId },
+            type: sequelize.QueryTypes.SELECT
+        });
+
+        // Calcola statistiche generali
+        const totalVotes = voteResults.reduce((sum, candidate) => sum + parseInt(candidate.votes), 0);
+        
+        // Calcola le percentuali
+        const candidatesWithPercentage = voteResults.map(candidate => ({
+            ...candidate,
+            votes: parseInt(candidate.votes),
+            percentage: totalVotes > 0 ? ((parseInt(candidate.votes) / totalVotes) * 100).toFixed(1) : 0
+        }));
+
+        // Ottieni statistiche sulla partecipazione
+        const whitelistCount = await ElectionWhitelist.count({ where: { electionId } });
+        const voterTurnout = whitelistCount > 0 ? ((totalVotes / whitelistCount) * 100).toFixed(1) : 0;
+
+        // Trova il vincitore
+        const winner = candidatesWithPercentage.length > 0 && candidatesWithPercentage[0].votes > 0 
+            ? candidatesWithPercentage[0] 
+            : null;
+
+        console.log(`[ELECTION-RESULTS] ✅ Risultati calcolati: ${totalVotes} voti totali`);
+
+        res.json({
+            success: true,
+            election: {
+                id: election.id,
+                title: election.title,
+                status: election.status,
+                network: election.blockchainNetwork
+            },
+            candidates: candidatesWithPercentage,
+            totalVotes,
+            voterTurnout: parseFloat(voterTurnout),
+            whitelistCount,
+            winner,
+            lastUpdated: new Date().toISOString()
+        });
+
+    } catch (error) {
+        console.error('[ELECTION-RESULTS] ❌ Errore caricamento risultati:', error);
+        res.status(500).json({ 
+            error: 'Errore nel caricamento dei risultati',
+            details: error.message 
+        });
+    }
+});
+
+// GET /api/elections/:electionId/transactions - Transazioni CoinJoin dell'elezione
+router.get('/:electionId/transactions', async (req, res) => {
+    try {
+        const { electionId } = req.params;
+        
+        console.log(`[ELECTION-TRANSACTIONS] 🔗 Caricamento transazioni per elezione ${electionId}`);
+
+        // Verifica che l'elezione esista
+        const election = await Election.findByPk(electionId);
+        if (!election) {
+            return res.status(404).json({ error: 'Elezione non trovata' });
+        }
+
+        // Ottieni le transazioni CoinJoin per questa elezione
+        const transactions = await Transaction.findAll({
+            where: { electionId },
+            attributes: [
+                'id', 'txid', 'type', 'confirmations', 'blockHeight', 
+                'metadata', 'rawData', 'createdAt', 'updatedAt'
+            ],
+            order: [['createdAt', 'DESC']]
+        });
+
+        // Arricchisci le transazioni con dati elaborati
+        const enrichedTransactions = transactions.map(tx => {
+            let parsedMetadata = {};
+            let parsedRawData = {};
+            
+            try {
+                parsedMetadata = tx.metadata ? JSON.parse(tx.metadata) : {};
+                parsedRawData = tx.rawData ? JSON.parse(tx.rawData) : {};
+            } catch (error) {
+                console.warn(`[ELECTION-TRANSACTIONS] ⚠️ Errore parsing JSON per TX ${tx.txid}`);
+            }
+
+            const network = election.blockchainNetwork || 'testnet';
+            const explorerUrl = network === 'mainnet'
+                ? `https://blockstream.info/tx/${tx.txid}`
+                : `https://blockstream.info/testnet/tx/${tx.txid}`;
+
+            return {
+                txid: tx.txid,
+                type: tx.type,
+                confirmations: tx.confirmations || 0,
+                blockHeight: tx.blockHeight,
+                timestamp: tx.createdAt,
+                inputCount: parsedRawData.inputs?.length || 0,
+                outputCount: parsedRawData.outputs?.length || 0,
+                voterCount: parsedRawData.voterCount || 0,
+                fee: parsedRawData.fee || null,
+                size: parsedMetadata.size || null,
+                explorerUrl,
+                network
+            };
+        });
+
+        console.log(`[ELECTION-TRANSACTIONS] ✅ ${enrichedTransactions.length} transazioni trovate`);
+
+        res.json({
+            success: true,
+            electionId,
+            transactions: enrichedTransactions,
+            total: enrichedTransactions.length,
+            confirmed: enrichedTransactions.filter(tx => tx.confirmations > 0).length,
+            pending: enrichedTransactions.filter(tx => tx.confirmations === 0).length
+        });
+
+    } catch (error) {
+        console.error('[ELECTION-TRANSACTIONS] ❌ Errore caricamento transazioni:', error);
+        res.status(500).json({ 
+            error: 'Errore nel caricamento delle transazioni',
+            details: error.message 
+        });
+    }
+});
+
+// GET /api/transactions/:txid/details - Dettagli specifici di una transazione
+router.get('/transactions/:txid/details', async (req, res) => {
+    try {
+        const { txid } = req.params;
+        
+        console.log(`[TRANSACTION-DETAILS] 🔍 Caricamento dettagli per transazione ${txid}`);
+
+        // Trova la transazione nel database
+        const transaction = await Transaction.findOne({
+            where: { txid },
+            include: [{
+                model: Election,
+                attributes: ['id', 'title', 'blockchainNetwork']
+            }]
+        });
+
+        if (!transaction) {
+            return res.status(404).json({ error: 'Transazione non trovata' });
+        }
+
+        // Parse dei dati JSON
+        let rawData = {};
+        let metadata = {};
+        
+        try {
+            rawData = transaction.rawData ? JSON.parse(transaction.rawData) : {};
+            metadata = transaction.metadata ? JSON.parse(transaction.metadata) : {};
+        } catch (error) {
+            console.warn(`[TRANSACTION-DETAILS] ⚠️ Errore parsing JSON`);
+        }
+
+        // Se possibile, ottieni informazioni aggiornate dalla blockchain
+        let blockchainInfo = null;
+        if (process.env.ENABLE_BLOCKCHAIN_MONITORING === 'true') {
+            try {
+                const coinJoinService = new CoinJoinService();
+                blockchainInfo = await coinJoinService.monitorTransaction(txid);
+            } catch (error) {
+                console.warn(`[TRANSACTION-DETAILS] ⚠️ Impossibile ottenere info blockchain: ${error.message}`);
+            }
+        }
+
+        // Combina dati database e blockchain
+        const details = {
+            txid: transaction.txid,
+            type: transaction.type,
+            confirmed: blockchainInfo?.confirmed || (transaction.confirmations > 0),
+            confirmations: blockchainInfo?.confirmations || transaction.confirmations || 0,
+            blockHeight: blockchainInfo?.blockHeight || transaction.blockHeight,
+            blockHash: blockchainInfo?.blockHash || null,
+            size: blockchainInfo?.size || metadata.size || null,
+            fee: blockchainInfo?.fee || rawData.fee || null,
+            feeRate: null,
+            timestamp: blockchainInfo?.timestamp 
+                ? new Date(blockchainInfo.timestamp * 1000).toISOString()
+                : transaction.createdAt,
+            
+            // Dati specifici del CoinJoin
+            inputs: rawData.inputs || [],
+            outputs: rawData.outputs || [],
+            voterCount: rawData.voterCount || 0,
+            
+            // Informazioni elezione
+            election: {
+                id: transaction.Election?.id,
+                title: transaction.Election?.title,
+                network: transaction.Election?.blockchainNetwork || 'testnet'
+            },
+            
+            // URL explorer
+            explorerUrl: transaction.Election?.blockchainNetwork === 'mainnet'
+                ? `https://blockstream.info/tx/${txid}`
+                : `https://blockstream.info/testnet/tx/${txid}`
+        };
+
+        // Calcola fee rate se disponibile
+        if (details.fee && details.size) {
+            details.feeRate = details.fee / details.size;
+        }
+
+        console.log(`[TRANSACTION-DETAILS] ✅ Dettagli preparati per ${txid}`);
+
+        res.json({
+            success: true,
+            ...details
+        });
+
+    } catch (error) {
+        console.error('[TRANSACTION-DETAILS] ❌ Errore caricamento dettagli:', error);
+        res.status(500).json({ 
+            error: 'Errore nel caricamento dei dettagli della transazione',
+            details: error.message 
+        });
+    }
+});
+
+// POST /api/elections/:electionId/trigger-coinjoin - Trigger manuale CoinJoin (solo admin)
+router.post('/:electionId/trigger-coinjoin', async (req, res) => {
+    try {
+        const { electionId } = req.params;
+        
+        // Verifica autorizzazioni admin (implementa il tuo middleware di autenticazione admin)
+        // const adminUser = req.admin; // Assume middleware di autenticazione admin
+        
+        console.log(`[MANUAL-COINJOIN] 🔄 Trigger manuale CoinJoin per elezione ${electionId}`);
+
+        // Verifica che l'elezione esista
+        const election = await Election.findByPk(electionId);
+        if (!election) {
+            return res.status(404).json({ error: 'Elezione non trovata' });
+        }
+
+        // Verifica che ci siano voti pendenti
+        const pendingVotes = await Vote.count({
+            where: { electionId, status: 'pending' }
+        });
+
+        if (pendingVotes === 0) {
+            return res.status(400).json({ 
+                error: 'Nessun voto pendente per questa elezione' 
+            });
+        }
+
+        console.log(`[MANUAL-COINJOIN] 📊 Trovati ${pendingVotes} voti pendenti`);
+
+        // Importa e usa la funzione triggerCoinJoinForElection dal route voting.js
+        // (In un'implementazione reale, dovresti refactorizzare questa funzione in un servizio condiviso)
+        const coinjoinResult = await triggerCoinJoinForElection(electionId);
+
+        console.log(`[MANUAL-COINJOIN] ✅ CoinJoin completato: ${coinjoinResult.transactionId}`);
+
+        res.json({
+            success: true,
+            message: `CoinJoin completato per ${pendingVotes} voti`,
+            transactionId: coinjoinResult.transactionId,
+            inputCount: coinjoinResult.inputCount,
+            outputCount: coinjoinResult.outputCount,
+            voterCount: coinjoinResult.voterCount,
+            electionId
+        });
+
+    } catch (error) {
+        console.error('[MANUAL-COINJOIN] ❌ Errore trigger CoinJoin manuale:', error);
+        res.status(500).json({ 
+            error: 'Errore durante il trigger del CoinJoin',
+            details: error.message 
+        });
+    }
 });
 
 module.exports = router;
