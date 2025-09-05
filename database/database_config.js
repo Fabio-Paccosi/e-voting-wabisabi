@@ -76,17 +76,6 @@ const User = sequelize.define('User', {
         unique: true,
         field: 'tax_code'    // Mappa a tax_code nel DB
     },
-    bitcoinAddress: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        unique: true,
-        field: 'bitcoin_address'
-    },
-    bitcoinPrivateKey: {
-        type: DataTypes.TEXT,
-        allowNull: true,
-        field: 'bitcoin_private_key'
-    },
     isAuthorized: {
         type: DataTypes.BOOLEAN,
         defaultValue: false,

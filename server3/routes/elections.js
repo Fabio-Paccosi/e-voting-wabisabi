@@ -86,7 +86,7 @@ router.get('/', extractUserFromHeaders, async (req, res) => {
                 {
                     model: Candidate,
                     as: 'candidates',
-                    attributes: ['id', 'name', 'firstName', 'lastName', 'party', 'voteEncoding', 'bitcoinAddress']
+                    attributes: ['id', 'name', 'party', 'voteEncoding', 'bitcoinAddress']
                 }
             ],
             order: [['startDate', 'ASC']]
@@ -133,9 +133,9 @@ router.get('/', extractUserFromHeaders, async (req, res) => {
                         blockchainNetwork: election.blockchainNetwork,
                         candidates: election.candidates.map(candidate => ({
                             id: candidate.id,
-                            name: candidate.name || `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim(),
-                            firstName: candidate.firstName,
-                            lastName: candidate.lastName,
+                            name: candidate.name,// || `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim(),
+                            //firstName: candidate.firstName,
+                            //lastName: candidate.lastName,
                             party: candidate.party,
                             voteEncoding: candidate.voteEncoding,
                             bitcoinAddress: candidate.bitcoinAddress
@@ -198,7 +198,7 @@ router.get('/voted', extractUserFromHeaders, async (req, res) => {
                         {
                             model: Candidate,
                             as: 'candidates',
-                            attributes: ['id', 'name', 'firstName', 'lastName', 'party', 'voteEncoding', 'bitcoinAddress', 'totalVotesReceived']
+                            attributes: ['id', 'name', 'party', 'voteEncoding', 'bitcoinAddress', 'totalVotesReceived']
                         }
                     ]
                 }
@@ -221,9 +221,9 @@ router.get('/voted', extractUserFromHeaders, async (req, res) => {
             votedAt: entry.votedAt,
             candidates: entry.election.candidates.map(candidate => ({
                 id: candidate.id,
-                name: candidate.name || `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim(),
-                firstName: candidate.firstName,
-                lastName: candidate.lastName,
+                name: candidate.name, // || `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim(),
+                //firstName: candidate.firstName,
+                //lastName: candidate.lastName,
                 party: candidate.party,
                 voteEncoding: candidate.voteEncoding,
                 bitcoinAddress: candidate.bitcoinAddress,
@@ -266,7 +266,7 @@ router.get('/:id/results', extractUserFromHeaders, async (req, res) => {
                 {
                     model: Candidate,
                     as: 'candidates',
-                    attributes: ['id', 'name', 'firstName', 'lastName', 'party', 'voteEncoding', 'bitcoinAddress', 'totalVotesReceived']
+                    attributes: ['id', 'name', 'party', 'voteEncoding', 'bitcoinAddress', 'totalVotesReceived']
                 }
             ]
         });
@@ -306,9 +306,9 @@ router.get('/:id/results', extractUserFromHeaders, async (req, res) => {
         // 4. Costruisci i risultati con i voti ricevuti da ogni candidato
         const results = election.candidates.map(candidate => ({
             id: candidate.id,
-            name: candidate.name || `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim(),
-            firstName: candidate.firstName,
-            lastName: candidate.lastName,
+            name: candidate.name,// || `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim(),
+            //firstName: candidate.firstName,
+            //lastName: candidate.lastName,
             party: candidate.party,
             voteEncoding: candidate.voteEncoding,
             bitcoinAddress: candidate.bitcoinAddress,
@@ -377,7 +377,7 @@ router.get('/:id', extractUserFromHeaders, async (req, res) => {
                 {
                     model: Candidate,
                     as: 'candidates',
-                    attributes: ['id', 'name', 'firstName', 'lastName', 'party', 'voteEncoding', 'bitcoinAddress']
+                    attributes: ['id', 'name', 'party', 'voteEncoding', 'bitcoinAddress']
                 }
             ]
         });
@@ -437,9 +437,9 @@ router.get('/:id', extractUserFromHeaders, async (req, res) => {
                 blockchainNetwork: election.blockchainNetwork,
                 candidates: election.candidates.map(candidate => ({
                     id: candidate.id,
-                    name: candidate.name || `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim(),
-                    firstName: candidate.firstName,
-                    lastName: candidate.lastName,
+                    name: candidate.name,// || `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim(),
+                    //firstName: candidate.firstName,
+                    //lastName: candidate.lastName,
                     party: candidate.party,
                     voteEncoding: candidate.voteEncoding,
                     bitcoinAddress: candidate.bitcoinAddress
@@ -524,7 +524,7 @@ router.get('/:electionId/results', async (req, res) => {
         // Ottieni i candidati con i voti
         const candidates = await Candidate.findAll({
             where: { electionId },
-            attributes: ['id', 'name', 'firstName', 'lastName', 'party', 'bitcoinAddress'],
+            attributes: ['id', 'name', 'party', 'bitcoinAddress'],
             order: [['voteEncoding', 'ASC']]
         });
 

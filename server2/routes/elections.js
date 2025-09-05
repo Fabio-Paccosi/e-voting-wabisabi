@@ -143,7 +143,7 @@ router.get('/:electionId/candidates', authMiddleware, async (req, res) => {
         const candidates = await Candidate.findAll({
             where: { electionId },
             attributes: [
-                'id', 'name', 'firstName', 'lastName', 'party', 
+                'id', 'name', 'party', 
                 'biography', 'voteEncoding', 'bitcoinAddress'
             ],
             order: [['voteEncoding', 'ASC']]
@@ -159,8 +159,8 @@ router.get('/:electionId/candidates', authMiddleware, async (req, res) => {
             candidates: candidates.map(candidate => ({
                 id: candidate.id,
                 name: candidate.name,
-                firstName: candidate.firstName,
-                lastName: candidate.lastName,
+                //firstName: candidate.firstName,
+                //lastName: candidate.lastName,
                 party: candidate.party,
                 biography: candidate.biography,
                 voteEncoding: candidate.voteEncoding,

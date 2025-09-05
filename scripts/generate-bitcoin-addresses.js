@@ -275,37 +275,6 @@ class BitcoinAddressGenerator {
             throw error;
         }
     }
-
-    // Esporta indirizzi in formato CSV
-    async exportToCSV(filename = 'bitcoin_addresses.csv') {
-        try {
-            await this.connect();
-
-            const users = await User.findAll({
-                where: {
-                    bitcoinAddress: {
-                        [sequelize.Sequelize.Op.ne]: null
-                    }
-                },
-                attributes: ['email', 'firstName', 'lastName', 'bitcoinAddress', 'createdAt']
-            });
-
-            const fs = require('fs');
-            const csvContent = [
-                'Email,Nome,Cognome,Indirizzo Bitcoin,Data Creazione',
-                ...users.map(user => 
-                    `${user.email},${user.firstName},${user.lastName},${user.bitcoinAddress},${user.createdAt.toISOString()}`
-                )
-            ].join('\n');
-
-            fs.writeFileSync(filename, csvContent);
-            console.log(` Indirizzi esportati in: ${filename}`);
-
-        } catch (error) {
-            console.error(' Errore esportazione:', error.message);
-            throw error;
-        }
-    }
 }
 
 // ====================
@@ -341,10 +310,6 @@ async function main() {
 
             case 'verify':
                 await generator.verifyAllAddresses();
-                break;
-
-            case 'export':
-                await generator.exportToCSV(arg);
                 break;
 
             case 'help':

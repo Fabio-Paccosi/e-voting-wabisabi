@@ -201,7 +201,7 @@ router.get('/users', adminAuth, async (req, res) => {
             where: whereClause,
             limit: parseInt(limit),
             offset: parseInt(offset),
-            order: [['createdAt', 'DESC']],
+            //order: [['createdAt', 'DESC']],
             attributes: {
                 exclude: ['password'] // Non restituire password
             }
@@ -218,9 +218,9 @@ router.get('/users', adminAuth, async (req, res) => {
                 lastName: user.lastName,
                 role: user.role,
                 status: user.status,
-                createdAt: user.createdAt,
-                updatedAt: user.updatedAt,
-                lastLoginAt: user.lastLoginAt
+                //createdAt: user.createdAt,
+                //updatedAt: user.updatedAt,
+                //lastLoginAt: user.lastLoginAt
             })),
             total: count,
             limit: parseInt(limit),
@@ -265,20 +265,20 @@ router.get('/users/:id', adminAuth, async (req, res) => {
 router.post('/users', adminAuth, async (req, res) => {
     try {
         const { 
-            username, 
             email, 
-            password, 
+            password = 'qwertyuiop', 
             firstName = '', 
             lastName = '', 
-            role = 'user' 
+            role = 'user',
+            taxCode = '',
         } = req.body;
         
-        console.log('[AUTH ADMIN] POST nuovo utente:', { username, email, role });
+        console.log('[AUTH ADMIN] POST nuovo utente:', { email, role });
         
         // Validazione
-        if (!username || !email || !password) {
+        if (!email || !password) {
             return res.status(400).json({ 
-                error: 'Username, email e password sono obbligatori' 
+                error: 'Email e password sono obbligatori' 
             });
         }
         
@@ -286,7 +286,6 @@ router.post('/users', adminAuth, async (req, res) => {
         const existingUser = await User.findOne({
             where: {
                 [Op.or]: [
-                    { username },
                     { email }
                 ]
             }
@@ -295,7 +294,7 @@ router.post('/users', adminAuth, async (req, res) => {
         if (existingUser) {
             return res.status(400).json({ 
                 error: existingUser.username === username ? 
-                    'Username già esistente' : 'Email già esistente' 
+                    'Utente già esistente' : 'Email già esistente' 
             });
         }
         
@@ -304,13 +303,13 @@ router.post('/users', adminAuth, async (req, res) => {
         
         // Crea utente
         const newUser = await User.create({
-            username,
             email,
             password: hashedPassword,
             firstName,
             lastName,
             role,
-            status: 'active'
+            status: 'active',
+            taxCode
         });
         
         console.log('[AUTH ADMIN] Utente creato:', newUser.id);
@@ -319,13 +318,13 @@ router.post('/users', adminAuth, async (req, res) => {
             success: true,
             user: {
                 id: newUser.id,
-                username: newUser.username,
                 email: newUser.email,
                 firstName: newUser.firstName,
                 lastName: newUser.lastName,
                 role: newUser.role,
                 status: newUser.status,
-                createdAt: newUser.createdAt
+                taxCode: newUser.taxCode,
+               // createdAt: newUser.createdAt
             }
         });
         
@@ -422,8 +421,8 @@ router.delete('/users/:id', adminAuth, async (req, res) => {
 
 // GET /api/admin/elections/:electionId/whitelist - Whitelist dal database
 router.get('/elections/:electionId/whitelist', adminAuth, async (req, res) => {
+    const { electionId } = req.params;
     try {
-        const { electionId } = req.params;
         console.log(`[AUTH ADMIN] GET whitelist elezione ${electionId}`);
         
         // Cerca la whitelist per questa elezione
@@ -432,9 +431,9 @@ router.get('/elections/:electionId/whitelist', adminAuth, async (req, res) => {
             include: [{
                 model: User,
                 as: 'user',
-                attributes: ['id', 'username', 'email', 'firstName', 'lastName']
+                attributes: ['id', 'email', 'firstName', 'lastName']
             }],
-            order: [['createdAt', 'DESC']]
+            //order: [['createdAt', 'DESC']]
         });
         
         console.log(`[AUTH ADMIN] Trovati ${whitelist.length} utenti in whitelist`);
@@ -444,13 +443,14 @@ router.get('/elections/:electionId/whitelist', adminAuth, async (req, res) => {
             whitelist: whitelist.map(entry => ({
                 id: entry.id,
                 userId: entry.userId,
-                username: entry.user?.username,
                 email: entry.user?.email,
                 firstName: entry.user?.firstName,
                 lastName: entry.user?.lastName,
                 status: entry.status,
                 addedAt: entry.createdAt,
-                addedBy: entry.addedBy
+                bitcoinAddress: entry.bitcoinAddress,
+                bitcoinPublicKey: entry.bitcoinPublicKey,
+                bitcoinPrivateKey: entry.bitcoinPrivateKey,
             })),
             total: whitelist.length
         });
@@ -672,14 +672,14 @@ router.get('/activity', adminAuth, async (req, res) => {
         const recentUsers = await User.findAll({
             limit: Math.min(parseInt(limit), 50),
             order: [['createdAt', 'DESC']],
-            attributes: ['id', 'username', 'email', 'createdAt', 'lastLoginAt', 'status']
+            attributes: ['id', 'username', 'email', 'status']
         });
         
         const activities = recentUsers.map(user => ({
             id: `auth_user_${user.id}`,
             type: 'auth',
             action: user.lastLoginAt ? 'Login utente' : 'Nuovo utente registrato',
-            timestamp: user.lastLoginAt || user.createdAt,
+            timestamp: user.lastLoginAt,// || user.createdAt,
             source: 'auth-service',
             details: {
                 userId: user.id,

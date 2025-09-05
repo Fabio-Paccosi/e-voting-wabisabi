@@ -9,6 +9,13 @@ console.log('Environment vars:', {
 });
 
 // ====================
+// GESTIONE THREAD-SAFE DELL'INIZIALIZZAZIONE
+// ====================
+let isInitialized = false;
+let initializationPromise = null;
+const initLock = {};
+
+// ====================
 // CONFIGURAZIONE SEQUELIZE UNICA
 // ====================
 const sequelize = new Sequelize(
@@ -27,10 +34,25 @@ const sequelize = new Sequelize(
         },
         define: {
             timestamps: true,
-            underscored: true,        // Usa snake_case per DB
-            freezeTableName: true,    // Non pluralizzare tabelle
+            underscored: true,        
+            freezeTableName: true,    
             createdAt: 'created_at',
             updatedAt: 'updated_at'
+        },
+        // Configurazioni per gestire race conditions
+        retry: {
+            match: [
+                /SequelizeConnectionError/,
+                /SequelizeConnectionRefusedError/,
+                /SequelizeHostNotFoundError/,
+                /SequelizeHostNotReachableError/,
+                /SequelizeInvalidConnectionError/,
+                /SequelizeConnectionTimedOutError/,
+                /TimeoutError/,
+                /SequelizeUniqueConstraintError/,
+                /SequelizeDatabaseError/
+            ],
+            max: 3
         }
     }
 );
@@ -39,7 +61,7 @@ const sequelize = new Sequelize(
 // TUTTI I MODELLI CENTRALIZZATI
 // ====================
 
-// Modello User (usato da server2 e server3)
+// Modello User con gestione sicura dell'enum
 const User = sequelize.define('User', {
     id: {
         type: DataTypes.UUID,
@@ -72,12 +94,6 @@ const User = sequelize.define('User', {
         unique: true,
         field: 'tax_code'
     },
-    bitcoinAddress: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        unique: true,
-        field: 'bitcoin_address'
-    },
     isAuthorized: {
         type: DataTypes.BOOLEAN,
         defaultValue: false,
@@ -88,6 +104,7 @@ const User = sequelize.define('User', {
         allowNull: true,
         field: 'authorization_proof'
     },
+    // Gestione sicura dell'enum status
     status: {
         type: DataTypes.ENUM('active', 'suspended', 'pending', 'inactive'),
         defaultValue: 'pending'
@@ -113,7 +130,7 @@ const User = sequelize.define('User', {
     timestamps: true
 });
 
-// Modello Election (usato da server2 e server3)
+// Altri modelli esistenti...
 const Election = sequelize.define('Election', {
     id: {
         type: DataTypes.UUID,
@@ -128,6 +145,10 @@ const Election = sequelize.define('Election', {
         type: DataTypes.TEXT,
         allowNull: true
     },
+    status: {
+        type: DataTypes.ENUM('draft', 'active', 'paused', 'completed'),
+        defaultValue: 'draft'
+    },
     startDate: {
         type: DataTypes.DATE,
         allowNull: false,
@@ -138,45 +159,22 @@ const Election = sequelize.define('Election', {
         allowNull: false,
         field: 'end_date'
     },
-    status: {
-        type: DataTypes.ENUM('draft', 'active', 'paused', 'completed', 'cancelled'),
-        defaultValue: 'draft'
-    },
-    isActive: {
-        type: DataTypes.BOOLEAN,
-        defaultValue: false,
-        field: 'is_active'
-    },
-    votingMethod: {
-        type: DataTypes.ENUM('single', 'multiple', 'ranked'),
-        defaultValue: 'single',
-        field: 'voting_method'
-    },
-    coinjoinEnabled: {
-        type: DataTypes.BOOLEAN,
-        defaultValue: true,
-        field: 'coinjoin_enabled'
-    },
-    coinjoinTrigger: {
-        type: DataTypes.INTEGER,
-        defaultValue: 10,
-        field: 'coinjoin_trigger'
-    },
-    blockchainNetwork: {
-        type: DataTypes.ENUM('mainnet', 'testnet', 'regtest'),
-        defaultValue: 'testnet',
-        field: 'blockchain_network'
-    },
-    maxVotersAllowed: {
+    maxParticipants: {
         type: DataTypes.INTEGER,
         allowNull: true,
-        field: 'max_voters_allowed'
+        field: 'max_participants'
+    },
+    anonymityLevel: {
+        type: DataTypes.ENUM('basic', 'advanced', 'maximum'),
+        defaultValue: 'basic',
+        field: 'anonymity_level'
     }
 }, {
-    tableName: 'elections'
+    tableName: 'elections',
+    underscored: true,
+    timestamps: true
 });
 
-// Modello Candidate (usato da server3)
 const Candidate = sequelize.define('Candidate', {
     id: {
         type: DataTypes.UUID,
@@ -186,56 +184,126 @@ const Candidate = sequelize.define('Candidate', {
     electionId: {
         type: DataTypes.UUID,
         allowNull: false,
-        field: 'election_id'
+        field: 'election_id',
+        references: {
+            model: 'elections',
+            key: 'id'
+        }
     },
     name: {
         type: DataTypes.STRING,
         allowNull: false
     },
-    firstName: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        field: 'first_name'
-    },
-    lastName: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        field: 'last_name'
-    },
     party: {
         type: DataTypes.STRING,
-        allowNull: true
+        allowNull: false
     },
-    biography: {
+    description: {
         type: DataTypes.TEXT,
         allowNull: true
+    },
+    order: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0
     },
     voteEncoding: {
         type: DataTypes.INTEGER,
         allowNull: false,
-        field: 'vote_encoding'
     },
     bitcoinAddress: {
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: true,
+        unique: true,
         field: 'bitcoin_address'
     },
-    bitcoinPublicKey: {
-        type: DataTypes.TEXT,
-        allowNull: true,
-        field: 'bitcoin_public_key'
-    },
-    totalVotesReceived: {
-        type: DataTypes.INTEGER,
-        defaultValue: 0,
-        field: 'total_votes_received'
-    }
 }, {
-    tableName: 'candidates'
+    tableName: 'candidates',
+    underscored: true,
+    timestamps: true
 });
 
-// Modello ElectionWhitelist (usato da server2)
-const ElectionWhitelist = sequelize.define('ElectionWhitelist', {
+const VotingSession = sequelize.define('VotingSession', {
+    id: {
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true
+    },
+    electionId: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        field: 'election_id',
+        references: {
+            model: 'elections',
+            key: 'id'
+        }
+    },
+    status: {
+        type: DataTypes.ENUM('pending', 'active', 'completed', 'failed'),
+        defaultValue: 'pending'
+    },
+    minParticipants: {
+        type: DataTypes.INTEGER,
+        defaultValue: 3,
+        field: 'min_participants'
+    },
+    maxParticipants: {
+        type: DataTypes.INTEGER,
+        defaultValue: 100,
+        field: 'max_participants'
+    },
+    currentParticipants: {
+        type: DataTypes.INTEGER,
+        defaultValue: 0,
+        field: 'current_participants'
+    }
+}, {
+    tableName: 'voting_sessions',
+    underscored: true,
+    timestamps: true
+});
+
+const Vote = sequelize.define('Vote', {
+    id: {
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true
+    },
+    sessionId: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        field: 'session_id',
+        references: {
+            model: 'voting_sessions',
+            key: 'id'
+        }
+    },
+    commitment: {
+        type: DataTypes.TEXT,
+        allowNull: false
+    },
+    serialNumber: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        unique: true,
+        field: 'serial_number'
+    },
+    status: {
+        type: DataTypes.ENUM('pending', 'confirmed', 'failed'),
+        defaultValue: 'pending'
+    },
+    transactionId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'transaction_id'
+    }
+}, {
+    tableName: 'votes',
+    underscored: true,
+    timestamps: true
+});
+
+const Transaction = sequelize.define('Transaction', {
     id: {
         type: DataTypes.UUID,
         defaultValue: DataTypes.UUIDV4,
@@ -246,20 +314,118 @@ const ElectionWhitelist = sequelize.define('ElectionWhitelist', {
         allowNull: false,
         field: 'election_id'
     },
+    sessionId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'session_id'
+    },
+    txid: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        unique: true
+    },
+    voteCount: {
+        type: DataTypes.INTEGER,
+        defaultValue: 0,
+        field: 'vote_count'
+    },
+    status: {
+        type: DataTypes.ENUM('pending', 'broadcasted', 'confirmed', 'failed'),
+        defaultValue: 'pending'
+    },
+    blockHeight: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: 'block_height'
+    }
+}, {
+    tableName: 'transactions',
+    underscored: true,
+    timestamps: true
+});
+
+const Credential = sequelize.define('Credential', {
+    id: {
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true
+    },
     userId: {
         type: DataTypes.UUID,
         allowNull: false,
-        field: 'user_id'
+        field: 'user_id',
+        references: {
+            model: 'users',
+            key: 'id'
+        }
     },
-    authorizedAt: {
+    serialNumber: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        unique: true,
+        field: 'serial_number'
+    },
+    signature: {
+        type: DataTypes.TEXT,
+        allowNull: false
+    },
+    isUsed: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        field: 'is_used'
+    },
+    expiresAt: {
         type: DataTypes.DATE,
-        defaultValue: DataTypes.NOW,
-        field: 'authorized_at'
-    },
-    authorizedBy: {
-        type: DataTypes.UUID,
         allowNull: true,
-        field: 'authorized_by'
+        field: 'expires_at'
+    }
+}, {
+    tableName: 'credentials',
+    underscored: true,
+    timestamps: true
+});
+
+const ElectionWhitelist = sequelize.define('ElectionWhitelist', {
+    id: {
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true
+    },
+    electionId: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        field: 'election_id',
+        references: {
+            model: 'elections',
+            key: 'id'
+        }
+    },
+    userId: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        field: 'user_id',
+        references: {
+            model: 'users',
+            key: 'id'
+        }
+    },
+    bitcoinAddress: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        unique: true,
+        field: 'bitcoin_address'
+    },
+    bitcoinPublicKey: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        unique: true,
+        field: 'bitcoin_public_key'
+    },
+    bitcoinPrivateKey: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        unique: true,
+        field: 'bitcoin_private_key'
     },
     hasVoted: {
         type: DataTypes.BOOLEAN,
@@ -271,322 +437,38 @@ const ElectionWhitelist = sequelize.define('ElectionWhitelist', {
         allowNull: true,
         field: 'voted_at'
     },
-    bitcoinAddress: {
-        type: DataTypes.STRING(95),
-        allowNull: true,
-        field: 'bitcoin_address',
-        unique: false
-    },
-    bitcoinPublicKey: {
-        type: DataTypes.TEXT,
-        allowNull: true,
-        field: 'bitcoin_public_key'
-    },
-    bitcoinPrivateKeyEncrypted: {
-        type: DataTypes.TEXT,
-        allowNull: true,
-        field: 'bitcoin_private_key_encrypted'
-    },
-    bitcoinKeySalt: {
-        type: DataTypes.STRING(64),
-        allowNull: true,
-        field: 'bitcoin_key_salt'
-    },
-    bitcoinKeyIv: {
-        type: DataTypes.STRING(32),
-        allowNull: true,
-        field: 'bitcoin_key_iv'
-    },
-    bitcoinKeyAuthTag: {
-        type: DataTypes.STRING(32),
-        allowNull: true,
-        field: 'bitcoin_key_auth_tag'
-    },
-    utxoTxid: {
-        type: DataTypes.STRING(64),
-        allowNull: true,
-        field: 'utxo_txid'
-    },
-    utxoVout: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        field: 'utxo_vout'
-    },
-    utxoAmount: {
-        type: DataTypes.BIGINT,
-        allowNull: true,
-        field: 'utxo_amount'
-    },
-    utxoStatus: {
-        type: DataTypes.ENUM('pending', 'available', 'reserved', 'spent'),
-        defaultValue: 'pending',
-        field: 'utxo_status'
-    },
-    walletGeneratedAt: {
+    invitedAt: {
         type: DataTypes.DATE,
         allowNull: true,
-        field: 'wallet_generated_at'
+        field: 'invited_at'
     }
 }, {
     tableName: 'election_whitelist',
-    indexes: [
-        {
-            fields: ['bitcoin_address']
-        },
-        {
-            fields: ['utxo_txid', 'utxo_vout']
-        },
-        {
-            fields: ['utxo_status']
-        },
-        {
-            unique: true,
-            fields: ['election_id', 'bitcoin_address'],
-            name: 'unique_bitcoin_address_per_election'
-        }
-    ]
-});
-
-// Modello VotingSession (usato da server3)
-const VotingSession = sequelize.define('VotingSession', {
-    id: {
-        type: DataTypes.UUID,
-        defaultValue: DataTypes.UUIDV4,
-        primaryKey: true
-    },
-    electionId: {
-        type: DataTypes.UUID,
-        allowNull: false,
-        field: 'election_id'
-    },
-    status: {
-        type: DataTypes.ENUM('pending', 'active', 'completed', 'failed'),
-        defaultValue: 'pending'
-    },
-    startTime: {
-        type: DataTypes.DATE,
-        allowNull: true,
-        field: 'start_time'
-    },
-    endTime: {
-        type: DataTypes.DATE,
-        allowNull: true,
-        field: 'end_time'
-    },
-    transactionCount: {
-        type: DataTypes.INTEGER,
-        defaultValue: 0,
-        field: 'transaction_count'
-    },
-    finalTallyTransactionId: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        field: 'final_tally_transaction_id'
-    }
-}, {
-    tableName: 'voting_sessions'
-});
-
-// Modello Vote (usato da server3)
-const Vote = sequelize.define('Vote', {
-    id: {
-        type: DataTypes.UUID,
-        defaultValue: DataTypes.UUIDV4,
-        primaryKey: true
-    },
-    sessionId: {
-        type: DataTypes.UUID,
-        allowNull: false,
-        field: 'session_id'
-    },
-    serialNumber: {
-        type: DataTypes.STRING,
-        allowNull: false,
-        unique: true,
-        field: 'serial_number'
-    },
-    commitment: {
-        type: DataTypes.TEXT,
-        allowNull: false
-    },
-    transactionId: {
-        type: DataTypes.UUID,
-        allowNull: true,
-        field: 'transaction_id',
-        references: {
-            model: 'transactions',
-            key: 'id'
-        }
-    },
-    status: {
-        type: DataTypes.ENUM('pending', 'processed', 'confirmed', 'failed'),
-        defaultValue: 'pending'
-    },
-    submittedAt: {
-        type: DataTypes.DATE,
-        defaultValue: DataTypes.NOW,
-        field: 'submitted_at'
-    },
-    processedAt: {
-        type: DataTypes.DATE,
-        allowNull: true,
-        field: 'processed_at'
-    }
-}, {
-    tableName: 'votes'
-});
-
-// Modello Transaction (usato da server3)
-const Transaction = sequelize.define('Transaction', {
-    id: {
-        type: DataTypes.UUID,
-        defaultValue: DataTypes.UUIDV4,
-        primaryKey: true
-    },
-    electionId: {
-        type: DataTypes.UUID,
-        allowNull: true,
-        field: 'election_id'
-    },
-    sessionId: {
-        type: DataTypes.UUID,
-        allowNull: true,
-        field: 'session_id'
-    },
-    txId: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        unique: true,
-        field: 'tx_id'
-    },
-    type: {
-        type: DataTypes.ENUM('coinjoin', 'tally', 'funding'),
-        allowNull: false
-    },
-    rawData: {
-        type: DataTypes.TEXT,
-        allowNull: true,
-        field: 'raw_data'
-    },
-    metadata: {
-        type: DataTypes.JSONB,
-        allowNull: true
-    },
-    confirmations: {
-        type: DataTypes.INTEGER,
-        defaultValue: 0
-    },
-    blockHeight: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        field: 'block_height'
-    },
-    blockHash: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        field: 'block_hash'
-    }
-}, {
-    tableName: 'transactions'
-});
-
-// Modell Credential (usato da server2 e server4)
-const Credential = sequelize.define('Credential', {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true
-    },
-    user_id: { 
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: 'users',
-        key: 'id'
-      }
-    },
-    serial_number: { 
-      type: DataTypes.STRING,
-      unique: true,
-      allowNull: false
-    },
-    nonce: {
-      type: DataTypes.STRING,
-      allowNull: false
-    },
-    signature: {
-      type: DataTypes.TEXT,
-      allowNull: false
-    },
-    is_used: { 
-      type: DataTypes.BOOLEAN,
-      defaultValue: false
-    },
-    issued_at: { 
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW
-    }
-  }, {
-    tableName: 'credentials',
-    underscored: true,  
-    timestamps: true,
-    createdAt: 'created_at',  
-    updatedAt: 'updated_at' 
-  });
-
-// Modello SystemSettings (usato da server2)
-const SystemSettings = sequelize.define('SystemSettings', {
-    id: {
-        type: DataTypes.UUID,
-        defaultValue: DataTypes.UUIDV4,
-        primaryKey: true
-    },
-    key: {
-        type: DataTypes.STRING,
-        allowNull: false,
-        unique: true
-    },
-    value: {
-        type: DataTypes.TEXT,
-        allowNull: false
-    },
-    description: {
-        type: DataTypes.TEXT,
-        allowNull: true
-    },
-    isPublic: {
-        type: DataTypes.BOOLEAN,
-        defaultValue: false,
-        field: 'is_public'
-    }
-}, {
-    tableName: 'system_settings'
+    underscored: true,
+    timestamps: true
 });
 
 // ====================
-// RELAZIONI TRA MODELLI
+// RELAZIONI
 // ====================
+User.hasMany(Credential, { 
+    foreignKey: 'userId', 
+    as: 'credentials' 
+});
+Credential.belongsTo(User, { 
+    foreignKey: 'userId', 
+    as: 'user' 
+});
 
-// User Relations
 User.hasMany(ElectionWhitelist, { 
     foreignKey: 'userId', 
-    as: 'electionWhitelists' 
+    as: 'whitelistEntries' 
 });
 ElectionWhitelist.belongsTo(User, { 
     foreignKey: 'userId', 
     as: 'user' 
 });
 
-User.hasMany(Credential, { 
-    foreignKey: 'user_id', 
-    as: 'credentials' 
-});
-Credential.belongsTo(User, { 
-    foreignKey: 'user_id',
-    as: 'user'  //  AGGIUNTO: alias per completezza
-});
-
-// Election Relations
 Election.hasMany(ElectionWhitelist, { 
     foreignKey: 'electionId', 
     as: 'whitelist' 
@@ -623,26 +505,24 @@ Transaction.belongsTo(Election, {
     as: 'election' 
 });
 
-// VotingSession Relations
 VotingSession.hasMany(Vote, { 
     foreignKey: 'sessionId', 
     as: 'votes' 
 });
 Vote.belongsTo(VotingSession, { 
     foreignKey: 'sessionId', 
-    as: 'votingSession'  //   alias univoco
+    as: 'votingSession'
 });
 
 VotingSession.hasMany(Transaction, { 
     foreignKey: 'sessionId', 
-    as: 'sessionTransactions'  //   alias univoco
+    as: 'sessionTransactions'
 });
 Transaction.belongsTo(VotingSession, { 
     foreignKey: 'sessionId', 
-    as: 'votingSession'  //   alias coerente
+    as: 'votingSession'
 });
 
-// Vote-Transaction Relations (opzionale)
 Vote.belongsTo(Transaction, { 
     foreignKey: 'transactionId', 
     as: 'transaction' 
@@ -652,226 +532,170 @@ Transaction.hasMany(Vote, {
     as: 'votes' 
 });
 
-
 // ====================
 // FUNZIONI DI UTILITÀ
 // ====================
 
-// Inizializzazione database
-const initializeDatabase = async () => {
-    try {
-        console.log('Connessione al database PostgreSQL...');
-        await sequelize.authenticate();
-        console.log(' Connessione database stabilita');
-        
-        console.log('Sincronizzazione modelli...');
-        try {
-            await sequelize.authenticate();
-            
-            // Sync con alter: true per riparare schema
-            await sequelize.sync({ 
-                alter: true,    
-                force: false 
-            });
-            
-            return true;
-        } catch (error) {
-            console.error('Database error:', error);
-            
-            // Se sync fallisce, prova con force (ATTENZIONE: cancella dati!)
-            if (process.env.NODE_ENV === 'development') {
-                console.log('Tentativo force sync...');
-                await sequelize.sync({ force: true });
-            }
-            
-            return false;
-        }
-        console.log(' Modelli sincronizzati');
-        
-        return true;
-    } catch (error) {
-        console.error(' Errore connessione database:', error);
-        return false;
-    }
-};
-
-// Statistiche veloci
 const getQuickStats = async () => {
     try {
-        const [users, elections, votes, sessions] = await Promise.all([
-            User.count(),
-            Election.count(),
+        const [
+            totalVotes, pendingVotes, confirmedVotes, failedVotes,
+            totalElections, activeElections,
+            totalSessions, activeSessions
+        ] = await Promise.all([
             Vote.count(),
-            VotingSession.count()
+            Vote.count({ where: { status: 'pending' } }),
+            Vote.count({ where: { status: 'confirmed' } }),
+            Vote.count({ where: { status: 'failed' } }),
+            Election.count(),
+            Election.count({ where: { status: 'active' } }),
+            VotingSession.count(),
+            VotingSession.count({ where: { status: 'active' } })
         ]);
 
         return {
-            users: {
-                total: users,
-                active: await User.count({ where: { status: 'active' } })
+            votes: {
+                total: totalVotes,
+                pending: pendingVotes,
+                confirmed: confirmedVotes,
+                failed: failedVotes
             },
             elections: {
-                total: elections,
-                active: await Election.count({ where: { status: 'active' } })
-            },
-            votes: {
-                total: votes,
-                pending: await Vote.count({ where: { transactionId: null } }),
-                confirmed: await Vote.count({ where: { transactionId: { [require('sequelize').Op.not]: null } } })
+                total: totalElections,
+                active: activeElections
             },
             sessions: {
-                total: sessions,
-                active: await VotingSession.count({ where: { status: 'active' } })
+                total: totalSessions,
+                active: activeSessions
             }
         };
     } catch (error) {
-        console.error(' Errore calcolo statistiche:', error);
+        console.error('Errore recupero statistiche:', error);
         return {
-            users: { total: 0, active: 0 },
+            votes: { total: 0, pending: 0, confirmed: 0, failed: 0 },
             elections: { total: 0, active: 0 },
-            votes: { total: 0, pending: 0, confirmed: 0 },
             sessions: { total: 0, active: 0 }
         };
     }
 };
 
-// Metodi helper per il modello ElectionWhitelist
-ElectionWhitelist.prototype.getDecryptedPrivateKey = function() {
-    if (!this.bitcoinPrivateKeyEncrypted) {
-        throw new Error('Nessuna chiave privata salvata per questo utente');
+// ====================
+// INIZIALIZZAZIONE THREAD-SAFE
+// ====================
+const initializeDatabase = async () => {
+    // Prevenire inizializzazioni multiple contemporanee
+    if (isInitialized) {
+        return true;
     }
     
-    const BitcoinWalletService = require('../shared/services/BitcoinWalletService');
-    const walletService = new BitcoinWalletService();
+    if (initializationPromise) {
+        return initializationPromise;
+    }
+
+    initializationPromise = (async () => {
+        try {
+            console.log('Connessione al database PostgreSQL...');
+            await sequelize.authenticate();
+            console.log(' Connessione database stabilita');
+            
+            console.log('Sincronizzazione modelli...');
+            
+            try {
+                // Sync con gestione errori specifici per PostgreSQL
+                await sequelize.sync({ 
+                    alter: true,
+                    force: false
+                });
+                console.log(' Database sincronizzato correttamente');
+                
+            } catch (syncError) {
+                console.log('Gestione errori di sincronizzazione...');
+                
+                // Gestisci errori specifici di enum già esistenti
+                if (syncError.name === 'SequelizeUniqueConstraintError' && 
+                    syncError.parent && 
+                    syncError.parent.code === '23505' &&
+                    syncError.parent.constraint === 'pg_type_typname_nsp_index') {
+                    
+                    console.log(' Enum già esistente, continuando...');
+                    
+                } else if (syncError.name === 'SequelizeDatabaseError' && 
+                          syncError.parent && 
+                          syncError.parent.code === '42701') {
+                    
+                    console.log(' Colonne già esistenti, continuando...');
+                    
+                } else {
+                    // Per altri errori, prova sync senza alter
+                    console.log(' Tentativo sync senza alter...');
+                    try {
+                        await sequelize.sync({ alter: false, force: false });
+                        console.log(' Database sincronizzato senza modifiche');
+                    } catch (secondError) {
+                        console.warn(' Errore sync secondario (non critico):', secondError.message);
+                    }
+                }
+            }
+            
+            isInitialized = true;
+            return true;
+            
+        } catch (error) {
+            console.error('Database error:', error);
+            
+            // Reset per permettere retry
+            initializationPromise = null;
+            
+            // Non fermare l'applicazione, continua comunque
+            console.log(' [AUTH CLIENT] Errore inizializzazione database');
+            return false;
+        }
+    })();
+
+    return initializationPromise;
+};
+
+console.log(' Database config centralizzata caricata');
+
+// ====================
+// FUNZIONE PER COMPATIBILITÀ CON CODICE ESISTENTE
+// ====================
+const getModelsForService = (serviceName) => {
+    console.log(`Richiesta modelli per servizio: ${serviceName}`);
     
-    const encryptedData = {
-        encrypted: this.bitcoinPrivateKeyEncrypted,
-        salt: this.bitcoinKeySalt,
-        iv: this.bitcoinKeyIv,
-        authTag: this.bitcoinKeyAuthTag
+    // Restituisce tutti i modelli indipendentemente dal servizio
+    // Ogni servizio può accedere a tutti i modelli condivisi
+    return {
+        sequelize,
+        Sequelize,
+        User,
+        Election,
+        Candidate,
+        VotingSession,
+        Vote,
+        Transaction,
+        Credential,
+        ElectionWhitelist,
+        getQuickStats,
+        initializeDatabase
     };
-    
-    return walletService.decryptPrivateKey(encryptedData);
-};
-
-ElectionWhitelist.prototype.hasValidBitcoinWallet = function() {
-    return !!(this.bitcoinAddress && this.bitcoinPublicKey && this.bitcoinPrivateKeyEncrypted);
-};
-
-ElectionWhitelist.prototype.hasAvailableUTXO = function() {
-    return this.utxoStatus === 'available' && this.utxoTxid && this.utxoAmount > 0;
-};
-
-// Metodo statico per creare entry con wallet Bitcoin
-ElectionWhitelist.createWithBitcoinWallet = async function(electionId, userId, authorizedBy) {
-    const BitcoinWalletService = require('../shared/services/BitcoinWalletService');
-    const walletService = new BitcoinWalletService();
-    
-    try {
-        console.log(`[WHITELIST] 🔗 Creando entry con wallet Bitcoin per utente ${userId}`);
-        
-        // Genera il wallet Bitcoin
-        const walletData = await walletService.generateWalletForUser(electionId, userId);
-        
-        // Crea l'entry nella whitelist con tutti i dati Bitcoin
-        const whitelistEntry = await this.create({
-            electionId,
-            userId,
-            authorizedBy,
-            authorizedAt: new Date(),
-            // Dati Bitcoin
-            bitcoinAddress: walletData.address,
-            bitcoinPublicKey: walletData.publicKey,
-            bitcoinPrivateKeyEncrypted: walletData.encryptedPrivateKey.encrypted,
-            bitcoinKeySalt: walletData.encryptedPrivateKey.salt,
-            bitcoinKeyIv: walletData.encryptedPrivateKey.iv,
-            bitcoinKeyAuthTag: walletData.encryptedPrivateKey.authTag,
-            // Dati UTXO
-            utxoTxid: walletData.utxo.txid,
-            utxoVout: walletData.utxo.vout,
-            utxoAmount: walletData.utxo.amount,
-            utxoStatus: walletData.utxo.status,
-            walletGeneratedAt: new Date()
-        });
-        
-        console.log(`[WHITELIST] ✅ Entry creata con indirizzo Bitcoin: ${walletData.address}`);
-        
-        return whitelistEntry;
-    } catch (error) {
-        console.error('[WHITELIST] ❌ Errore creazione entry con wallet Bitcoin:', error);
-        throw error;
-    }
 };
 
 // ====================
-// EXPORTS CONFIGURABILI PER SERVIZIO
+// EXPORT
 // ====================
-
-// Export completo per riferimento
-const allModels = {
+module.exports = {
     sequelize,
+    Sequelize,
     User,
     Election,
     Candidate,
-    Credential,
-    ElectionWhitelist,
     VotingSession,
     Vote,
     Transaction,
-    SystemSettings,
+    Credential,
+    ElectionWhitelist,
+    getQuickStats,
     initializeDatabase,
-    getQuickStats
+    getModelsForService
 };
-
-// Export specifici per servizio
-const getModelsForService = (serviceName) => {
-    switch (serviceName) {
-        case 'auth':
-        case 'server2':
-            return {
-                sequelize,
-                User,
-                Election,
-                Credential,
-                ElectionWhitelist,
-                SystemSettings,
-                initializeDatabase,
-                getQuickStats
-            };
-        
-        case 'vote':
-        case 'server3':
-            return {
-                sequelize,
-                User,
-                Election,
-                Credential,
-                ElectionWhitelist,
-                Candidate,
-                VotingSession,
-                Vote,
-                Transaction,
-                initializeDatabase,
-                getQuickStats
-            };
-        
-        case 'gateway':
-        case 'server1':
-            return {
-                sequelize,
-                initializeDatabase,
-                getQuickStats
-            };
-        
-        default:
-            return allModels;
-    }
-};
-
-// Export di default (tutto)
-module.exports = allModels;
-
-// Export per servizi specifici
-module.exports.getModelsForService = getModelsForService;
-
-console.log(' Database config centralizzata caricata');

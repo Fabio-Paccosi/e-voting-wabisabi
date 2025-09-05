@@ -128,7 +128,7 @@ const VotingPage = () => {
       setVotingProgress(10);
       setVoteSubmittedAt(new Date()); // TRACCIA TIMESTAMP INVIO
 
-      console.log('[VOTING] 🗳️ Avvio processo di voto per candidato:', selectedCandidate.name || `${selectedCandidate.firstName} ${selectedCandidate.lastName}`);
+      console.log('[VOTING] 🗳️ Avvio processo di voto per candidato:', selectedCandidate.name);
 
       // Step 1: Generate Bitcoin address
       setCryptoStatus('Generazione indirizzo Bitcoin sicuro...');

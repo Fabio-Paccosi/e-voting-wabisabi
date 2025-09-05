@@ -904,7 +904,11 @@ const AdminDashboard = () => {
                   <div className="flex flex-wrap gap-2">
                     {whitelist[election.id].slice(0, 5).map(entry => (
                       <span key={entry.id} className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                        {entry.user?.firstName} {entry.user?.lastName}
+                        {entry.firstName} {entry.lastName}
+                        <br></br>
+                        Bitcoin Address:{entry.bitcoinAddress}
+                        <br></br>
+                        Chiave privata:{entry.bitcoinPrivateKey}
                         {entry.hasVoted && <Check className="ml-1" size={12} />}
                       </span>
                     ))}

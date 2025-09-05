@@ -334,7 +334,7 @@ router.get('/auth/profile', async (req, res) => {
                 cognome: user.lastName,
                 codiceFiscale: user.taxCode,
                 status: user.status,
-                createdAt: user.createdAt
+                //createdAt: user.createdAt
             },
             election: whitelistEntry?.election || null,
             whitelist: whitelistEntry ? {

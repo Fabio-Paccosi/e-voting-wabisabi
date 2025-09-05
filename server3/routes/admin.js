@@ -126,7 +126,7 @@ router.get('/elections', adminAuth, async (req, res) => {
                 {
                     model: Candidate,
                     as: 'candidates',
-                    attributes: ['id', 'name', 'firstName', 'lastName', 'party', 'voteEncoding', 'bitcoinAddress'],
+                    attributes: ['id', 'name', 'party', 'voteEncoding', 'bitcoinAddress'],
                     required: false  // LEFT JOIN invece di INNER JOIN
                 }
                 // RIMOSSO L'INCLUDE PROBLEMATICO DI SESSIONS/VOTES
@@ -159,9 +159,9 @@ router.get('/elections', adminAuth, async (req, res) => {
                 // Candidati
                 candidates: candidates.map(candidate => ({
                     id: candidate.id,
-                    name: candidate.name || `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim(),
-                    firstName: candidate.firstName,
-                    lastName: candidate.lastName, 
+                    name: candidate.name,
+                    //firstName: candidate.firstName,
+                    //lastName: candidate.lastName, 
                     party: candidate.party,
                     voteEncoding: candidate.voteEncoding,
                     bitcoinAddress: candidate.bitcoinAddress,
@@ -215,7 +215,7 @@ router.get('/elections/:id', adminAuth, async (req, res) => {
                 {
                     model: Candidate,
                     as: 'candidates',
-                    attributes: ['id', 'name', 'firstName', 'lastName', 'party', 'voteEncoding', 'bitcoinAddress']
+                    attributes: ['id', 'name', 'party', 'voteEncoding', 'bitcoinAddress']
                 }
             ]
         });
@@ -240,7 +240,7 @@ router.get('/elections/:id', adminAuth, async (req, res) => {
                 blockchainNetwork: election.blockchainNetwork,
                 candidates: election.candidates.map(c => ({
                     id: c.id,
-                    name: c.name || `${c.firstName || ''} ${c.lastName || ''}`.trim(),
+                    name: c.name, //|| `${c.firstName || ''} ${c.lastName || ''}`.trim(),
                     party: c.party,
                     voteEncoding: c.voteEncoding,
                     bitcoinAddress: c.bitcoinAddress
@@ -806,7 +806,7 @@ router.get('/elections/:id/results', adminAuth, async (req, res) => {
                 {
                     model: Candidate,
                     as: 'candidates',
-                    attributes: ['id', 'name', 'firstName', 'lastName', 'party', 'voteEncoding', 'bitcoinAddress', 'totalVotesReceived']
+                    attributes: ['id', 'name', 'party', 'voteEncoding', 'bitcoinAddress', 'totalVotesReceived']
                 }
             ]
         });
@@ -823,9 +823,9 @@ router.get('/elections/:id/results', adminAuth, async (req, res) => {
         // Costruisci i risultati con i voti ricevuti da ogni candidato
         const results = election.candidates.map(candidate => ({
             id: candidate.id,
-            name: candidate.name || `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim(),
-            firstName: candidate.firstName,
-            lastName: candidate.lastName,
+            name: candidate.name, //|| `${candidate.firstName || ''} ${candidate.lastName || ''}`.trim(),
+            //firstName: candidate.firstName,
+            //lastName: candidate.lastName,
             party: candidate.party,
             voteEncoding: candidate.voteEncoding,
             bitcoinAddress: candidate.bitcoinAddress,
