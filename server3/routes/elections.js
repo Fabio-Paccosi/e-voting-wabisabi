@@ -685,7 +685,6 @@ router.get('/transactions/:txid/details', async (req, res) => {
             where: { txid },
             include: [{
                 model: Election,
-                attributes: ['id', 'title', 'blockchainNetwork']
             }]
         });
 

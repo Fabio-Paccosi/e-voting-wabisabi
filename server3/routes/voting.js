@@ -446,10 +446,8 @@ router.get('/status/:voteId', async (req, res) => {
         // Se il voto ha un transactionId, cerca i dettagli della transazione separatamente
         if (vote.transactionId) {
             try {
-                // ✅ CORREZIONE: Query semplificata per Transaction con schema corretto
                 const transaction = await Transaction.findOne({
                     where: { txid: vote.transactionId },
-                    attributes: ['id', 'txid', 'voteCount', 'status', 'blockHeight', 'createdAt']
                 });
 
                 if (transaction) {
@@ -520,10 +518,6 @@ router.get('/receipt/:voteId', async (req, res) => {
                     txId: vote.transactionId,
                     type: 'coinjoin'
                 },
-                attributes: [
-                    'id', 'txId', 'type', 'confirmations', 
-                    'blockHeight', 'blockHash', 'metadata', 'createdAt'
-                ]
             });
         }
 
@@ -534,11 +528,6 @@ router.get('/receipt/:voteId', async (req, res) => {
                     sessionId: votingSession.id,
                     type: 'coinjoin'
                 },
-                attributes: [
-                    'id', 'txId', 'type', 'confirmations', 
-                    'blockHeight', 'blockHash', 'metadata', 'createdAt'
-                ],
-                order: [['createdAt', 'DESC']] // *** CORREZIONE: Usa attributo Sequelize ***
             });
         }
 
@@ -619,11 +608,6 @@ router.get('/verify/:txId', async (req, res) => {
 
         const transaction = await Transaction.findOne({
             where: { txId },
-            attributes: [
-                'id', 'txId', 'type', 'electionId', 'sessionId',
-                'confirmations', 'blockHeight', 'blockHash', 
-                'metadata', 'createdAt' // *** Usa attributo Sequelize ***
-            ],
             include: [
                 {
                     model: VotingSession,
@@ -1061,11 +1045,6 @@ router.get('/receipt/:voteId/detailed', extractUserFromHeaders, async (req, res)
             try {
                 const transaction = await Transaction.findOne({
                     where: { txid: vote.transactionId },
-                    attributes: [
-                        'id', 'txid', 'type', 'rawData', 'metadata', 
-                        'voteCount', 'status', 'confirmations', 
-                        'blockHeight', 'blockHash'
-                    ]
                 });
 
                 if (transaction) {
