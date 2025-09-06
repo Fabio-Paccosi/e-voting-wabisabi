@@ -1003,134 +1003,339 @@ router.post('/submit-vote', extractUserFromHeaders, async (req, res) => {
     }
 });
 
-// FUNZIONE HELPER: TRIGGER COINJOIN
-async function triggerCoinJoinForElection(electionId) {
-    console.log(`[COINJOIN-TRIGGER] 🔄 Avviando CoinJoin per elezione ${electionId}`);
-    
+/**
+ * GET /api/voting/receipt/:voteId/detailed
+ * Genera una ricevuta dettagliata con tutti i dati del voto, whitelist, UTXO e transazione
+ * CORRETTA per usare l'alias 'session' (come definito in database/database_config.js)
+ */
+router.get('/receipt/:voteId/detailed', extractUserFromHeaders, async (req, res) => {
     try {
-        // Ottieni tutti gli utenti che hanno votato con i loro UTXO
-        const voterEntries = await ElectionWhitelist.findAll({
-            where: {
-                electionId,
-                hasVoted: true,
-                utxoStatus: 'reserved'
-            },
-            attributes: [
-                'bitcoinAddress', 'utxoTxid', 'utxoVout', 'utxoAmount', 'userId'
+        const { voteId } = req.params;
+        const userId = req.user.id;
+
+        console.log(`[DETAILED-RECEIPT] 🧾 Generazione ricevuta dettagliata per voto ${voteId}`);
+
+        // === STEP 1: Carica il voto con tutte le relazioni (ALIAS CORRETTI) ===
+        const vote = await Vote.findByPk(voteId, {
+            include: [
+                {
+                    model: VotingSession,
+                    as: 'votingSession',
+                    include: [
+                        {
+                            model: Election,
+                            as: 'election',
+                            attributes: ['id', 'title', 'description']
+                        }
+                    ]
+                }
             ]
         });
 
-        if (voterEntries.length === 0) {
-            throw new Error('Nessun voto con UTXO disponibile per CoinJoin');
+        if (!vote) {
+            return res.status(404).json({ 
+                error: 'Voto non trovato',
+                message: 'Il voto richiesto non esiste o è stato eliminato'
+            });
         }
 
-        console.log(`[COINJOIN-TRIGGER] 📊 Preparando CoinJoin con ${voterEntries.length} input`);
-
-        // Prepara gli input per la transazione CoinJoin
-        const walletService = new BitcoinWalletService();
-        const coinJoinInputs = walletService.prepareCoinJoinInputs(voterEntries);
-
-        // Ottieni i candidati per gli output
-        const candidates = await Candidate.findAll({
-            where: { electionId },
-            attributes: ['id', 'bitcoinAddress', 'name']
+        // === STEP 2: Verifica che l'utente abbia accesso a questo voto ===
+        const whitelistEntry = await ElectionWhitelist.findOne({
+            where: {
+                userId: userId,
+                electionId: vote.votingSession.election.id,
+                hasVoted: true
+            }
         });
 
-        // Conta i voti per candidato
-        const votesByCandidate = await Vote.findAll({
-            where: {
-                electionId,
-                status: 'pending'
-            },
-            include: [{
-                model: Candidate,
-                attributes: ['id', 'bitcoinAddress', 'name']
-            }],
-            group: ['candidateId'],
+        if (!whitelistEntry) {
+            return res.status(403).json({ 
+                error: 'Accesso negato',
+                message: 'Non hai i permessi per visualizzare questa ricevuta'
+            });
+        }
+
+        // === STEP 3: Carica i dettagli della transazione CoinJoin ===
+        let transactionDetails = null;
+        if (vote.transactionId) {
+            try {
+                const transaction = await Transaction.findOne({
+                    where: { txid: vote.transactionId },
+                    attributes: [
+                        'id', 'txid', 'type', 'rawData', 'metadata', 
+                        'voteCount', 'status', 'confirmations', 
+                        'blockHeight', 'blockHash'
+                    ]
+                });
+
+                if (transaction) {
+                    // Parse dei metadati JSON se presenti
+                    let metadata = {};
+                    try {
+                        metadata = transaction.metadata ? 
+                            (typeof transaction.metadata === 'string' ? 
+                                JSON.parse(transaction.metadata) : 
+                                transaction.metadata) : {};
+                    } catch (e) {
+                        console.warn('[DETAILED-RECEIPT] ⚠️ Errore parsing metadata:', e.message);
+                    }
+
+                    transactionDetails = {
+                        txid: transaction.txid,
+                        type: transaction.type,
+                        status: transaction.status,
+                        confirmations: transaction.confirmations || 0,
+                        blockHeight: transaction.blockHeight,
+                        blockHash: transaction.blockHash,
+                        voteCount: transaction.voteCount,
+                        inputCount: metadata.inputCount || metadata.participants || 'N/A',
+                        outputCount: metadata.outputCount || 'N/A',
+                        voterCount: metadata.participants || transaction.voteCount || 'N/A',
+                        totalAmount: metadata.totalAmount || 'N/A',
+                        //broadcastedAt: transaction.createdAt,
+                        confirmedAt: transaction.blockHeight ? transaction.updatedAt : null
+                    };
+                }
+            } catch (transactionError) {
+                console.warn(`[DETAILED-RECEIPT] ⚠️ Errore caricamento transazione: ${transactionError.message}`);
+            }
+        }
+
+        // === STEP 4: Prepara i dati della whitelist (con sicurezza) ===
+        const whitelistData = {
+            bitcoinAddress: whitelistEntry.bitcoinAddress,
+            bitcoinPublicKey: whitelistEntry.bitcoinPublicKey ? 
+                whitelistEntry.bitcoinPublicKey.substring(0, 32) + '...' : 'N/A',
+            utxo_txid: whitelistEntry.utxo_txid || 'N/A',
+            utxo_vout: whitelistEntry.utxo_vout !== null ? whitelistEntry.utxo_vout : 'N/A',
+            utxo_amount: whitelistEntry.utxo_amount || 0,
+            votedAt: whitelistEntry.votedAt,
+            hasVoted: whitelistEntry.hasVoted
+        };
+
+        // === STEP 5: Carica i dettagli della sessione ===
+        const sessionStats = await VotingSession.findByPk(vote.sessionId, {
             attributes: [
-                'candidateId',
-                [sequelize.fn('COUNT', sequelize.col('id')), 'voteCount']
+                'id', 'status', 'transactionCount', 'finalTallyTransactionId',
+                'startTime'
             ]
         });
 
-        // Crea gli output per ogni candidato che ha ricevuto voti
-        const outputs = votesByCandidate.map(voteData => ({
-            address: voteData.Candidate.bitcoinAddress,
-            amount: 546 * voteData.voteCount, // 546 satoshi per voto (dust limit)
-            candidateId: voteData.candidateId,
-            candidateName: voteData.Candidate.name,
-            voteCount: voteData.voteCount
-        }));
-
-        console.log(`[COINJOIN-TRIGGER] 🎯 Output preparati:`, outputs.length);
-
-        // Simula la creazione della transazione (in un'implementazione reale useresti bitcoinjs-lib)
-        const transactionId = crypto.createHash('sha256')
-            .update(`coinjoin-${electionId}-${Date.now()}-${JSON.stringify(coinJoinInputs)}`)
-            .digest('hex');
-
-        console.log(`[COINJOIN-TRIGGER] 🔗 Transazione CoinJoin simulata: ${transactionId}`);
-
-        // Salva la transazione nel database
-        await sequelize.transaction(async (t) => {
-            // Crea il record della transazione
-            await Transaction.create({
-                electionId,
-                txid: transactionId,
-                type: 'coinjoin',
-                rawData: JSON.stringify({
-                    inputs: coinJoinInputs,
-                    outputs: outputs,
-                    voterCount: voterEntries.length,
-                    timestamp: new Date()
-                }),
-                confirmations: 0,
-                blockHeight: null,
-                metadata: JSON.stringify({
-                    electionTitle: 'Election',
-                    coinjoinType: 'wabisabi',
-                    participantCount: voterEntries.length
-                })
-            }, { transaction: t });
-
-            // Aggiorna tutti i voti come confermati
-            await Vote.update({
-                transactionId,
-                status: 'confirmed'
-            }, {
-                where: {
-                    electionId,
-                    status: 'pending'
-                },
-                transaction: t
-            });
-
-            // Aggiorna gli UTXO come spesi
-            await ElectionWhitelist.update({
-                utxoStatus: 'spent'
-            }, {
-                where: {
-                    electionId,
-                    hasVoted: true,
-                    utxoStatus: 'reserved'
-                },
-                transaction: t
-            });
+        // Conta i partecipanti totali in questa sessione
+        const totalParticipants = await Vote.count({
+            where: { sessionId: vote.sessionId }
         });
 
-        console.log(`[COINJOIN-TRIGGER] ✅ CoinJoin completato e salvato nel database`);
+        // === STEP 6: Assembla la risposta completa ===
+        const detailedReceipt = {
+            // Dati del voto
+            voteData: {
+                voteId: vote.id,
+                serialNumber: vote.serialNumber ? 
+                    vote.serialNumber.substring(0, 16) + '...' : 'N/A',
+                commitment: vote.commitment || 'N/A',
+                status: vote.status,
+                //submittedAt: vote.createdAt,
+                //processedAt: vote.updatedAt
+            },
 
-        return {
-            transactionId,
-            inputCount: coinJoinInputs.length,
-            outputCount: outputs.length,
-            voterCount: voterEntries.length
+            // Dati Election Whitelist (informazioni sensibili nascoste)
+            whitelistData: whitelistData,
+
+            // Dati transazione CoinJoin
+            transaction: transactionDetails,
+
+            // Dati elezione
+            election: {
+                id: vote.votingSession.election.id, 
+                title: vote.votingSession.election.title,
+                description: vote.votingSession.election.description,
+                //network: vote.votingSession.election.blockchainNetwork || 'testnet'
+            },
+
+            // Dati sessione
+            session: {
+                id: vote.sessionId,
+                status: sessionStats ? sessionStats.status : 'unknown',
+                totalParticipants: totalParticipants,
+                transactionCount: sessionStats ? sessionStats.transactionCount : 0,
+                startTime: sessionStats ? sessionStats.startTime : null,
+                endTime: sessionStats ? sessionStats.endTime : null,
+                protocolVersion: process.env.WABISABI_VERSION || ''
+            },
+
+            // Metadati per verifica
+            metadata: {
+                receiptGeneratedAt: new Date(),
+                receiptVersion: '2.0',
+                systemVersion: process.env.SYSTEM_VERSION || '1.0.0',
+                userId: userId, // Per debug/audit (rimosso in produzione)
+                verificationHash: require('crypto')
+                    .createHash('sha256')
+                    .update(`${vote.id}-${whitelistEntry.bitcoinAddress}-${vote.transactionId || 'pending'}`)
+                    .digest('hex')
+                    .substring(0, 16)
+            }
         };
 
+        console.log(`[DETAILED-RECEIPT] ✅ Ricevuta generata con successo per voto ${voteId}`);
+
+        res.json({
+            success: true,
+            receipt: detailedReceipt
+        });
+
     } catch (error) {
-        console.error('[COINJOIN-TRIGGER] ❌ Errore durante CoinJoin:', error);
-        throw error;
+        console.error('[DETAILED-RECEIPT] ❌ Errore generazione ricevuta dettagliata:', error);
+        res.status(500).json({ 
+            error: 'Errore nella generazione della ricevuta dettagliata',
+            details: error.message 
+        });
     }
-}
+});
+
+/**
+ * GET /api/voting/receipt/:electionId/user/:userId/detailed
+ * Endpoint alternativo per ottenere la ricevuta usando electionId e userId
+ * CORRETTA per usare l'alias 'session'
+ */
+router.get('/receipt/:electionId/user/:userId/detailed', extractUserFromHeaders, async (req, res) => {
+    try {
+        const { electionId, userId } = req.params;
+        const requestingUserId = req.user.id;
+
+        // Verifica che l'utente possa accedere a questi dati
+        if (requestingUserId !== userId) {
+            return res.status(403).json({ 
+                error: 'Accesso negato',
+                message: 'Puoi visualizzare solo le tue ricevute'
+            });
+        }
+
+        console.log(`[DETAILED-RECEIPT-ALT] 🔍 Ricerca voto per utente ${userId} in elezione ${electionId}`);
+
+        // Trova il voto dell'utente per questa elezione
+        const vote = await Vote.findOne({
+            include: [
+                {
+                    model: VotingSession,
+                    as: 'votingSession',
+                    where: { electionId: electionId },
+                    include: [
+                        {
+                            model: Election,
+                            as: 'election'
+                        }
+                    ]
+                }
+            ],
+            //order: [['createdAt', 'DESC']] // Il voto più recente
+        });
+
+        if (!vote) {
+            return res.status(404).json({ 
+                error: 'Voto non trovato',
+                message: 'Nessun voto trovato per questo utente in questa elezione'
+            });
+        }
+
+        // Verifica tramite whitelist che l'utente abbia effettivamente votato
+        const whitelistEntry = await ElectionWhitelist.findOne({
+            where: {
+                userId: userId,
+                electionId: electionId,
+                hasVoted: true
+            }
+        });
+
+        if (!whitelistEntry) {
+            return res.status(404).json({ 
+                error: 'Voto non confermato',
+                message: 'Nessun voto confermato trovato per questo utente'
+            });
+        }
+
+        // Usa la ricevuta dettagliata standard con il voteId trovato
+        req.params.voteId = vote.id;
+        
+        // Chiama ricorsivamente l'endpoint della ricevuta dettagliata
+        router.get('/receipt/:voteId/detailed', extractUserFromHeaders)(req, res);
+
+    } catch (error) {
+        console.error('[DETAILED-RECEIPT-ALT] ❌ Errore ricerca voto:', error);
+        res.status(500).json({ 
+            error: 'Errore nella ricerca del voto',
+            details: error.message 
+        });
+    }
+});
+
+/**
+ * GET /api/voting/receipt/:voteId/verification
+ * Endpoint per verificare l'autenticità di una ricevuta
+ */
+router.get('/receipt/:voteId/verification', async (req, res) => {
+    try {
+        const { voteId } = req.params;
+        const { verificationHash } = req.query;
+
+        console.log(`[RECEIPT-VERIFICATION] 🔍 Verifica ricevuta per voto ${voteId}`);
+
+        // Carica solo i dati necessari per la verifica
+        const vote = await Vote.findByPk(voteId, {
+            attributes: ['id', 'transactionId', 'status'],
+            include: [
+                {
+                    model: VotingSession,
+                    as: 'votingSession',
+                    attributes: ['electionId']
+                }
+            ]
+        });
+
+        if (!vote) {
+            return res.status(404).json({ 
+                verified: false,
+                message: 'Voto non trovato'
+            });
+        }
+
+        // Verifica l'hash se fornito
+        let hashVerified = true;
+        if (verificationHash) {
+            // In produzione, dovresti usare un hash che non espone dati sensibili
+            const expectedHash = require('crypto')
+                .createHash('sha256')
+                .update(`${vote.id}-[PROTECTED]-${vote.transactionId || 'pending'}`)
+                .digest('hex')
+                .substring(0, 16);
+            
+            hashVerified = (verificationHash === expectedHash);
+        }
+
+        // Verifica se il voto è stato effettivamente confermato
+        const isConfirmed = vote.status === 'confirmed' && vote.transactionId;
+
+        res.json({
+            verified: hashVerified && isConfirmed,
+            voteId: vote.id,
+            status: vote.status,
+            hasTransaction: !!vote.transactionId,
+            //submittedAt: vote.createdAt,
+            hashVerified: hashVerified,
+            message: hashVerified && isConfirmed ? 
+                'Ricevuta verificata con successo' : 
+                'Ricevuta non valida o voto non confermato'
+        });
+
+    } catch (error) {
+        console.error('[RECEIPT-VERIFICATION] ❌ Errore verifica ricevuta:', error);
+        res.status(500).json({ 
+            verified: false,
+            error: 'Errore nella verifica della ricevuta',
+            details: error.message 
+        });
+    }
+});
 
 module.exports = router;

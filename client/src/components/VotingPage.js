@@ -1,5 +1,5 @@
 // client/src/components/VotingPage.js
-// Versione con integrazione WabiSabi completa
+// Versione con integrazione WabiSabi completa e ricevuta dettagliata
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
@@ -17,7 +17,8 @@ import {
   Wallet
 } from 'lucide-react';
 import api from '../services/api';
-import WabiSabiVoting from '../services/WabiSabiVoting'; // NUOVO IMPORT
+import WabiSabiVoting from '../services/WabiSabiVoting';
+import VoteReceipt from './VoteReceipt';
 
 const VotingPage = () => {
   const { electionId } = useParams();
@@ -48,6 +49,10 @@ const VotingPage = () => {
   const [credentials, setCredentials] = useState(null);
   const [voteCommitment, setVoteCommitment] = useState(null);
   const [zkProof, setZkProof] = useState(null);
+
+  // NUOVI STATI PER RICEVUTA DETTAGLIATA
+  const [voteId, setVoteId] = useState(null);
+  const [showDetailedReceipt, setShowDetailedReceipt] = useState(false);
 
   useEffect(() => {
     initializeVoting();
@@ -112,7 +117,7 @@ const VotingPage = () => {
     setShowPrivateKeyModal(true);
   };
 
-  // FUNZIONE CONFIRMVOTE COMPLETAMENTE RISCRITTA PER SUPPORTARE WABISABI
+  // FUNZIONE CONFIRMVOTE AGGIORNATA PER SUPPORTARE RICEVUTA DETTAGLIATA
   const confirmVote = async () => {
     if (!privateKey.trim()) {
       setError('Inserisci la chiave privata per confermare il voto');
@@ -154,11 +159,10 @@ const VotingPage = () => {
         setVotingProgress(45);
         setWabiSabiProgress(45);
         
-        // IMPORTANTE: Usa l'indirizzo e chiave privata specifici dell'utente per questa elezione
         const commitment = await wabiSabi.createVoteCommitment(
           selectedCandidate.id,
           requestedCredentials.serialNumber,
-          privateKey.trim() // Chiave privata specifica dell'utente
+          privateKey.trim()
         );
         setVoteCommitment(commitment);
         console.log('[WABISABI] ✓ Commitment creato per indirizzo:', bitcoinAddress);
@@ -187,10 +191,13 @@ const VotingPage = () => {
           commitment: commitment.commitment,
           zkProof: generatedZkProof,
           serialNumber: requestedCredentials.serialNumber,
-          bitcoinAddress: bitcoinAddress // PASSA L'INDIRIZZO SPECIFICO
+          bitcoinAddress: bitcoinAddress
         });
         
         console.log('[WABISABI] ✓ Voto anonimo inviato:', voteResult.voteId);
+        
+        // SALVA IL VOTE ID PER LA RICEVUTA DETTAGLIATA
+        setVoteId(voteResult.voteId);
         
         // FASE 6: Attesa CoinJoin
         setWabiSabiStep('Attesa aggregazione CoinJoin...');
@@ -198,15 +205,13 @@ const VotingPage = () => {
         setVotingProgress(90);
         setWabiSabiProgress(90);
         
-        // Attendi completamento (con timeout ridotto per UX)
         try {
           const finalResult = await wabiSabi.waitForCoinJoinCompletion(
             voteResult.voteId,
-            5, // max 5 tentativi
-            3000 // 3 secondi tra tentativi
+            5,
+            3000
           );
           
-          // FASE 7: Completamento
           setWabiSabiStep('Voto registrato su blockchain!');
           setCryptoStatus('Voto confermato e registrato su blockchain Bitcoin!');
           setVotingProgress(100);
@@ -214,7 +219,6 @@ const VotingPage = () => {
           
           setTransactionId(finalResult.transactionId || voteResult.voteId);
         } catch (coinjoinError) {
-          // Se CoinJoin non è immediato, mostra comunque successo
           console.log('[WABISABI] ⚠️ CoinJoin in corso, voto comunque registrato');
           setWabiSabiStep('Voto registrato, CoinJoin in elaborazione...');
           setCryptoStatus('Voto registrato con successo, aggregazione in corso...');
@@ -239,7 +243,6 @@ const VotingPage = () => {
         // ============ FLUSSO SEMPLIFICATO ORIGINALE ============
         console.log('[VOTING] 📝 Voto modalità semplificata');
         
-        // Mantieni la logica originale per compatibilità
         setCryptoStatus('Inizializzazione processo di voto sicuro...');
         setVotingProgress(20);
         
@@ -267,6 +270,8 @@ const VotingPage = () => {
           setCryptoStatus('Voto registrato con successo!');
           setVotingProgress(100);
           
+          // SALVA IL VOTE ID PER LA RICEVUTA DETTAGLIATA
+          setVoteId(voteResponse.data.voteId);
           setTransactionId(voteResponse.data.transactionId || 'N/A');
           setVoteSuccess(true);
           setShowPrivateKeyModal(false);
@@ -288,7 +293,6 @@ const VotingPage = () => {
       setWabiSabiProgress(0);
       setWabiSabiStep('');
       
-      // Pulisci stati WabiSabi in caso di errore
       setCredentials(null);
       setVoteCommitment(null);
       setZkProof(null);
@@ -308,7 +312,6 @@ const VotingPage = () => {
   };
 
   const generateVoteCommitment = (candidate) => {
-    // Genera un commitment crittografico del voto (implementazione semplificata)
     const voteData = {
       candidateId: candidate.id,
       voteEncoding: candidate.voteEncoding,
@@ -317,7 +320,6 @@ const VotingPage = () => {
       nonce: Math.random().toString(36).substring(2, 15)
     };
     
-    // In un'implementazione reale, questo utilizzerebbe crypto più sofisticato
     return btoa(JSON.stringify(voteData));
   };
 
@@ -331,7 +333,15 @@ const VotingPage = () => {
     });
   };
 
-  // MODAL AGGIORNATO PER MOSTRARE INFO WABISABI
+  // HANDLER PER MOSTRARE RICEVUTA DETTAGLIATA
+  const handleShowDetailedReceipt = () => {
+    setShowDetailedReceipt(true);
+  };
+
+  const handleCloseDetailedReceipt = () => {
+    setShowDetailedReceipt(false);
+  };
+
   const PrivateKeyModal = () => (
     <div style={{
       position: 'fixed',
@@ -393,7 +403,7 @@ const VotingPage = () => {
           </button>
         </div>
 
-        {/* Info modalità voto - AGGIORNATO */}
+        {/* Info modalità voto */}
         <div style={{
           backgroundColor: isWabiSabiEnabled ? '#f0f9ff' : '#eff6ff',
           border: `1px solid ${isWabiSabiEnabled ? '#0ea5e9' : '#bfdbfe'}`,
@@ -537,7 +547,7 @@ const VotingPage = () => {
           </p>
         </div>
 
-        {/* Progress bar durante invio - AGGIORNATO */}
+        {/* Progress bar durante invio */}
         {submitting && (
           <div style={{ marginBottom: '1rem' }}>
             <div style={{
@@ -568,7 +578,6 @@ const VotingPage = () => {
               }}></div>
             </div>
             
-            {/* Status WabiSabi dettagliato */}
             {isWabiSabiEnabled && wabiSabiStep && (
               <p style={{
                 fontSize: '0.75rem',
@@ -618,7 +627,7 @@ const VotingPage = () => {
           </div>
         )}
 
-        {/* Pulsanti - AGGIORNATI */}
+        {/* Pulsanti */}
         <div style={{
           display: 'flex',
           gap: '0.75rem'
@@ -686,7 +695,19 @@ const VotingPage = () => {
     </div>
   );
 
-  // Schermata di successo - AGGIORNATA
+  // MOSTRA RICEVUTA DETTAGLIATA SE RICHIESTA
+  if (showDetailedReceipt && voteId) {
+    return (
+      <VoteReceipt 
+        voteId={voteId}
+        electionId={electionId}
+        userId={user?.id}
+        onClose={handleCloseDetailedReceipt}
+      />
+    );
+  }
+
+  // SCHERMATA DI SUCCESSO AGGIORNATA CON RICEVUTA DETTAGLIATA
   if (voteSuccess) {
     return (
       <div style={{
@@ -698,7 +719,7 @@ const VotingPage = () => {
         padding: '1rem'
       }}>
         <div style={{
-          maxWidth: '28rem',
+          maxWidth: '32rem',
           width: '100%',
           backgroundColor: 'white',
           borderRadius: '12px',
@@ -793,35 +814,77 @@ const VotingPage = () => {
             </div>
           </div>
 
-          <button
-            onClick={() => navigate('/')}
-            style={{
-              width: '100%',
-              background: isWabiSabiEnabled 
-                ? 'linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%)'
-                : 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-              color: 'white',
-              border: 'none',
-              padding: '0.75rem 1rem',
-              borderRadius: '8px',
-              fontSize: '1rem',
-              fontWeight: '500',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease'
-            }}
-            onMouseOver={(e) => {
-              e.target.style.transform = 'translateY(-1px)';
-              e.target.style.boxShadow = isWabiSabiEnabled 
-                ? '0 4px 12px rgba(14, 165, 233, 0.3)'
-                : '0 4px 12px rgba(59, 130, 246, 0.3)';
-            }}
-            onMouseOut={(e) => {
-              e.target.style.transform = 'translateY(0)';
-              e.target.style.boxShadow = 'none';
-            }}
-          >
-            Torna alla Home
-          </button>
+          {/* PULSANTI AGGIORNATI CON RICEVUTA DETTAGLIATA */}
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.75rem'
+          }}>
+            {/* Pulsante Ricevuta Dettagliata */}
+            {voteId && (
+              <button
+                onClick={handleShowDetailedReceipt}
+                style={{
+                  width: '100%',
+                  background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)',
+                  color: 'white',
+                  border: 'none',
+                  padding: '0.875rem 1rem',
+                  borderRadius: '8px',
+                  fontSize: '1rem',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.5rem'
+                }}
+                onMouseOver={(e) => {
+                  e.target.style.transform = 'translateY(-1px)';
+                  e.target.style.boxShadow = '0 4px 12px rgba(22, 163, 74, 0.3)';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.transform = 'translateY(0)';
+                  e.target.style.boxShadow = 'none';
+                }}
+              >
+                <CheckCircle size={20} />
+                Visualizza Ricevuta Dettagliata
+              </button>
+            )}
+
+            {/* Pulsante Torna alla Home */}
+            <button
+              onClick={() => navigate('/')}
+              style={{
+                width: '100%',
+                background: isWabiSabiEnabled 
+                  ? 'linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%)'
+                  : 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                color: 'white',
+                border: 'none',
+                padding: '0.75rem 1rem',
+                borderRadius: '8px',
+                fontSize: '1rem',
+                fontWeight: '500',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseOver={(e) => {
+                e.target.style.transform = 'translateY(-1px)';
+                e.target.style.boxShadow = isWabiSabiEnabled 
+                  ? '0 4px 12px rgba(14, 165, 233, 0.3)'
+                  : '0 4px 12px rgba(59, 130, 246, 0.3)';
+              }}
+              onMouseOut={(e) => {
+                e.target.style.transform = 'translateY(0)';
+                e.target.style.boxShadow = 'none';
+              }}
+            >
+              Torna alla Home
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -1108,7 +1171,7 @@ const VotingPage = () => {
           ))}
         </div>
 
-        {/* Pulsante invio voto - AGGIORNATO */}
+        {/* Pulsante invio voto */}
         <div style={{
           paddingTop: '1.5rem',
           borderTop: '1px solid #e5e7eb'

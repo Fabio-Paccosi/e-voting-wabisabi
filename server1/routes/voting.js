@@ -235,5 +235,89 @@ router.get('/debug', authenticateUser, async (req, res) => {
     }
 });
 
+// GET /api/voting/receipt/:voteId/detailed - Ricevuta dettagliata per voteId
+router.get('/receipt/:voteId/detailed', authenticateUser, async (req, res) => {
+    try {
+        const { voteId } = req.params;
+        console.log(`[API GATEWAY] 🧾 Richiesta ricevuta dettagliata per voto ${voteId} da utente ${req.user.id}`);
+        
+        const response = await callService('vote', `/api/voting/receipt/${voteId}/detailed`, 'GET', null, {
+            'x-user-id': req.user.id,
+            'x-user-email': req.user.email,
+            'authorization': req.headers.authorization
+        });
+        
+        console.log(`[API GATEWAY] ✅ Ricevuta dettagliata generata per voto ${voteId}`);
+        res.json(response);
+        
+    } catch (error) {
+        console.error(`[API GATEWAY] ❌ Errore generazione ricevuta dettagliata:`, error.message);
+        res.status(error.status || 500).json({
+            error: 'Errore nella generazione della ricevuta dettagliata',
+            details: error.originalError || error.message,
+            service: 'vote'
+        });
+    }
+});
+
+// GET /api/voting/receipt/:electionId/user/:userId/detailed - Ricevuta dettagliata per elezione/utente
+router.get('/receipt/:electionId/user/:userId/detailed', authenticateUser, async (req, res) => {
+    try {
+        const { electionId, userId } = req.params;
+        
+        // Verifica che l'utente possa accedere solo alle proprie ricevute
+        if (req.user.id !== userId) {
+            return res.status(403).json({
+                error: 'Accesso negato',
+                message: 'Puoi visualizzare solo le tue ricevute'
+            });
+        }
+        
+        console.log(`[API GATEWAY] 🧾 Richiesta ricevuta dettagliata per elezione ${electionId}, utente ${userId}`);
+        
+        const response = await callService('vote', `/api/voting/receipt/${electionId}/user/${userId}/detailed`, 'GET', null, {
+            'x-user-id': req.user.id,
+            'x-user-email': req.user.email,
+            'authorization': req.headers.authorization
+        });
+        
+        console.log(`[API GATEWAY] ✅ Ricevuta dettagliata generata per elezione ${electionId}, utente ${userId}`);
+        res.json(response);
+        
+    } catch (error) {
+        console.error(`[API GATEWAY] ❌ Errore generazione ricevuta dettagliata elezione/utente:`, error.message);
+        res.status(error.status || 500).json({
+            error: 'Errore nella generazione della ricevuta dettagliata',
+            details: error.originalError || error.message,
+            service: 'vote'
+        });
+    }
+});
+
+// GET /api/voting/receipt/:voteId/verification - Verifica autenticità ricevuta (pubblico)
+router.get('/receipt/:voteId/verification', async (req, res) => {
+    try {
+        const { voteId } = req.params;
+        const { verificationHash } = req.query;
+        
+        console.log(`[API GATEWAY] 🔍 Verifica ricevuta per voto ${voteId}`);
+        
+        // Questa route è pubblica (senza autenticazione) per permettere verifiche indipendenti
+        const response = await callService('vote', `/api/voting/receipt/${voteId}/verification?verificationHash=${encodeURIComponent(verificationHash || '')}`, 'GET');
+        
+        console.log(`[API GATEWAY] ✅ Verifica ricevuta completata per voto ${voteId}`);
+        res.json(response);
+        
+    } catch (error) {
+        console.error(`[API GATEWAY] ❌ Errore verifica ricevuta:`, error.message);
+        res.status(error.status || 500).json({
+            verified: false,
+            error: 'Errore nella verifica della ricevuta',
+            details: error.originalError || error.message,
+            service: 'vote'
+        });
+    }
+});
+
 console.log('[VOTING ROUTES]  Route WabiSabi con autenticazione JWT reale caricate');
 module.exports = router;
