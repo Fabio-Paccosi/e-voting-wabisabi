@@ -3,6 +3,7 @@ const router = express.Router();
 const crypto = require('crypto');
 const { randomBytes, createHash, createHmac } = require('crypto');
 const BitcoinWalletService = require('../shared/services/BitcoinWalletService');
+const CoinJoinTriggerService = require('../services/coinjoinTrigger.service');
 
 // Import dei modelli dal database_config.js
 const {
@@ -368,7 +369,7 @@ router.post('/submit', async (req, res) => {
             
             // Trigger CoinJoin in background (non bloccare la risposta)
             setImmediate(() => {
-                CoinJoinService.triggerCoinJoin(votingSession.id, electionId)
+                CoinJoinTriggerService.triggerCoinJoinForSession(votingSession.id, electionId)
                     .then(() => {
                         console.log(`[VOTING] ✅ CoinJoin completato per sessione ${votingSession.id}`);
                     })
@@ -409,57 +410,60 @@ router.get('/status/:voteId', async (req, res) => {
 
         console.log(`[VOTING] 📋 Controllo stato voto ${voteId}`);
 
-        // CORREZIONE: Usa l'alias corretto e evita accesso diretto a createdAt
+        // CORREZIONE: Query semplificata con mapping corretto dei campi timestamp
         const vote = await Vote.findByPk(voteId, {
-            include: [
-                {
-                    model: VotingSession,
-                    as: 'votingSession', 
-                    include: [
-                        {
-                            model: Transaction,
-                            as: 'sessionTransactions', 
-                            where: { type: 'coinjoin' },
-                            required: false,
-                            attributes: [
-                                'id', 'txId', 'type', 'confirmations', 
-                                'blockHeight', 'blockHash', 'metadata'
-                                //'createdAt', 'updatedAt'
-                            ]
-                        }
-                    ]
-                }
+            attributes: [
+                'id', 
+                'sessionId', 
+                'commitment', 
+                'serialNumber', 
+                'status', 
+                'transactionId',
+                ['created_at', 'createdAt'],     // Mappa created_at -> createdAt
+                ['updated_at', 'updatedAt']      // Mappa updated_at -> updatedAt
             ]
         });
 
         if (!vote) {
-            return res.status(404).json({ error: 'Voto non trovato' });
+            return res.status(404).json({ 
+                error: 'Voto non trovato',
+                message: 'Il voto richiesto non esiste o è stato eliminato'
+            });
         }
 
+        console.log(`[VOTING] 📋 Voto trovato: ${vote.id}, status: ${vote.status}`);
+
+        // Costruisci risposta base
         const response = {
             voteId: vote.id,
+            serialNumber: vote.serialNumber ? vote.serialNumber.substring(0, 8) + '...' : 'N/A',
             status: vote.status || 'pending',
-            submittedAt: vote.submittedAt,
-            processedAt: vote.processedAt,
+            submittedAt: vote.createdAt,
+            processedAt: vote.updatedAt,
             sessionId: vote.sessionId
         };
 
-        // Se il voto è stato processato, includi dettagli transazione
+        // Se il voto ha un transactionId, cerca i dettagli della transazione separatamente
         if (vote.transactionId) {
-            const transaction = await Transaction.findOne({
-                where: { txId: vote.transactionId },
-                //attributes: ['id', 'txId', 'confirmations', 'blockHeight', 'blockHash', 'createdAt']
-                attributes: ['id', 'txId', 'confirmations', 'blockHeight', 'blockHash']
-            });
+            try {
+                // ✅ CORREZIONE: Query semplificata per Transaction con schema corretto
+                const transaction = await Transaction.findOne({
+                    where: { txid: vote.transactionId },
+                    attributes: ['id', 'txid', 'voteCount', 'status', 'blockHeight', 'createdAt']
+                });
 
-            if (transaction) {
-                response.transaction = {
-                    txId: transaction.txId,
-                    confirmations: transaction.confirmations,
-                    blockHeight: transaction.blockHeight,
-                    blockHash: transaction.blockHash,
-                    //broadcastedAt: transaction.createdAt
-                };
+                if (transaction) {
+                    response.transaction = {
+                        txId: transaction.txid,
+                        voteCount: transaction.voteCount,
+                        status: transaction.status,
+                        blockHeight: transaction.blockHeight,
+                        broadcastedAt: transaction.createdAt
+                    };
+                }
+            } catch (transactionError) {
+                console.warn(`[VOTING] ⚠️ Errore caricamento transazione ${vote.transactionId}:`, transactionError.message);
+                // Non bloccare la risposta per errori di transazione
             }
         }
 
