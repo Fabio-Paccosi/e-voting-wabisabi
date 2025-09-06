@@ -218,11 +218,10 @@ const Candidate = sequelize.define('Candidate', {
         unique: true,
         field: 'bitcoin_address'
     },
-    voteCount: {
+    totalVotesReceived: {
         type: DataTypes.INTEGER,
-        allowNull: false,
         defaultValue: 0,
-        field: 'vote_count'
+        field: 'total_votes_received'
     },
 }, {
     tableName: 'candidates',
@@ -325,11 +324,6 @@ const Vote = sequelize.define('Vote', {
         allowNull: false,
         unique: true,
         field: 'serial_number'
-    },
-    candidateChoice: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-        field: 'candidate_choice'
     },
     status: {
         type: DataTypes.ENUM('pending', 'confirmed', 'failed'),

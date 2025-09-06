@@ -206,7 +206,7 @@ const ResultsPage = () => {
                         <TrendingUp size={24} />
                         <div className="winner-info">
                         <h4>Vincitore{winner.length > 1 ? ' (pareggio)' : ''}</h4>
-                        <p>{w.firstName} {w.lastName}</p>
+                        <p>{w.name}</p>
                         <span>
                             {w.votes} voti ({formatPercentage(w.votes, totalVotes)})
                         </span>
@@ -258,8 +258,8 @@ const ResultsPage = () => {
                       outerRadius={80}
                       fill="#8884d8"
                       dataKey="votes"
-                      label={({ firstName, lastName, votes }) => 
-                        `${firstName} ${lastName}: ${votes}`
+                      label={({ name, votes }) => 
+                        `${name}: ${votes}`
                       }
                     >
                       {results.map((entry, index) => (
@@ -288,7 +288,7 @@ const ResultsPage = () => {
                       <div key={candidate.id} className="table-row">
                         <span className="position">#{index + 1}</span>
                         <span className="candidate-name">
-                          {candidate.firstName} {candidate.lastName}
+                          {candidate.name}
                         </span>
                         <span className="party">{candidate.party || 'Indipendente'}</span>
                         <span className="votes">{candidate.votes}</span>

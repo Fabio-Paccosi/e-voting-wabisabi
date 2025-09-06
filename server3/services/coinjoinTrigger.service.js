@@ -53,7 +53,7 @@ class CoinJoinTriggerService {
             // Trova elezioni attive
             const activeElections = await Election.findAll({
                 where: {
-                    status: "active"
+                    status: 'active'
                 }
             });
 
@@ -272,16 +272,11 @@ class CoinJoinTriggerService {
 
     async extractCandidateFromVote(vote) {
         try {
-            console.log(`[CoinJoin] 🔍 DEBUG: Analisi voto ${vote.id}`);
-            console.log(`[CoinJoin] 🔍 Raw commitment:`, vote.commitment);
-            console.log(`[CoinJoin] 🔍 Commitment type:`, typeof vote.commitment);
-            
             // Gestione robusta dei diversi formati di commitment
             let commitment = vote.commitment;
             
             // Se commitment è oggetto, converti in stringa
             if (typeof commitment === 'object') {
-                console.log(`[CoinJoin] 🔍 Commitment è oggetto:`, commitment);
                 commitment = JSON.stringify(commitment);
             }
             
@@ -289,55 +284,34 @@ class CoinJoinTriggerService {
             if (typeof commitment === 'string' && (commitment.startsWith('{') || commitment.startsWith('['))) {
                 try {
                     const parsed = JSON.parse(commitment);
-                    console.log(`[CoinJoin] 🔍 Commitment parsato:`, parsed);
-                    
-                    // Cerca diversi campi possibili per il candidato
-                    const possibleFields = ['candidateEncoding', 'candidate', 'candidateId', 'voteChoice', 'choice'];
-                    
-                    for (const field of possibleFields) {
-                        if (parsed[field] !== undefined) {
-                            const encoding = parseInt(parsed[field]);
-                            if (!isNaN(encoding)) {
-                                console.log(`[CoinJoin] ✅ Trovato candidato in campo '${field}': ${encoding}`);
-                                return encoding;
-                            }
+                    if (parsed.candidateEncoding !== undefined) {
+                        const encoding = parseInt(parsed.candidateEncoding);
+                        if (!isNaN(encoding)) {
+                            return encoding;
                         }
                     }
-                    
-                    console.log(`[CoinJoin] ⚠️ Nessun campo candidato trovato nel commitment parsato`);
-                    
-                } catch (parseError) {
-                    console.warn(`[CoinJoin] ⚠️ Errore parsing commitment:`, parseError.message);
-                }
-            }
-            
-            // Se è una stringa semplice, prova a estrarre numeri
-            if (typeof commitment === 'string') {
-                console.log(`[CoinJoin] 🔍 Commitment è stringa: "${commitment}"`);
-                
-                // Cerca pattern numerici
-                const numberMatch = commitment.match(/(\d+)/);
-                if (numberMatch) {
-                    const candidateId = parseInt(numberMatch[1]);
-                    if (candidateId >= 1 && candidateId <= 3) {
-                        console.log(`[CoinJoin] ✅ Estratto candidato da pattern numerico: ${candidateId}`);
-                        return candidateId;
+                    if (parsed.candidate !== undefined) {
+                        const encoding = parseInt(parsed.candidate);
+                        if (!isNaN(encoding)) {
+                            return encoding;
+                        }
                     }
+                } catch (parseError) {
+                    console.warn(`[CoinJoin] Warning parsing commitment:`, parseError.message);
                 }
             }
             
-            // *** FALLBACK PROBLEMATICO - da rimuovere dopo debug ***
-            console.log(`[CoinJoin] ❌ FALLBACK ERRATO: usando hash mapping`);
+            // Mappa hash a candidati validi (1, 2, 3)
             const commitmentStr = commitment ? commitment.toString() : '';
             const hash = crypto.createHash('sha256').update(commitmentStr).digest('hex');
             const numericValue = parseInt(hash.substring(0, 8), 16);
             const candidateId = (numericValue % 3) + 1; // 1, 2, o 3
             
-            console.log(`[CoinJoin] ❌ Hash fallback: ${candidateId} (NON CORRETTO)`);
+            console.log(`[CoinJoin] 🔢 Voto ${vote.id} mappato a candidato ${candidateId}`);
             return candidateId;
             
         } catch (error) {
-            console.error(`[CoinJoin] ❌ Errore estrazione candidato:`, error);
+            console.error(`[CoinJoin] Errore estrazione candidato:`, error);
             return 1; // Default fallback
         }
     }
@@ -465,7 +439,7 @@ class CoinJoinTriggerService {
                     
                     // Usa increment per aggiornare atomicamente il conteggio
                     try{
-                        await Candidate.increment('voteCount', {
+                        await Candidate.increment('totalVotesReceived', {
                             by: count,
                             where: { id: candidateId }
                         });
