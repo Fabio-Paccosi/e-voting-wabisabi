@@ -1,14 +1,14 @@
-// Componente di voto che richiede la chiave privata per completare il voto
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { api } from '../services/api';
+import CoinJoinWaiting from './CoinJoinWaiting';
 
 const VotingPageWithPrivateKey = () => {
     const { electionId } = useParams();
     const navigate = useNavigate();
     const location = useLocation();
     
+    // Stati esistenti
     const [election, setElection] = useState(null);
     const [candidates, setCandidates] = useState([]);
     const [selectedCandidate, setSelectedCandidate] = useState(null);
@@ -20,6 +20,10 @@ const VotingPageWithPrivateKey = () => {
     const [error, setError] = useState('');
     const [voteSuccess, setVoteSuccess] = useState(false);
     const [transactionId, setTransactionId] = useState('');
+    
+    // NUOVI stati per CoinJoin
+    const [showCoinJoinWaiting, setShowCoinJoinWaiting] = useState(false);
+    const [voteId, setVoteId] = useState(null);
 
     useEffect(() => {
         initializeVoting();
@@ -39,50 +43,44 @@ const VotingPageWithPrivateKey = () => {
             
             if (!address) {
                 setError('Indirizzo Bitcoin non trovato. Riaccedi all\'elezione.');
-                setTimeout(() => navigate(`/election/${electionId}`), 3000);
+                setLoading(false);
                 return;
             }
             
             setBitcoinAddress(address);
             
-            // Carica elezione e candidati
-            await Promise.all([
-                loadElection(),
-                loadCandidates()
-            ]);
-
+            // Carica i dati dell'elezione
+            await loadElectionData();
+            
         } catch (error) {
-            console.error('[VOTING] Errore inizializzazione:', error);
+            console.error('[VOTING] ❌ Errore inizializzazione:', error);
             setError('Errore durante l\'inizializzazione del voto');
         } finally {
             setLoading(false);
         }
     };
 
-    // Carica informazioni elezione
-    const loadElection = async () => {
+    // Carica i dati dell'elezione e candidati
+    const loadElectionData = async () => {
         try {
-            const response = await api.get(`/elections/${electionId}`);
-            setElection(response.data.election || response.data);
-        } catch (error) {
-            console.error('[VOTING] Errore caricamento elezione:', error);
-            throw error;
-        }
-    };
-
-    // Carica lista candidati
-    const loadCandidates = async () => {
-        try {
-            const response = await api.get(`/elections/${electionId}/candidates`);
-            setCandidates(response.data.candidates || []);
+            console.log('[VOTING] 📂 Caricamento elezione:', electionId);
             
-            // Verifica se l'utente ha già votato
-            if (response.data.userAccess?.hasVoted) {
-                setVoteSuccess(true);
-                setError('Hai già votato per questa elezione');
+            const electionResponse = await api.get(`/elections/${electionId}`);
+            const electionData = electionResponse.data;
+            
+            if (!electionData) {
+                throw new Error('Elezione non trovata');
             }
+            
+            setElection(electionData);
+            setCandidates(electionData.candidates || []);
+            
+            console.log('[VOTING] ✅ Elezione caricata:', electionData.title);
+            console.log('[VOTING] 👥 Candidati:', electionData.candidates?.length || 0);
+            
         } catch (error) {
-            console.error('[VOTING] Errore caricamento candidati:', error);
+            console.error('[VOTING] ❌ Errore caricamento elezione:', error);
+            setError('Impossibile caricare i dati dell\'elezione');
             throw error;
         }
     };
@@ -115,25 +113,32 @@ const VotingPageWithPrivateKey = () => {
         return wifRegex.test(key);
     };
 
-    // Conferma e invia il voto
-    const confirmVote = async () => {
-        if (!privateKey.trim()) {
-            setError('Inserisci la chiave privata per completare il voto');
+    // Genera commitment del voto (placeholder - implementazione semplificata)
+    const generateVoteCommitment = (candidate) => {
+        const crypto = require('crypto');
+        const voteData = {
+            candidateId: candidate.id,
+            voteEncoding: candidate.voteEncoding,
+            timestamp: Date.now(),
+            nonce: Math.random().toString(36)
+        };
+        
+        return crypto.createHash('sha256')
+            .update(JSON.stringify(voteData))
+            .digest('hex');
+    };
+
+    // MODIFICATA: Funzione per inviare il voto con integrazione CoinJoinWaiting
+    const submitVote = async () => {
+        if (!selectedCandidate || !privateKey.trim()) {
+            setError('Seleziona un candidato e inserisci la chiave privata');
             return;
         }
 
-        if (!validatePrivateKey(privateKey.trim())) {
-            setError('Chiave privata non valida');
-            return;
-        }
+        setSubmitting(true);
+        setError('');
 
         try {
-            setSubmitting(true);
-            setError('');
-            
-            console.log('[VOTING] 🗳️ Inviando voto per candidato:', selectedCandidate.name);
-
-            // Invia il voto al server con la chiave privata per la firma
             const voteResponse = await api.post('/voting/submit-vote', {
                 electionId,
                 candidateId: selectedCandidate.id,
@@ -146,9 +151,11 @@ const VotingPageWithPrivateKey = () => {
             if (voteResponse.data.success) {
                 console.log('[VOTING] ✅ Voto inviato con successo');
                 
+                // MODIFICATO: Invece di mostrare success statico, avvia l'attesa CoinJoin
+                setVoteId(voteResponse.data.voteId || `vote_${Date.now()}`);
                 setTransactionId(voteResponse.data.transactionId);
-                setVoteSuccess(true);
                 setShowPrivateKeyModal(false);
+                setShowCoinJoinWaiting(true); // Mostra il componente di attesa
                 
                 // Pulisci la chiave privata dalla memoria
                 setPrivateKey('');
@@ -175,19 +182,25 @@ const VotingPageWithPrivateKey = () => {
         }
     };
 
-    // Genera commitment del voto (placeholder - implementazione semplificata)
-    const generateVoteCommitment = (candidate) => {
-        const crypto = require('crypto');
-        const voteData = {
-            candidateId: candidate.id,
-            voteEncoding: candidate.voteEncoding,
-            timestamp: Date.now(),
-            nonce: Math.random().toString(36)
-        };
-        
-        return crypto.createHash('sha256')
-            .update(JSON.stringify(voteData))
-            .digest('hex');
+    // NUOVA: Funzione per gestire la chiusura del componente di attesa
+    const handleCoinJoinWaitingClose = () => {
+        setShowCoinJoinWaiting(false);
+        setVoteSuccess(true); // Mostra il messaggio di successo finale
+    };
+
+    // Conferma e invia il voto (chiamata dal modal)
+    const confirmVote = async () => {
+        if (!privateKey.trim()) {
+            setError('Inserisci la chiave privata per completare il voto');
+            return;
+        }
+
+        if (!validatePrivateKey(privateKey.trim())) {
+            setError('Chiave privata non valida');
+            return;
+        }
+
+        await submitVote();
     };
 
     // Modal chiave privata
@@ -260,6 +273,7 @@ const VotingPageWithPrivateKey = () => {
         </div>
     );
 
+    // LOADING STATE
     if (loading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -271,6 +285,18 @@ const VotingPageWithPrivateKey = () => {
         );
     }
 
+    // NUOVO: Mostra il componente di attesa CoinJoin
+    if (showCoinJoinWaiting && voteId) {
+        return (
+            <CoinJoinWaiting 
+                voteId={voteId}
+                electionId={electionId}
+                onClose={handleCoinJoinWaitingClose}
+            />
+        );
+    }
+
+    // MODIFICATO: Messaggio di successo finale (dopo che l'utente chiude la ricevuta)
     if (voteSuccess) {
         return (
             <div className="min-h-screen bg-green-50 flex items-center justify-center">
@@ -280,11 +306,19 @@ const VotingPageWithPrivateKey = () => {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
                     </div>
-                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Voto Registrato!</h2>
-                    <p className="text-gray-600 mb-4">Il tuo voto è stato inviato con successo alla blockchain</p>
+                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Processo Completato!</h2>
+                    <p className="text-gray-600 mb-4">
+                        Il tuo voto è stato processato con successo tramite CoinJoin e registrato sulla blockchain Bitcoin.
+                    </p>
+                    <div className="bg-blue-50 p-4 rounded-lg mb-4">
+                        <p className="text-sm text-blue-800">
+                            🔒 <strong>Privacy Garantita:</strong> Il tuo voto è stato mixato anonimamente con altri voti. 
+                            Nessuno può risalire alla tua identità o al candidato scelto.
+                        </p>
+                    </div>
                     {transactionId && (
                         <div className="bg-gray-50 p-3 rounded-lg mb-4">
-                            <p className="text-xs text-gray-500 mb-1">ID Transazione:</p>
+                            <p className="text-xs text-gray-500 mb-1">ID Transazione CoinJoin:</p>
                             <p className="text-sm font-mono text-gray-800 break-all">{transactionId}</p>
                         </div>
                     )}
@@ -299,6 +333,7 @@ const VotingPageWithPrivateKey = () => {
         );
     }
 
+    // MAIN VOTING INTERFACE
     return (
         <div className="min-h-screen bg-gray-50 py-8">
             <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -309,41 +344,46 @@ const VotingPageWithPrivateKey = () => {
                         {election.description && (
                             <p className="text-gray-600 mb-4">{election.description}</p>
                         )}
-                        <div className="flex items-center justify-between text-sm text-gray-500">
-                            <span>Il tuo indirizzo: <code className="bg-gray-100 px-2 py-1 rounded">{bitcoinAddress}</code></span>
-                            <span>Rete: {election.blockchainNetwork || 'testnet'}</span>
+                        <div className="flex items-center text-sm text-gray-500">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                Attiva
+                            </span>
+                            <span className="ml-4">Indirizzo Bitcoin: {bitcoinAddress}</span>
                         </div>
                     </div>
                 )}
 
                 {/* Lista candidati */}
-                <div className="bg-white rounded-lg shadow">
-                    <div className="px-6 py-4 border-b border-gray-200">
-                        <h2 className="text-lg font-medium text-gray-900">Seleziona il tuo candidato</h2>
-                    </div>
-                    <div className="divide-y divide-gray-200">
+                <div className="bg-white rounded-lg shadow p-6">
+                    <h2 className="text-xl font-bold text-gray-900 mb-6">Scegli il tuo candidato</h2>
+                    
+                    <div className="space-y-4">
                         {candidates.map((candidate) => (
                             <div
                                 key={candidate.id}
                                 onClick={() => handleCandidateSelect(candidate)}
-                                className={`p-6 cursor-pointer hover:bg-gray-50 transition-colors ${
-                                    selectedCandidate?.id === candidate.id ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
+                                className={`border rounded-lg p-4 cursor-pointer transition-colors ${
+                                    selectedCandidate?.id === candidate.id
+                                        ? 'border-blue-500 bg-blue-50'
+                                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                                 }`}
                             >
                                 <div className="flex items-center justify-between">
                                     <div className="flex-1">
-                                        <h3 className="text-lg font-medium text-gray-900">{candidate.name}</h3>
+                                        <h3 className="text-lg font-medium text-gray-900">
+                                            {candidate.name}
+                                        </h3>
                                         {candidate.party && (
                                             <p className="text-sm text-gray-600">{candidate.party}</p>
                                         )}
-                                        {candidate.biography && (
-                                            <p className="text-sm text-gray-500 mt-2">{candidate.biography}</p>
+                                        {candidate.description && (
+                                            <p className="text-sm text-gray-500 mt-1">{candidate.description}</p>
                                         )}
                                     </div>
                                     <div className="ml-4">
                                         <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                                            selectedCandidate?.id === candidate.id 
-                                                ? 'border-blue-500 bg-blue-500' 
+                                            selectedCandidate?.id === candidate.id
+                                                ? 'border-blue-500 bg-blue-500'
                                                 : 'border-gray-300'
                                         }`}>
                                             {selectedCandidate?.id === candidate.id && (

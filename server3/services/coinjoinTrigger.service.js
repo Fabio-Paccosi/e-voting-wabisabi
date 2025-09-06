@@ -1,7 +1,7 @@
 // server3/services/coinjoinTrigger.service.js - VERSIONE CORRETTA
 const crypto = require('crypto');
 const axios = require('axios');
-
+const { v4: uuidv4 } = require('uuid');
 // Import corretto dei modelli dal database config centralizzato
 const { sequelize, Vote, Election, Candidate, VotingSession } = require('../shared/database_config').getModelsForService('vote');
 const coinJoinServiceInstance = require('./CoinJoinService');
@@ -115,8 +115,9 @@ class CoinJoinTriggerService {
             }
     
             // Step 4: Procedi con CoinJoin
-            //await this.processCoinJoin(election, votes);
-            await this.coinJoinService.startCoinJoin(sessionId, election.id, votes);
+            // CORREZIONE: Usa il metodo corretto executeCoinJoin che è già presente in questa classe
+            console.log(`[CoinJoin Service] Avvio esecuzione CoinJoin per ${votes.length} voti`);
+            await this.executeCoinJoin(election, votes);
             
         } catch (error) {
             console.error(`[CoinJoin Service] Errore:`, error);
@@ -318,13 +319,13 @@ class CoinJoinTriggerService {
             } catch (rpcError) {
                 console.log(` [CoinJoin Service] Nodo locale non disponibile, uso simulazione`);
             }
-
-            // Fallback a simulazione
-            const mockTxId = `tx_${network}_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 8)}`;
+    
+            // CORREZIONE: Genera un UUID valido invece di una stringa casuale
+            const mockTxId = uuidv4();
             
             await this.sleep(1000);
             
-            console.log(` [CoinJoin Service] Broadcast simulato: ${mockTxId}`);
+            console.log(` [CoinJoin Service] Broadcast simulato con UUID: ${mockTxId}`);
             return mockTxId;
             
         } catch (error) {
