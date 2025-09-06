@@ -151,7 +151,6 @@ class CoinJoinTriggerService {
         }
     }
 
-    // *** NUOVO METODO: Salva il record della transazione nel database ***
     async saveTransactionRecord(election, transaction, votes, txId) {
         try {
             console.log(`[CoinJoin Service] 💾 Salvataggio record transazione nel database`);
@@ -179,7 +178,8 @@ class CoinJoinTriggerService {
                 votes: votes.map(v => ({
                     id: v.id,
                     serialNumber: v.serialNumber,
-                    commitment: v.commitment
+                    commitment: v.commitment,
+                    utxo: 0.001,
                 })),
                 fee: transaction.transaction?.fee || 0,
                 txHex: transaction.rawTx || null

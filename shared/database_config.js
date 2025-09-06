@@ -218,6 +218,10 @@ const Candidate = sequelize.define('Candidate', {
         unique: true,
         field: 'bitcoin_address'
     },
+    voteCount: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+    },
 }, {
     tableName: 'candidates',
     underscored: true,
@@ -367,7 +371,20 @@ const Transaction = sequelize.define('Transaction', {
         type: DataTypes.INTEGER,
         allowNull: true,
         field: 'block_height'
-    }
+    },
+    rawData: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: 'raw_data'
+    },
+    metadata: {
+        type: DataTypes.JSONB,
+        allowNull: true
+    },
+    confirmations: {
+        type: DataTypes.INTEGER,
+        defaultValue: 0
+    },
 }, {
     tableName: 'transactions',
     underscored: true,
