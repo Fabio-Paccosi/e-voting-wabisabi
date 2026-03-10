@@ -498,9 +498,15 @@ class CoinJoinTriggerService {
                 console.log(`[CoinJoin Service] ⚠️ Nessun voto pending trovato per sessione ${sessionId}`);
                 return;
             }
-            
+
+            const threshold = election.coinjoinTrigger || 2;
+            if (votes.length < threshold) {
+                console.log(`[CoinJoin Service] ⚠️ Voti insufficienti per sessione ${sessionId}: ${votes.length}/${threshold}. Attesa di altri voti.`);
+                return;
+            }
+
             console.log(`[CoinJoin Service] 📊 Trovati ${votes.length} voti pending per sessione ${sessionId}`);
-            
+
             // Esegui CoinJoin
             await this.executeCoinJoin(election, votes);
             

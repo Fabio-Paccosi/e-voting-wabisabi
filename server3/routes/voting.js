@@ -353,12 +353,12 @@ router.post('/submit', async (req, res) => {
             }
         });
 
-        console.log(`[VOTING] 📊 Voti pending in sessione ${votingSession.id}: ${pendingVotes}/${WABISABI_CONFIG.COINJOIN_THRESHOLD}`);
-
         // 12. Trigger CoinJoin se soglia raggiunta
         let coinjoinTriggered = false;
-        if (pendingVotes >= WABISABI_CONFIG.COINJOIN_THRESHOLD) {
-            console.log(`[VOTING] 🚀 Soglia CoinJoin raggiunta (${pendingVotes} >= ${WABISABI_CONFIG.COINJOIN_THRESHOLD}), avvio aggregazione...`);
+        const coinjoinThreshold = election.coinjoinTrigger || WABISABI_CONFIG.COINJOIN_THRESHOLD;
+        console.log(`[VOTING] 📊 Voti pending in sessione ${votingSession.id}: ${pendingVotes}/${coinjoinThreshold}`);
+        if (pendingVotes >= coinjoinThreshold) {
+            console.log(`[VOTING] 🚀 Soglia CoinJoin raggiunta (${pendingVotes} >= ${coinjoinThreshold}), avvio aggregazione...`);
             
             // Aggiorna stato sessione a output_registration
             await votingSession.update({
@@ -389,7 +389,7 @@ router.post('/submit', async (req, res) => {
             status: 'submitted',
             message: 'Voto ricevuto e in elaborazione',
             pendingVotes: pendingVotes,
-            coinjoinThreshold: WABISABI_CONFIG.COINJOIN_THRESHOLD,
+            coinjoinThreshold: coinjoinThreshold,
             coinjoinTriggered: coinjoinTriggered,
             sessionStatus: votingSession.status
         });
