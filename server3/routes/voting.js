@@ -241,7 +241,7 @@ router.post('/submit', async (req, res) => {
             where: {
                 electionId: electionId,
                 status: {
-                    [require('sequelize').Op.in]: ['preparing', 'input_registration', 'output_registration']
+                    [require('sequelize').Op.in]: ['preparing', 'input_registration']
                 }
             },
             order: [['created_at', 'DESC']] // Prendi la più recente
@@ -277,7 +277,7 @@ router.post('/submit', async (req, res) => {
         }
 
         // 5. Verifica che la sessione sia in uno stato accettabile
-        const acceptableStates = ['preparing', 'input_registration', 'output_registration'];
+        const acceptableStates = ['preparing', 'input_registration'];
         if (!acceptableStates.includes(votingSession.status)) {
             console.log(`[VOTING] ⚠️ Sessione ${votingSession.id} in stato non accettabile: ${votingSession.status}`);
             

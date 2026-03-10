@@ -113,6 +113,9 @@ class CoinJoinTriggerService {
                 // Step 4: Procedi con CoinJoin
                 console.log(`[CoinJoin Service] Avvio esecuzione CoinJoin per ${votes.length} voti`);
                 await this.executeCoinJoin(election, votes);
+
+                // Chiudi la sessione dopo coinjoin completato
+                await session.update({ status: 'completed', endTime: new Date() });
             }
             
         } catch (error) {
@@ -509,11 +512,23 @@ class CoinJoinTriggerService {
 
             // Esegui CoinJoin
             await this.executeCoinJoin(election, votes);
-            
+
+            // Chiudi la sessione: non deve più accettare nuovi voti
+            await session.update({ status: 'completed', endTime: new Date() });
             console.log(`[CoinJoin Service] ✅ CoinJoin completato per sessione ${sessionId}`);
-            
+
         } catch (error) {
             console.error(`[CoinJoin Service] ❌ Errore CoinJoin per sessione ${sessionId}:`, error);
+            // Riporta la sessione a input_registration per consentire retry
+            try {
+                const { VotingSession } = require('../shared/database_config').getModelsForService('vote');
+                await VotingSession.update(
+                    { status: 'input_registration' },
+                    { where: { id: sessionId, status: 'output_registration' } }
+                );
+            } catch (resetErr) {
+                console.error(`[CoinJoin Service] ❌ Impossibile resettare sessione ${sessionId}:`, resetErr);
+            }
             throw error;
         }
     }
